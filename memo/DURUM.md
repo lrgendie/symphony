@@ -9,6 +9,7 @@
 **Faz 0 — TAMAMLANDI ✅ (2026-07-03). Sırada: Faz 1 (provider katmanı).**
 
 Monorepo ayakta, protokol koda döküldü, testler yeşil, CLI iskeleti çalışıyor.
+GitHub Actions CI kullanıcı tarafından doğrulandı: **yeşil** → Faz 0 kabul testi eksiksiz geçti.
 
 ## Bitenler
 
