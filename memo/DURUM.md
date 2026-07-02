@@ -18,6 +18,9 @@ Proje fikri netleşti, tüm planlama belgeleri yazıldı. Henüz kod yok; ilk ko
 - [x] Memo/süreklilik sistemi kuruldu → `memo/`
 - [x] `.gitignore` + `README.md`
 - [x] Donanım tespiti: i7-12650H, 32 GB RAM, RTX 4060 8 GB VRAM → 7-8B yerel modeller akıcı, büyük işler API'ye
+- [x] GitHub remote bağlandı: `lrgendie/symphony` — dal `main` olarak yeniden adlandırıldı, push edildi
+- [x] Oturum sonu otomatik commit+push hook'u kuruldu ve test edildi (`.claude/settings.json`)
+- [x] Karar: temperature varsayılanı 0 (agent tanımıyla bilinçli istisna mümkün)
 
 ## Sıradaki adım (buradan devam)
 
@@ -29,8 +32,7 @@ Proje fikri netleşti, tüm planlama belgeleri yazıldı. Henüz kod yok; ilk ko
 
 ## Bekleyen kararlar / kullanıcıdan gerekenler
 
-- [ ] **GitHub remote:** Özel `symphony` reposu oluşturulup bağlanacak (push yedeği için şart).
-      Seçenekler: kullanıcı github.com'dan oluşturur VEYA `gh` CLI kurulup terminalden oluşturulur.
+- [ ] Repodaki `symphony.vcxproj` / `symphony.slnx` (Visual Studio C++ iskeleti) silinsin mi? Kullanıcıya soruldu, cevap bekleniyor.
 - [ ] API anahtarları Faz 1'de gerekecek (Anthropic ilk sırada; OpenAI/Google sonra eklenebilir).
 - [ ] Ollama kurulumu Faz 1'de yapılacak.
 

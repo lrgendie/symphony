@@ -165,5 +165,6 @@ symphony/
 - **Protokol kutsaldır:** CLI ve UI daemon'la sadece `shared` paketindeki tiplerle konuşur.
 - **Güvenlik varsayılan:** Agent hiçbir dosyayı iznin olmadan değiştiremez; anahtarlar keychain'de.
 - **Her model eşit vatandaş:** Claude, GPT, Gemini, yerel Llama — hepsi aynı adapter arayüzünün arkasında.
+- **Determinizm varsayılandır:** Tüm model çağrılarında `temperature` varsayılanı **0**'dır (kod, araç çağrısı, analiz — tutarlılık ve tekrarlanabilirlik için). Agent tanımında açıkça belirtilerek yükseltilebilir (ör. yaratıcı yazım görevleri); ama bilinçli bir istisna olmadıkça 0 kalır.
 - **Öğrenme lokaldir:** Seni tanıyan tüm veri (kullanım geçmişi, tercihler, skorlar) kendi diskinde durur; hiçbir yere gönderilmez, `symphony sync` ile sadece kendi depona yedeklenir.
 - **Arayüz yaşar:** Dashboard bir tablo yığını değil, sistemin nabzını gösteren canlı bir sahnedir — ama her animasyonun bir anlamı vardır (durum, yük, hata), süs değil.
