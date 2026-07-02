@@ -1,0 +1,32 @@
+# Bağımlılıklar
+node_modules/
+.pnpm-store/
+
+# Derleme çıktıları
+dist/
+build/
+out/
+.turbo/
+target/
+
+# Ortam ve gizli bilgiler — ASLA commitlenmez
+.env
+.env.*
+*.pem
+*.key
+
+# Loglar ve geçici dosyalar
+*.log
+logs/
+coverage/
+.cache/
+
+# İşletim sistemi
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editör
+.vscode/*
+!.vscode/extensions.json
+.idea/

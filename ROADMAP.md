@@ -1,0 +1,169 @@
+# 🎼 SYMPHONY — Yol Haritası
+
+> Yerel + bulut LLM'leri ve agent'ları tek merkezden yöneten, koda müdahale edebilen,
+> Windows / macOS / ARM üzerinde çalışan, terminal + masaüstü senkron orkestrasyon platformu.
+
+---
+
+## 1. Temel Mimari Karar: "Daemon Merkezli" Tasarım
+
+Projenin en kritik kararı şu: **bütün akıl tek bir çekirdek serviste (daemon) yaşar,
+terminal ve masaüstü uygulaması sadece o servise bağlanan iki ayrı "ekran"dır.**
+
+```
+                    ┌─────────────────────────────┐
+                    │      symphonyd (Çekirdek)    │
+                    │  • Provider yöneticisi       │
+                    │  • Agent motoru              │
+                    │  • Görev kuyruğu             │
+                    │  • Olay yayını (WebSocket)   │
+                    │  • İzin/güvenlik katmanı     │
+                    └──────────┬──────────────────┘
+                    WebSocket + REST (localhost)
+              ┌────────────────┼────────────────┐
+              │                │                │
+        ┌─────┴─────┐    ┌─────┴─────┐    ┌─────┴─────┐
+        │  CLI/TUI  │    │ Masaüstü  │    │  (ileride │
+        │ symphony  │    │ Dashboard │    │  web/mobil)│
+        └───────────┘    └───────────┘    └───────────┘
+```
+
+**Neden?** Terminale `symphony` yazıp bir agent başlattığında, masaüstü uygulaması aynı
+WebSocket olay akışını dinlediği için her şeyi **eş zamanlı** görürsün. İstediğin
+"senfoni yönetir gibi canlı izleme" özelliği bu mimarinin doğal sonucudur — sonradan
+eklenen bir özellik değil.
+
+---
+
+## 2. Teknoloji Seçimleri (ve Nedenleri)
+
+| Katman | Seçim | Neden |
+|---|---|---|
+| **Dil** | TypeScript (her yerde) | Tüm AI SDK'ları (Anthropic, OpenAI, Google, Ollama) birinci sınıf TS desteğine sahip. Tek dil = CLI, çekirdek ve arayüz arasında kod paylaşımı. Claude Code'un kendisi de bu stack ile yazıldı. |
+| **Çalışma zamanı** | Node.js 22 LTS | Windows/macOS/Linux + x64/ARM64 resmi desteği. Bilgisayar değiştirince tek kurulum. |
+| **Paket yöneticisi** | pnpm (workspace/monorepo) | Tek repo içinde core/cli/ui/desktop paketleri. |
+| **LLM soyutlama** | Vercel AI SDK (`ai` paketi) | Claude, GPT, Gemini, Ollama'yı **tek arayüzle** konuşturur: streaming + tool-calling hepsinde aynı kodla çalışır. Provider eklemek = 1 adapter dosyası. |
+| **Yerel LLM** | Ollama | Windows/Mac/Linux + Apple Silicon'da native. REST API'si var; sistemde "bir provider daha" gibi görünür. |
+| **Araç protokolü** | MCP (Model Context Protocol) | Agent'lara yetenek eklemenin endüstri standardı. Symphony MCP istemcisi olursa, hazır binlerce MCP sunucusunu (dosya, tarayıcı, DB...) tak-çalıştır kullanırsın. |
+| **CLI/TUI** | Ink (React ile terminal arayüzü) | Claude Code'un kullandığı kütüphane. Model seçici, canlı spinner'lar, renkli paneller. |
+| **Masaüstü** | Tauri 2 + React + Vite | ~10 MB kurulum (Electron ~150 MB), Windows ARM64 ve Apple Silicon native desteği. İçindeki arayüz zaten web (React) olduğu için CLI dışındaki her şey TS kalır. Rust derleme sorun çıkarırsa B planı: Electron. |
+| **Canlı arayüz görselleri** | Three.js (React Three Fiber) | "Living Interface" vizyonu: WebGL parçacık küresi — sistem boştayken nefes alır, agent çalışırken hareketlenir, hataya renkle tepki verir. |
+| **Yerel veri katmanı** | SQLite (better-sqlite3) | Sohbet geçmişi, model performans kayıtları, kullanım istatistikleri — kişiselleşmenin ve akıllı yönlendirmenin yakıtı, tamamı lokalde. |
+| **API anahtarları** | İşletim sistemi keychain'i (keytar / Tauri secure storage) | Anahtarlar asla düz dosyada durmaz. |
+| **Taşınabilirlik** | `~/.symphony/` klasörü + git senkronu | Agent tanımların, ayarların, proje kayıtların burada. Yeni bilgisayarda: uygulamayı kur → `symphony sync` → kaldığın yerden devam. |
+
+---
+
+## 3. Depo Yapısı
+
+```
+symphony/
+├── package.json              # pnpm workspace kökü
+├── packages/
+│   ├── shared/               # Ortak tipler, WS protokol şeması (her paket bunu kullanır)
+│   ├── core/                 # symphonyd: provider'lar, agent motoru, event bus
+│   ├── cli/                  # `symphony` komutu (Ink TUI)
+│   ├── ui/                   # React dashboard (Vite) — hem Tauri hem tarayıcıda çalışır
+│   └── desktop/              # Tauri 2 kabuğu (ui'yi paketler)
+└── docs/
+```
+
+---
+
+## 4. Fazlar
+
+### Faz 0 — Temel Atma (1. hafta)
+- [ ] pnpm monorepo + TypeScript + ESLint/Prettier kurulumu
+- [ ] `packages/shared`: olay/mesaj tipleri (`AgentStarted`, `TokenUsage`, `ToolCall`...)
+- [ ] `~/.symphony/` config yapısı: `config.json`, `providers.json`, `agents/`
+- [ ] Test altyapısı (Vitest) + GitHub Actions CI — ileride sistemin kendine yazacağı yamaların "bağışıklık sistemi"; test paketi geçmeyen hiçbir değişiklik canlıya çıkamaz
+- **Çıktı:** `pnpm build` ve `pnpm test` çalışan iskelet repo.
+
+### Faz 1 — Çekirdek: Provider Katmanı (2–3. hafta)
+- [ ] `symphonyd` süreci: localhost REST + WebSocket sunucusu (Fastify + ws)
+- [ ] Vercel AI SDK ile provider adapter'ları: **Anthropic → OpenAI → Google → Ollama**
+- [ ] API anahtarı yönetimi (keychain) + provider sağlık kontrolü (hangi model ayakta?)
+- [ ] Streaming sohbet: tek uçtan tüm modellerle konuşabilme
+- [ ] SQLite veri katmanı: sohbet geçmişi + her isteğin kaydı (model, süre, token, maliyet, başarı) — ileride router ve kişiselleşme bu veriyle beslenecek
+- [ ] Hata telemetrisi: daemon ve agent hatalarının yapılandırılmış kaydı (hangi işlem, hangi girdi, stack trace) — kendi kendini onarmanın veri kaynağı
+- [ ] **Model yönlendirici v1 (kural tabanlı):** görev türüne göre öneri — "kod işi → Claude, hızlı özet → yerel Llama, uzun bağlam → Gemini" gibi; donanımını da tanır (VRAM'e göre hangi yerel model kaldırılabilir)
+- **Çıktı:** `curl` ile 4 farklı sağlayıcıdan streaming cevap alınabiliyor.
+
+### Faz 2 — CLI: `symphony` Komutu (4–5. hafta)
+- [ ] Ink TUI: açılışta model seçici (aynı `claude` deneyimi), sohbet ekranı
+- [ ] `symphony` yazınca daemon çalışmıyorsa otomatik başlatma
+- [ ] Komutlar: `symphony` (TUI), `symphony models`, `symphony agents`, `symphony status`
+- [ ] Global kurulum: `npm i -g` ile PATH'e `symphony` komutu
+- **Çıktı:** Terminalde `symphony` → model seç → sohbet et.
+
+### Faz 3 — Kod Agent'ı: Sisteme Müdahale (6–8. hafta) ⭐ kalbi burası
+- [ ] Araç seti: `read_file`, `write_file`, `edit`, `glob`, `grep`, `run_command` (PowerShell/bash)
+- [ ] Agent döngüsü: model → tool call → sonuç → model... (Vercel AI SDK tool-calling ile, her modelde aynı)
+- [ ] **İzin sistemi:** her dosya yazma / komut çalıştırma öncesi onay (Claude Code'daki gibi), "her zaman izin ver" listesi
+- [ ] Diff önizleme: agent dosya değiştirmeden önce ne değişeceğini göster
+- [ ] MCP istemci desteği: harici MCP sunucularını agent'lara araç olarak bağlama
+- [ ] **Eklenti sistemi:** `symphony add <github-repo | npm-paket | mcp-sunucu>` — GitHub'daki bir aracı veya MCP sunucusunu indirip agent'lara araç olarak kaydetme; ilk örnek eklenti: Playwright tabanlı web scraping aracı
+- **Çıktı:** "şu dosyadaki bug'ı düzelt" diyebildiğin, onayınla kodu değiştiren agent.
+
+### Faz 4 — Masaüstü: Orkestra Sahnesi (9–11. hafta)
+- [ ] Tauri 2 + React dashboard, daemon'un WS akışına bağlanır
+- [ ] **"Living Interface" sahnesi:** Three.js parçacık küresi merkezde — boşta yavaşça nefes alır, agent düşünürken dalgalanır, araç çalıştırırken hızlanır, hatada renk değiştirir. Her agent'ın kendi küçük "yaşam formu" olur
+- [ ] **Şef Paneli:** aktif agent'lar (kim çalışıyor, hangi araç, hangi dosya), canlı log akışı
+- [ ] Model panosu: provider durumları, token kullanımı/maliyet sayaçları, yerel model VRAM durumu
+- [ ] **Yol haritası görselleştirme:** projelerin ROADMAP/plan dosyalarından otomatik üretilen interaktif faz-adım grafiği; hangi adım bitti, hangi adımda hangi agent çalışıyor canlı görünür
+- [ ] Proje görünümü: hangi projede hangi agent ne yapıyor
+- [ ] Terminal ⇄ masaüstü eş zamanlılık testi: CLI'da başlayan iş anında ekranda
+- **Çıktı:** Terminalde agent çalıştırırken masaüstünde canlı izlediğin, yaşayan dashboard.
+
+### Faz 5 — Orkestrasyon: Çoklu Agent (12–14. hafta)
+- [ ] Görev kuyruğu: birden çok agent'ı paralel çalıştırma, birbirine iş devretme
+- [ ] Agent tanımları dosya olarak: `~/.symphony/agents/*.md` (rol + araçlar + model) → taşınabilir
+- [ ] "Şef" agent: görevi alt görevlere bölüp uygun agent'lara/modellere dağıtan üst akıl
+- [ ] Maliyet stratejisi: basit işleri yerel/ucuz modele, zor işleri Claude'a yönlendirme
+- **Çıktı:** Tek komutla çok-agent'lı iş akışı, dashboard'da orkestra gibi izlenir.
+
+### Faz 6 — Zeka Katmanı: Seni Tanıyan Symphony (15–17. hafta)
+- [ ] **Model yönlendirici v2 (öğrenen):** Faz 1'den beri biriken kayıtlardan (hangi model hangi görevde başarılı/hızlı/ucuz oldu) skor tablosu; "bu işi kime verelim?" sorusuna veriyle cevap
+- [ ] Soru sorulduğunda otomatik öneri: "Bu görev için yerel Qwen yeterli (ücretsiz, ~3sn) — ama en yüksek kalite istersen Claude öneririm (~$0.04)" gibi şeffaf gerekçeli seçenek sunma
+- [ ] **Kullanıcı hafızası:** tercihlerini, kod stilini, sık kullandığın projeleri ve düzeltmelerini hatırlayan kalıcı profil (`~/.symphony/memory/`) — her agent bu bağlamla başlar
+- [ ] **Kendini geliştirme döngüsü:** haftalık kullanım özeti üzerinden sistemin kendi yönlendirme kurallarını ve agent tanımlarını güncelleme önerisi (onayınla uygulanır)
+- [ ] Geri bildirim sinyalleri: cevabı beğenme/düzeltme, agent çıktısını geri alma gibi olaylar skorlara işlenir
+- **Çıktı:** "Şu PDF'leri özetleyecek bir şey lazım" dediğinde donanımına, geçmişine ve bütçene göre doğru modeli öneren; seni tanıdıkça isabeti artan sistem.
+
+### Faz 7 — Paketleme ve Taşınabilirlik (18–19. hafta)
+- [ ] Tauri installer'ları: Windows x64/ARM64 (.msi), macOS Intel/Apple Silicon (.dmg)
+- [ ] CLI dağıtımı: npm paketi + tek dosya binary seçeneği
+- [ ] `symphony sync`: `~/.symphony/` klasörünü özel git deposuyla eşitleme (yeni makinede 2 dakikada kurulum)
+- [ ] Otomatik güncelleme (sürümlü + tek komutla geri alınabilir; güncelleyici çekirdek ayrı ve dokunulmaz)
+- **Çıktı:** Kur → giriş yap → senkronla → devam et.
+
+### Faz 8 — Kendini Geliştiren Symphony (20. hafta ve sonrası, sürekli) ⭐ nihai hedef
+> Symphony'nin kod agent'ı vardır; kendini geliştirmek = agent'ın hedef olarak **kendi reposunu** alması.
+> Güvenliği dört sigorta sağlar: test paketi (Faz 0), hata telemetrisi (Faz 1), rollback (Faz 7), onay kapısı.
+
+- [ ] **Doktor agent:** hata telemetrisini periyodik okur, tekrarlayan hataları saptar, kök neden analizi yapar
+- [ ] **Kendine yama döngüsü:** Doktor agent hatayı sandbox'ta (ayrı git branch + izole süreç) yeniden üretir → düzeltme yazar → tüm test paketini çalıştırır → geçerse diff + test raporu ile onayına sunar
+- [ ] **Onaylı canlıya alma:** onayladığın yama sürüm olarak derlenir, daemon kendini yeniden başlatarak günceller; sorun çıkarsa watchdog otomatik bir önceki sürüme döner
+- [ ] **Güven merdiveni:** yama kategorileri bazında sicil tutulur ("null hatası düzeltmeleri: 12/12 başarılı"); istediğin kategorilere "artık sormadan uygula" yetkisi verebilirsin — varsayılan her zaman "sor"
+- [ ] **Bekçi modu (senin projelerin için):** Symphony'de kayıtlı programlarının loglarını/çıktılarını izler; hata veya crash görünce seni uyarır ve tek tıkla "düzeltme öner" akışını başlatır — kendi hatalarını kapattığı mekanizmanın aynısı senin kodun için de çalışır
+- [ ] **Kendini geliştirme raporu:** haftalık özet — hangi hatalar yakalandı, hangi yamalar uygulandı, router isabeti nasıl değişti, hangi yeni yetenek öneriliyor
+- [ ] Değişmezler (asla otomatikleşmez): güncelleyici çekirdek, izin sistemi, API anahtar yönetimi — bunlara dokunan her değişiklik her zaman insan onayı ister
+- **Çıktı:** Hatasını gören, yamasını yazan, test eden, onayınla kendini güncelleyen ve sicili büyüdükçe daha bağımsızlaşan sistem.
+
+---
+
+## 5. İlk Somut Adımlar (bu hafta)
+
+1. Monorepo iskeletini kur (Faz 0)
+2. `shared` paketinde WS protokolünü tasarla — bu sözleşme her şeyin temeli
+3. `core` içinde tek provider'la (Anthropic) uçtan uca streaming sohbeti çalıştır
+4. Kazanılan güvenle Ollama'yı ekle → "hem yerel hem bulut" hedefi 1. ayda kanıtlanmış olur
+
+## 6. İlkeler
+
+- **Önce dikey dilim:** Her fazda uçtan uca çalışan küçük bir şey; asla 3 ay görünmez altyapı yazma.
+- **Protokol kutsaldır:** CLI ve UI daemon'la sadece `shared` paketindeki tiplerle konuşur.
+- **Güvenlik varsayılan:** Agent hiçbir dosyayı iznin olmadan değiştiremez; anahtarlar keychain'de.
+- **Her model eşit vatandaş:** Claude, GPT, Gemini, yerel Llama — hepsi aynı adapter arayüzünün arkasında.
+- **Öğrenme lokaldir:** Seni tanıyan tüm veri (kullanım geçmişi, tercihler, skorlar) kendi diskinde durur; hiçbir yere gönderilmez, `symphony sync` ile sadece kendi depona yedeklenir.
+- **Arayüz yaşar:** Dashboard bir tablo yığını değil, sistemin nabzını gösteren canlı bir sahnedir — ama her animasyonun bir anlamı vardır (durum, yük, hata), süs değil.
