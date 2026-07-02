@@ -30,3 +30,7 @@ desktop.ini
 .vscode/*
 !.vscode/extensions.json
 .idea/
+.vs/
+
+# Claude Code kişisel ayarları
+.claude/settings.local.json
