@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && git add -A && { git diff --cached --quiet || git commit -m \"oturum: $(date '+%Y-%m-%d %H:%M') otomatik yedek\"; } && { git remote get-url origin >/dev/null 2>&1 && git push origin HEAD || true; }",
+            "timeout": 60,
+            "statusMessage": "Oturum yedekleniyor (commit + push)..."
+          }
+        ]
+      }
+    ]
+  }
+}
