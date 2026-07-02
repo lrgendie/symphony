@@ -78,6 +78,7 @@ symphony/
 - [ ] `~/.symphony/` config yapısı: `config.json`, `providers.json`, `agents/`
 - [ ] Test altyapısı (Vitest) + GitHub Actions CI — ileride sistemin kendine yazacağı yamaların "bağışıklık sistemi"; test paketi geçmeyen hiçbir değişiklik canlıya çıkamaz
 - **Çıktı:** `pnpm build` ve `pnpm test` çalışan iskelet repo.
+- **Kabul testi:** Temiz klonda `pnpm install && pnpm build && pnpm test` sıfır hatayla geçer; CI yeşil; `shared`'daki en az bir zod şemasının doğrulama testi vardır.
 
 ### Faz 1 — Çekirdek: Provider Katmanı (2–3. hafta)
 - [ ] `symphonyd` süreci: localhost REST + WebSocket sunucusu (Fastify + ws)
@@ -88,6 +89,7 @@ symphony/
 - [ ] Hata telemetrisi: daemon ve agent hatalarının yapılandırılmış kaydı (hangi işlem, hangi girdi, stack trace) — kendi kendini onarmanın veri kaynağı
 - [ ] **Model yönlendirici v1 (kural tabanlı):** görev türüne göre öneri — "kod işi → Claude, hızlı özet → yerel Llama, uzun bağlam → Gemini" gibi; donanımını da tanır (VRAM'e göre hangi yerel model kaldırılabilir)
 - **Çıktı:** `curl` ile 4 farklı sağlayıcıdan streaming cevap alınabiliyor.
+- **Kabul testi:** 4 sağlayıcıdan streaming cevap; anahtarlar diskte grep'lenemiyor (yalnız keychain); her istek SQLite'a kayıt düşüyor; `providers.status` gerçek sağlık durumu döndürüyor; router v1 örnek göreve gerekçeli öneri veriyor.
 
 ### Faz 2 — CLI: `symphony` Komutu (4–5. hafta)
 - [ ] Ink TUI: açılışta model seçici (aynı `claude` deneyimi), sohbet ekranı
@@ -95,6 +97,7 @@ symphony/
 - [ ] Komutlar: `symphony` (TUI), `symphony models`, `symphony agents`, `symphony status`
 - [ ] Global kurulum: `npm i -g` ile PATH'e `symphony` komutu
 - **Çıktı:** Terminalde `symphony` → model seç → sohbet et.
+- **Kabul testi:** Temiz terminalde `symphony` daemon'ı otomatik başlatıyor; model seçici tüm sağlayıcıları listeliyor; streaming sohbet akıyor; aynı anda açık ikinci istemci aynı olayları görüyor.
 
 ### Faz 3 — Kod Agent'ı: Sisteme Müdahale (6–8. hafta) ⭐ kalbi burası
 - [ ] Araç seti: `read_file`, `write_file`, `edit`, `glob`, `grep`, `run_command` (PowerShell/bash)
@@ -104,6 +107,7 @@ symphony/
 - [ ] MCP istemci desteği: harici MCP sunucularını agent'lara araç olarak bağlama
 - [ ] **Eklenti sistemi:** `symphony add <github-repo | npm-paket | mcp-sunucu>` — GitHub'daki bir aracı veya MCP sunucusunu indirip agent'lara araç olarak kaydetme; ilk örnek eklenti: Playwright tabanlı web scraping aracı
 - **Çıktı:** "şu dosyadaki bug'ı düzelt" diyebildiğin, onayınla kodu değiştiren agent.
+- **Kabul testi:** Agent diff gösterip onay almadan tek bayt yazamıyor (izinsiz yazma girişimi testle kanıtlanmış şekilde engelli); workspace dışına çıkamıyor; deny cevabı koşuyu kırmıyor; bir harici MCP sunucusu bağlanıp araç olarak çağrılıyor. Davranışlar `docs/SPEC-AGENT.md`'ye uygun.
 
 ### Faz 4 — Masaüstü: Orkestra Sahnesi (9–11. hafta)
 - [ ] Tauri 2 + React dashboard, daemon'un WS akışına bağlanır
@@ -114,6 +118,7 @@ symphony/
 - [ ] Proje görünümü: hangi projede hangi agent ne yapıyor
 - [ ] Terminal ⇄ masaüstü eş zamanlılık testi: CLI'da başlayan iş anında ekranda
 - **Çıktı:** Terminalde agent çalıştırırken masaüstünde canlı izlediğin, yaşayan dashboard.
+- **Kabul testi:** CLI'da başlatılan koşu 1 saniye içinde masaüstünde görünüyor; küre agent durumlarına (thinking/executing/failed) görsel tepki veriyor; token/maliyet sayaçları gerçek kullanım verisiyle artıyor; izin istekleri masaüstünden de cevaplanabiliyor.
 
 ### Faz 5 — Orkestrasyon: Çoklu Agent (12–14. hafta)
 - [ ] Görev kuyruğu: birden çok agent'ı paralel çalıştırma, birbirine iş devretme
@@ -121,6 +126,7 @@ symphony/
 - [ ] "Şef" agent: görevi alt görevlere bölüp uygun agent'lara/modellere dağıtan üst akıl
 - [ ] Maliyet stratejisi: basit işleri yerel/ucuz modele, zor işleri Claude'a yönlendirme
 - **Çıktı:** Tek komutla çok-agent'lı iş akışı, dashboard'da orkestra gibi izlenir.
+- **Kabul testi:** İki agent aynı anda farklı görevlerde koşup dashboard'da ayrı izlenebiliyor; şef agent bir görevi en az iki alt göreve bölüp farklı modellere dağıtıyor; agent tanımı dosyası yeni makineye kopyalanınca aynen çalışıyor.
 
 ### Faz 6 — Zeka Katmanı: Seni Tanıyan Symphony (15–17. hafta)
 - [ ] **Model yönlendirici v2 (öğrenen):** Faz 1'den beri biriken kayıtlardan (hangi model hangi görevde başarılı/hızlı/ucuz oldu) skor tablosu; "bu işi kime verelim?" sorusuna veriyle cevap
@@ -129,6 +135,7 @@ symphony/
 - [ ] **Kendini geliştirme döngüsü:** haftalık kullanım özeti üzerinden sistemin kendi yönlendirme kurallarını ve agent tanımlarını güncelleme önerisi (onayınla uygulanır)
 - [ ] Geri bildirim sinyalleri: cevabı beğenme/düzeltme, agent çıktısını geri alma gibi olaylar skorlara işlenir
 - **Çıktı:** "Şu PDF'leri özetleyecek bir şey lazım" dediğinde donanımına, geçmişine ve bütçene göre doğru modeli öneren; seni tanıdıkça isabeti artan sistem.
+- **Kabul testi:** Router v2 önerileri gerçek kullanım skorlarına dayanıyor ve gerekçesini gösteriyor; kullanıcı hafızasına yazılan bir tercih yeni oturumda agent bağlamında görülüyor; haftalık rapor üretiliyor; tüm öğrenme verisi lokalde kalıyor (dışarı istek testle doğrulanmış şekilde yok).
 
 ### Faz 7 — Paketleme ve Taşınabilirlik (18–19. hafta)
 - [ ] Tauri installer'ları: Windows x64/ARM64 (.msi), macOS Intel/Apple Silicon (.dmg)
@@ -136,6 +143,7 @@ symphony/
 - [ ] `symphony sync`: `~/.symphony/` klasörünü özel git deposuyla eşitleme (yeni makinede 2 dakikada kurulum)
 - [ ] Otomatik güncelleme (sürümlü + tek komutla geri alınabilir; güncelleyici çekirdek ayrı ve dokunulmaz)
 - **Çıktı:** Kur → giriş yap → senkronla → devam et.
+- **Kabul testi:** Windows installer temiz bir makinede kurulup çalışıyor; `symphony` komutu PATH'te; `symphony sync` ikinci makinede ayarları ve agent tanımlarını geri getiriyor (anahtarlar hariç — onlar yeniden girilir); güncelleme tek komutla geri alınabiliyor.
 
 ### Faz 8 — Kendini Geliştiren Symphony (20. hafta ve sonrası, sürekli) ⭐ nihai hedef
 > Symphony'nin kod agent'ı vardır; kendini geliştirmek = agent'ın hedef olarak **kendi reposunu** alması.
@@ -149,6 +157,7 @@ symphony/
 - [ ] **Kendini geliştirme raporu:** haftalık özet — hangi hatalar yakalandı, hangi yamalar uygulandı, router isabeti nasıl değişti, hangi yeni yetenek öneriliyor
 - [ ] Değişmezler (asla otomatikleşmez): güncelleyici çekirdek, izin sistemi, API anahtar yönetimi — bunlara dokunan her değişiklik her zaman insan onayı ister
 - **Çıktı:** Hatasını gören, yamasını yazan, test eden, onayınla kendini güncelleyen ve sicili büyüdükçe daha bağımsızlaşan sistem.
+- **Kabul testi:** Kasıtlı enjekte edilen bir hatayı Doktor agent telemetriden saptayıp sandbox'ta yama + geçen test raporu üretiyor; testleri geçmeyen yama canlıya çıkamıyor; bozuk sürüm watchdog ile otomatik geri alınıyor; değişmez bileşenlere (güncelleyici, izin sistemi, anahtar yönetimi) dokunan yama otomatik uygulanamıyor.
 
 ---
 

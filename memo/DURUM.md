@@ -2,7 +2,7 @@
 
 > Her oturuma bu dosyayı okuyarak başla. Oturum sonunda güncelle.
 
-**Son güncelleme:** 2026-07-02 (Oturum 1)
+**Son güncelleme:** 2026-07-03 (Oturum 1 devamı)
 
 ## Şu an neredeyiz?
 
@@ -21,6 +21,10 @@ Proje fikri netleşti, tüm planlama belgeleri yazıldı. Henüz kod yok; ilk ko
 - [x] GitHub remote bağlandı: `lrgendie/symphony` — dal `main` olarak yeniden adlandırıldı, push edildi
 - [x] Oturum sonu otomatik commit+push hook'u kuruldu ve test edildi (`.claude/settings.json`)
 - [x] Karar: temperature varsayılanı 0 (agent tanımıyla bilinçli istisna mümkün)
+- [x] VS C++ dosyaları silindi (kullanıcı onayıyla) — repo temiz
+- [x] **"Fable mirası" belgeleri yazıldı:** `CLAUDE.md` (anayasa), `docs/PROTOKOL.md` (WS spesifikasyonu),
+      `docs/SPEC-AGENT.md` (agent+izin şartnamesi), `docs/kararlar/KARARLAR.md` (11 ADR),
+      ROADMAP'e faz başına kabul testleri
 
 ## Sıradaki adım (buradan devam)
 
@@ -32,7 +36,6 @@ Proje fikri netleşti, tüm planlama belgeleri yazıldı. Henüz kod yok; ilk ko
 
 ## Bekleyen kararlar / kullanıcıdan gerekenler
 
-- [ ] Repodaki `symphony.vcxproj` / `symphony.slnx` (Visual Studio C++ iskeleti) silinsin mi? Kullanıcıya soruldu, cevap bekleniyor.
 - [ ] API anahtarları Faz 1'de gerekecek (Anthropic ilk sırada; OpenAI/Google sonra eklenebilir).
 - [ ] Ollama kurulumu Faz 1'de yapılacak.
 

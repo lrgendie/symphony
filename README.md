@@ -9,7 +9,11 @@ aynı çekirdeğe bağlı iki eş zamanlı arayüzdür.
 
 | Dosya | Ne için |
 |---|---|
-| [ROADMAP.md](ROADMAP.md) | Vizyon, mimari, teknoloji kararları, fazlar (0–8) |
+| [CLAUDE.md](CLAUDE.md) | **Proje anayasası** — bu repoda çalışan her AI modelin uyacağı kurallar |
+| [ROADMAP.md](ROADMAP.md) | Vizyon, mimari, fazlar (0–8) ve faz başına kabul testleri |
+| [docs/PROTOKOL.md](docs/PROTOKOL.md) | Daemon ⇄ arayüz iletişim protokolü spesifikasyonu |
+| [docs/SPEC-AGENT.md](docs/SPEC-AGENT.md) | Agent motoru + izin sistemi şartnamesi |
+| [docs/kararlar/KARARLAR.md](docs/kararlar/KARARLAR.md) | Mimari karar kayıtları (ADR) — "neden böyle?"nin cevabı |
 | [docs/GEREKSINIMLER.md](docs/GEREKSINIMLER.md) | Tüm araç/kütüphane envanteri, dosya-klasör planı |
 | [memo/DURUM.md](memo/DURUM.md) | **Kaldığımız yer** — her oturuma buradan başlanır |
 | [memo/oturumlar/](memo/oturumlar/) | Oturum günlükleri (her çalışma seansının kaydı) |
