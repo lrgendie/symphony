@@ -6,9 +6,9 @@
 
 ## Şu an neredeyiz?
 
-**Faz: 0 öncesi hazırlık — TAMAMLANDI ✅**
+**Faz 0 — TAMAMLANDI ✅ (2026-07-03). Sırada: Faz 1 (provider katmanı).**
 
-Proje fikri netleşti, tüm planlama belgeleri yazıldı. Henüz kod yok; ilk kod Faz 0'da yazılacak.
+Monorepo ayakta, protokol koda döküldü, testler yeşil, CLI iskeleti çalışıyor.
 
 ## Bitenler
 
@@ -28,11 +28,17 @@ Proje fikri netleşti, tüm planlama belgeleri yazıldı. Henüz kod yok; ilk ko
 
 ## Sıradaki adım (buradan devam)
 
-**→ Faz 0'ı başlat:**
-1. Node.js 22 LTS + pnpm kurulumunu doğrula/kur
-2. pnpm workspace monorepo iskeleti (`packages/shared|core|cli|ui|desktop`)
-3. `shared` içinde zod ile WS protokol tiplerinin ilk taslağı
-4. Vitest + temel CI
+**→ Faz 1: Çekirdek provider katmanı**
+1. `core`'a Fastify + ws sunucusu (PROTOKOL.md §1: port 7770, token auth, hello akışı)
+2. Vercel AI SDK ile ilk provider: Anthropic (streaming chat, temperature 0 varsayılan)
+3. Anahtar yönetimi: keytar vs @napi-rs/keyring dene (ADR-010), `SecretStore` soyutlaması
+4. SQLite veri katmanı (better-sqlite3): istek kayıtları + hata telemetrisi
+5. Sonra: OpenAI → Google → Ollama adapter'ları, router v1
+
+**Faz 0'dan notlar (Faz 1'de lazım olacak):**
+- Node paketi eklerken `tsconfig.json`'a `"types": ["node"]` yazmayı unutma (TS 6 otomatik almıyor)
+- `shared` ortam-bağımsız kalmalı: Node API'si import etme (tarayıcı da kullanacak)
+- Kurulu sürümler: Node 24.14.1, pnpm 11.9.0, TS 6.0.3, ESLint 10, Vitest 4, zod 3
 
 ## Bekleyen kararlar / kullanıcıdan gerekenler
 

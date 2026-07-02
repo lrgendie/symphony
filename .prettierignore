@@ -1,0 +1,5 @@
+# Prettier yalnız kod dosyalarını biçimlendirir; belgelerin düzeni elle kurulmuştur.
+*.md
+pnpm-lock.yaml
+dist/
+.turbo/

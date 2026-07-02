@@ -1,0 +1,20 @@
+{
+  "name": "@symphony/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "symphony komutu — terminal arayüzü (Ink TUI Faz 2'de gelecek)",
+  "bin": {
+    "symphony": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@symphony/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0"
+  }
+}

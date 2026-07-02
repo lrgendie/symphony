@@ -1,0 +1,24 @@
+{
+  "name": "@symphony/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "symphonyd — Symphony çekirdek daemon'ı (Faz 1'de dolacak; Faz 0: ~/.symphony yapısı)",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@symphony/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0"
+  }
+}

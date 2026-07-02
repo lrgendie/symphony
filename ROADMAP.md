@@ -72,11 +72,11 @@ symphony/
 
 ## 4. Fazlar
 
-### Faz 0 — Temel Atma (1. hafta)
-- [ ] pnpm monorepo + TypeScript + ESLint/Prettier kurulumu
-- [ ] `packages/shared`: olay/mesaj tipleri (`AgentStarted`, `TokenUsage`, `ToolCall`...)
-- [ ] `~/.symphony/` config yapısı: `config.json`, `providers.json`, `agents/`
-- [ ] Test altyapısı (Vitest) + GitHub Actions CI — ileride sistemin kendine yazacağı yamaların "bağışıklık sistemi"; test paketi geçmeyen hiçbir değişiklik canlıya çıkamaz
+### Faz 0 — Temel Atma (1. hafta) ✅ 2026-07-03
+- [x] pnpm monorepo + TypeScript + ESLint/Prettier kurulumu
+- [x] `packages/shared`: olay/mesaj tipleri — PROTOKOL.md'nin tamamı zod şemalarına kodlandı (zarf, 11 istek, 26 olay/cevap, agent durum makinesi)
+- [x] `~/.symphony/` config yapısı: `core`'da paths modülü (`SYMPHONY_HOME` ile taşınabilir)
+- [x] Test altyapısı (Vitest, 24 test) + GitHub Actions CI — ileride sistemin kendine yazacağı yamaların "bağışıklık sistemi"; test paketi geçmeyen hiçbir değişiklik canlıya çıkamaz
 - **Çıktı:** `pnpm build` ve `pnpm test` çalışan iskelet repo.
 - **Kabul testi:** Temiz klonda `pnpm install && pnpm build && pnpm test` sıfır hatayla geçer; CI yeşil; `shared`'daki en az bir zod şemasının doğrulama testi vardır.
 

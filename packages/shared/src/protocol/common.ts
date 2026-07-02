@@ -1,0 +1,89 @@
+import { z } from "zod";
+import { AgentRunStateSchema } from "./agent-state.js";
+
+/** Hata kodu uzayı: AUTH_*, PROVIDER_*, AGENT_*, PERMISSION_*, VALIDATION_*, INTERNAL_* (PROTOKOL.md §2). */
+export const ERROR_CODE_PATTERN =
+  /^(AUTH|PROVIDER|AGENT|PERMISSION|VALIDATION|INTERNAL)_[A-Z0-9_]+$/;
+
+export const ErrorPayloadSchema = z
+  .object({
+    code: z.string().regex(ERROR_CODE_PATTERN),
+    message: z.string().min(1),
+    details: z.record(z.unknown()).optional(),
+  })
+  .strip();
+export type ErrorPayload = z.infer<typeof ErrorPayloadSchema>;
+
+export const UsageSchema = z
+  .object({
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    costUsd: z.number().nonnegative(),
+  })
+  .strip();
+export type Usage = z.infer<typeof UsageSchema>;
+
+/** Araç risk sınıfları (SPEC-AGENT.md §2). */
+export const RiskClassSchema = z.enum(["safe", "mutating", "destructive"]);
+export type RiskClass = z.infer<typeof RiskClassSchema>;
+
+export const ChatMessageSchema = z
+  .object({
+    role: z.enum(["system", "user", "assistant"]),
+    content: z.string(),
+  })
+  .strip();
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+
+export const ProviderHealthSchema = z
+  .object({
+    provider: z.string().min(1),
+    status: z.enum(["up", "down", "degraded"]),
+    latencyMs: z.number().nonnegative().optional(),
+  })
+  .strip();
+export type ProviderHealth = z.infer<typeof ProviderHealthSchema>;
+
+export const PendingPermissionSchema = z
+  .object({
+    requestId: z.string().uuid(),
+    runId: z.string().uuid(),
+    tool: z.string().min(1),
+    args: z.record(z.unknown()),
+    riskClass: RiskClassSchema,
+    diff: z.string().optional(),
+  })
+  .strip();
+export type PendingPermission = z.infer<typeof PendingPermissionSchema>;
+
+export const ActiveRunSchema = z
+  .object({
+    runId: z.string().uuid(),
+    agentId: z.string().min(1),
+    task: z.string(),
+    state: AgentRunStateSchema,
+    model: z.string().optional(),
+  })
+  .strip();
+export type ActiveRun = z.infer<typeof ActiveRunSchema>;
+
+/** Yeniden bağlanmada verilen tam durum görüntüsü — replay yok, snapshot var (ADR-011). */
+export const SnapshotSchema = z
+  .object({
+    runs: z.array(ActiveRunSchema),
+    providers: z.array(ProviderHealthSchema),
+    pendingPermissions: z.array(PendingPermissionSchema),
+  })
+  .strip();
+export type Snapshot = z.infer<typeof SnapshotSchema>;
+
+export const ModelInfoSchema = z
+  .object({
+    provider: z.string().min(1),
+    id: z.string().min(1),
+    displayName: z.string().optional(),
+    local: z.boolean(),
+    contextWindow: z.number().int().positive().optional(),
+  })
+  .strip();
+export type ModelInfo = z.infer<typeof ModelInfoSchema>;
