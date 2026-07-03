@@ -16,13 +16,14 @@ Daemon (`symphonyd`) canlı: Fastify+ws, port 7770, token auth, hello/snapshot a
 parametresini KABUL ETMİYOR (400 döner) — Anthropic adapter'ı bu parametreyi bilinçli
 olarak API'ye iletmiyor. ADR-008 ilkesi diğer sağlayıcılarda geçerli.
 
-**Bekleyen ilk iş: kullanıcının Anthropic anahtarını kaydetmesi** → sonra curl ile canlı
-streaming kabul testi. Komut:
-```powershell
-$env:SYMPHONY_KEY = "sk-ant-..."
-pnpm --filter @symphony/core key:set anthropic
-Remove-Item Env:SYMPHONY_KEY
-```
+**✅ CANLI STREAMING KABUL TESTİ GEÇTİ (2026-07-03):** Anahtar keychain'de
+(`anahtar-kaydet.bat` ile kaydedildi), curl → daemon → Claude Opus 4.8 gerçek streaming
+cevap + maliyet (62in/99out token, $0.0028). Faz 1'in Anthropic ayağı uçtan uca çalışıyor.
+
+**Öğrenilen ders (Faz 2'de çözülecek):** Daemon zaten çalışırken ikinci kopya
+EADDRINUSE ile çöküyor ama önce token dosyasının üstüne yazıyor → eski daemon'a
+erişim kilitleniyor. Çözüm: başlarken port kontrolü / tek-kopya kilidi
+(CLI'ın otomatik başlatma mantığıyla birlikte ele alınacak).
 
 ## Bitenler
 
@@ -43,11 +44,11 @@ Remove-Item Env:SYMPHONY_KEY
 ## Sıradaki adım (buradan devam)
 
 **→ Faz 1 kalanlar:**
-1. ✅ Fastify+ws sunucu, ✅ Anthropic adapter, ✅ SecretStore (keychain)
-2. Anahtar kaydı (kullanıcı) → curl ile canlı streaming kabul testi
-3. SQLite veri katmanı (better-sqlite3): istek kayıtları + hata telemetrisi
-4. Ollama adapter'ı (yerel model) → sonra OpenAI/Google
-5. Router v1 (kural tabanlı öneri)
+1. ✅ Fastify+ws sunucu, ✅ Anthropic adapter, ✅ SecretStore, ✅ canlı streaming testi
+2. SQLite veri katmanı (better-sqlite3): istek kayıtları + hata telemetrisi
+3. Ollama adapter'ı (yerel model — kullanıcıya Ollama kurulumu gerekecek) → sonra OpenAI/Google
+4. Router v1 (kural tabanlı öneri)
+5. Daemon tek-kopya kilidi (EADDRINUSE dersi)
 
 **Faz 0'dan notlar (Faz 1'de lazım olacak):**
 - Node paketi eklerken `tsconfig.json`'a `"types": ["node"]` yazmayı unutma (TS 6 otomatik almıyor)
