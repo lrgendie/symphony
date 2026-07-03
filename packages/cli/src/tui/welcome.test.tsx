@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render } from "ink-testing-library";
 import type { ProviderHealth, Usage } from "@symphony/shared";
-import { LOGO_LINES } from "./logo.js";
+import { LOGO_LINES, logoLineText } from "./logo.js";
 import { Welcome } from "./welcome.js";
 
 const providers: ProviderHealth[] = [
@@ -17,7 +17,8 @@ describe("Welcome (Faz 2.5 kabul testi)", () => {
     const frame = lastFrame() ?? "";
 
     // Logo tek modülden geliyor (ink satır sonu boşluklarını kırpar → trimEnd)
-    for (const line of LOGO_LINES) expect(frame).toContain(line.trimEnd());
+    for (const line of LOGO_LINES) expect(frame).toContain(logoLineText(line).trimEnd());
+    expect(frame).toContain("◉"); // kırmızı sinaps düğümü (marka logosundaki vurgu)
     expect(frame).toContain("protokol v1");
     expect(frame).toContain("anthropic");
     expect(frame).toContain("openai");

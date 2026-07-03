@@ -138,9 +138,10 @@ CLI oturum yönetimiyle birlikte tasarlanacak; şimdilik yalnız istek META veri
 
 ## Bekleyen kararlar / kullanıcıdan gerekenler
 
-- [ ] **Kullanıcı logosu:** karşılama ekranındaki geçici banner, kullanıcının kendi
-  logosuyla değiştirilecek — logo görseli paylaşılınca YALNIZ
-  `packages/cli/src/tui/logo.ts` güncellenir (LOGO_LINES + LOGO_COLORS).
+- [x] **Kullanıcı logosu geldi ve uyarlandı (2026-07-03):** nöral sinaps düğümlü
+  tesseract görseli → `tui/logo.ts`'de segment-renkli Unicode uyarlama (camgöbeği
+  dış küp, mor iç küp, kırmızı sinaps ◉ + SYMPHONY yazısı). Marka paleti:
+  cyan/magenta/red — Faz 4 masaüstü arayüzü de bu paleti kullanmalı.
 - [ ] OpenAI/Google API anahtarları (isteğe bağlı — gelince canlı doğrulama yapılır:
   `pnpm --filter @symphony/core key:set openai`).
 

@@ -1,7 +1,7 @@
 import { Box, Text } from "ink";
 import type { JSX } from "react";
 import { PROTOCOL_VERSION, type ProviderHealth, type Usage } from "@symphony/shared";
-import { LOGO_COLORS, LOGO_LINES, LOGO_TAGLINE } from "./logo.js";
+import { LOGO_LINES, LOGO_TAGLINE } from "./logo.js";
 
 /** index.ts'teki program.version ile aynı tutulur (kaynak: packages/cli/package.json). */
 export const CLI_VERSION = "0.1.0";
@@ -26,8 +26,12 @@ export function Welcome(props: { providers: ProviderHealth[]; totals: Usage }): 
     <Box flexDirection="column" marginBottom={1}>
       <Box flexDirection="column">
         {LOGO_LINES.map((line, i) => (
-          <Text key={i} color={LOGO_COLORS[i % LOGO_COLORS.length]} bold>
-            {line}
+          <Text key={i} bold>
+            {line.map((segment, j) => (
+              <Text key={j} {...(segment.color !== undefined ? { color: segment.color } : {})}>
+                {segment.text}
+              </Text>
+            ))}
           </Text>
         ))}
       </Box>
