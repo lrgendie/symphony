@@ -53,9 +53,18 @@ erişim kilitleniyor. Çözüm: başlarken port kontrolü / tek-kopya kilidi
 **→ Faz 1 kalanlar:**
 1. ✅ Fastify+ws sunucu, ✅ Anthropic adapter, ✅ SecretStore, ✅ canlı streaming testi
 2. ✅ SQLite veri katmanı: istek kayıtları + hata telemetrisi + usage.query (2026-07-03)
-3. Ollama adapter'ı (yerel model — kullanıcıya Ollama kurulumu gerekecek) → sonra OpenAI/Google
-4. Router v1 (kural tabanlı öneri)
-5. Daemon tek-kopya kilidi (EADDRINUSE dersi)
+3. ✅ Ollama adapter'ı KODU (2026-07-03): `@ai-sdk/openai-compatible` ile /v1 üzerinden;
+   dinamik model listesi (/api/tags), sahte sunuculu testler CI'da koşuyor.
+   **⏳ CANLI TEST BEKLİYOR:** kullanıcı Ollama kuruyor; kurulunca 11434 kontrol et →
+   model indirt (`qwen3:8b` önerisi) → daemon üzerinden gerçek streaming + SQLite kaydı doğrula.
+4. OpenAI/Google adapter'ları
+5. Router v1 (kural tabanlı öneri)
+6. Daemon tek-kopya kilidi (EADDRINUSE dersi)
+
+**Teknik not (Ollama):** topluluk paketleri `ollama-ai-provider`/`-v2` AI SDK v7 + zod v3
+ile uyumsuz → resmî `@ai-sdk/openai-compatible` seçildi (GEREKSINIMLER.md güncellendi).
+`ProviderAdapter.listModels` artık async (dinamik listeler için); Ollama'da temperature
+API'ye İLETİLİR (ADR-008), Anthropic'te iletilmez (Claude 4.7+ reddi).
 
 **Not:** "Sohbet geçmişi" tablosu (mesaj içerikleri) bilinçli olarak Faz 2'ye bırakıldı —
 CLI oturum yönetimiyle birlikte tasarlanacak; şimdilik yalnız istek META verisi saklanıyor.

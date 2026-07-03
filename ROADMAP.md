@@ -82,7 +82,7 @@ symphony/
 
 ### Faz 1 — Çekirdek: Provider Katmanı (2–3. hafta) — devam ediyor
 - [x] `symphonyd` süreci: localhost REST + WebSocket sunucusu (Fastify + ws) — token auth, hello akışı, snapshot ✅ 2026-07-03
-- [ ] Vercel AI SDK ile provider adapter'ları: **Anthropic ✅ → OpenAI → Google → Ollama**
+- [ ] Vercel AI SDK ile provider adapter'ları: **Anthropic ✅ → Ollama ✅ (kod+stub test 2026-07-03; canlı test kurulum bekliyor) → OpenAI → Google**
 - [x] API anahtarı yönetimi (keychain: @napi-rs/keyring + env yedek) + provider sağlık kontrolü ✅ 2026-07-03
 - [ ] Streaming sohbet: tek uçtan tüm modellerle konuşabilme
 - [x] SQLite veri katmanı: her isteğin kaydı (model, süre, token, maliyet, başarı) + `usage.query` + kalıcı toplamlar ✅ 2026-07-03 — ileride router ve kişiselleşme bu veriyle beslenecek; sohbet geçmişi tablosu Faz 2'de CLI oturumlarıyla eklenecek

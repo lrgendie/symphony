@@ -18,6 +18,7 @@ import { ensureSymphonyHome } from "../config/paths.js";
 import { loadConfig } from "../config/config.js";
 import { createSecretStore } from "../secrets/secret-store.js";
 import { AnthropicAdapter } from "../providers/anthropic.js";
+import { OllamaAdapter } from "../providers/ollama.js";
 import type { ProviderAdapter } from "../providers/types.js";
 import { DataStore } from "../db/store.js";
 import { EventBus } from "./bus.js";
@@ -30,6 +31,8 @@ export interface DaemonOptions {
   port?: number;
   /** Test: `~/.symphony` yerine kullanılacak dizin. */
   home?: string;
+  /** Test: sahte Ollama sunucusuna yönlendirme. Varsayılan: http://127.0.0.1:11434 */
+  ollamaBaseUrl?: string;
 }
 
 export interface RunningDaemon {
@@ -49,6 +52,8 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const providers = new Map<string, ProviderAdapter>();
   const anthropic = new AnthropicAdapter(secrets);
   providers.set(anthropic.name, anthropic);
+  const ollama = new OllamaAdapter(options.ollamaBaseUrl);
+  providers.set(ollama.name, ollama);
 
   const bus = new EventBus();
   const activeChats = new Map<string, AbortController>();
@@ -317,8 +322,8 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             return;
           }
           case "models.list": {
-            const models = [...providers.values()].flatMap((p) => p.listModels());
-            bus.sendTo(ws, "models.list.ok", { models }, message.id);
+            const lists = await Promise.all([...providers.values()].map((p) => p.listModels()));
+            bus.sendTo(ws, "models.list.ok", { models: lists.flat() }, message.id);
             return;
           }
           case "providers.status": {

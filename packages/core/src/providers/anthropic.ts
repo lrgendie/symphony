@@ -34,8 +34,8 @@ export class AnthropicAdapter implements ProviderAdapter {
 
   constructor(private readonly secrets: SecretStore) {}
 
-  listModels(): ModelInfo[] {
-    return MODELS;
+  listModels(): Promise<ModelInfo[]> {
+    return Promise.resolve(MODELS);
   }
 
   async isConfigured(): Promise<boolean> {

@@ -98,6 +98,7 @@ describe("symphonyd", () => {
     };
     expect(payload.protocolVersion).toBe(PROTOCOL_VERSION);
     expect(payload.snapshot.providers.map((p) => p.provider)).toContain("anthropic");
+    expect(payload.snapshot.providers.map((p) => p.provider)).toContain("ollama");
 
     const modelsReply = await request(ws, createMessage("models.list", {}));
     expect(modelsReply.type).toBe("models.list.ok");

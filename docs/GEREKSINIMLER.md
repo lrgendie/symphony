@@ -36,7 +36,7 @@
 | `@ai-sdk/anthropic` | Claude adapter'ı |
 | `@ai-sdk/openai` | GPT adapter'ı |
 | `@ai-sdk/google` | Gemini adapter'ı |
-| `ollama-ai-provider` | Yerel Ollama modelleri adapter'ı |
+| `@ai-sdk/openai-compatible` | Yerel Ollama adapter'ı (OpenAI-uyumlu `/v1` ucu üzerinden). Not 2026-07-03: topluluk paketi `ollama-ai-provider(-v2)` AI SDK v7 + zod v3 ile uyumsuz çıktı → resmî paket seçildi |
 | `@modelcontextprotocol/sdk` | MCP istemcisi — harici araç sunucuları |
 | `better-sqlite3` | Yerel veri katmanı: geçmiş, telemetri, skorlar |
 | `keytar` | API anahtarlarını OS keychain'inde saklama |

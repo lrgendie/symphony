@@ -25,7 +25,12 @@ export interface ChatUsageResult {
  */
 export interface ProviderAdapter {
   readonly name: string;
-  listModels(): ModelInfo[];
+  /**
+   * Async'tir çünkü liste her sağlayıcıda statik değildir: Ollama'da
+   * "kullanıcı ne indirdiyse o" — sunucudan sorgulanır. Sunucuya
+   * ulaşılamıyorsa hata değil BOŞ liste döner (sağlayıcı yok sayılır).
+   */
+  listModels(): Promise<ModelInfo[]>;
   isConfigured(): Promise<boolean>;
   /** Metin parçaları akıtır; bittiğinde kullanım/maliyet döndürür. */
   streamChat(request: ChatStreamRequest): AsyncGenerator<string, ChatUsageResult, void>;
