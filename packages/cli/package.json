@@ -12,9 +12,20 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@symphony/shared": "workspace:*"
+    "@symphony/core": "workspace:*",
+    "@symphony/shared": "workspace:*",
+    "chalk": "^5.6.2",
+    "commander": "^15.0.0",
+    "ink": "^7.1.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.2.7",
+    "ws": "^8.21.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0"
+    "@types/node": "^26.1.0",
+    "@types/react": "^19.2.17",
+    "@types/ws": "^8.18.1",
+    "ink-testing-library": "^4.0.0"
   }
 }

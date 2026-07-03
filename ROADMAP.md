@@ -91,10 +91,10 @@ symphony/
 - **Çıktı:** `curl` ile 4 farklı sağlayıcıdan streaming cevap alınabiliyor.
 - **Kabul testi:** 4 sağlayıcıdan streaming cevap; anahtarlar diskte grep'lenemiyor (yalnız keychain); her istek SQLite'a kayıt düşüyor; `providers.status` gerçek sağlık durumu döndürüyor; router v1 örnek göreve gerekçeli öneri veriyor.
 
-### Faz 2 — CLI: `symphony` Komutu (4–5. hafta)
-- [ ] Ink TUI: açılışta model seçici (aynı `claude` deneyimi), sohbet ekranı
-- [ ] `symphony` yazınca daemon çalışmıyorsa otomatik başlatma
-- [ ] Komutlar: `symphony` (TUI), `symphony models`, `symphony agents`, `symphony status`
+### Faz 2 — CLI: `symphony` Komutu (4–5. hafta) — devam ediyor
+- [x] Ink TUI: açılışta model seçici (↑/↓+Enter, tüm sağlayıcılar) + streaming sohbet ekranı (Esc iptal) ✅ 2026-07-03 — kullanıcının canlı TUI denemesi bekleniyor
+- [x] `symphony` yazınca daemon çalışmıyorsa otomatik başlatma ✅ 2026-07-03 — kabul koşusu geçti: temiz terminalde `status` daemon'ı spawn etti
+- [x] Komutlar: `symphony` (TUI), `symphony models`, `symphony status` ✅ 2026-07-03 — `symphony agents` Faz 3'te (agent motoru gerekiyor)
 - [ ] Global kurulum: `npm i -g` ile PATH'e `symphony` komutu
 - **Çıktı:** Terminalde `symphony` → model seç → sohbet et.
 - **Kabul testi:** Temiz terminalde `symphony` daemon'ı otomatik başlatıyor; model seçici tüm sağlayıcıları listeliyor; streaming sohbet akıyor; aynı anda açık ikinci istemci aynı olayları görüyor.

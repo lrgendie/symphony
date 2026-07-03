@@ -71,8 +71,25 @@ erişim kilitleniyor. Çözüm: başlarken port kontrolü / tek-kopya kilidi
    Gemini'ye iletiliyor. **Canlı test anahtar bekliyor** — kullanıcı anahtar
    eklerse: `pnpm --filter @symphony/core key:set openai` (veya google).
 
-**Faz 1 kod olarak TAMAM.** Kalan: OpenAI/Google canlı doğrulama (anahtar gelince)
-+ kabul testinin "anahtar diskte grep'lenemiyor" koşusu. Sonraki büyük iş: **Faz 2 CLI**.
+**Faz 1 kod olarak TAMAM.** Kalan: OpenAI/Google canlı doğrulama (anahtar gelince).
+Anahtar-diskte-yok kabul koşusu ✅ geçti (grep temiz, yalnız keychain).
+
+## Faz 2 — CLI (başladı 2026-07-03 akşam, ilk dilim TAMAM)
+
+- ✅ **Daemon istemcisi** (`packages/cli/src/client/daemon-client.ts`): WS+hello,
+  replyTo korelasyonu, sticky kayıt (chat'in geç hatası aynı TCP paketinde bile
+  yakalanır), üstel geri çekilmeli yeniden bağlanma, olay aboneliği.
+- ✅ **Otomatik başlatma**: `ensureDaemonRunning` → sağlık sondası → yoksa
+  `@symphony/core/daemon` (yeni export alt yolu) detached spawn + sağlık bekleme.
+  **Kabul koşusu geçti:** temiz terminalde `symphony status` daemon'ı kendisi başlattı.
+- ✅ **Komutlar**: `symphony status` (sağlayıcı sağlığı + SQLite kullanım özeti),
+  `symphony models` (4 sağlayıcı, 9 model listelendi). `symphony agents` Faz 3'e.
+- ✅ **Ink TUI** (ink 7 + React 19): model seçici (↑/↓+Enter) → sohbet ekranı
+  (canlı delta akışı, maliyet satırı, Esc iptal). **Kullanıcının canlı TUI
+  denemesi bekleniyor** (etkileşimli olduğu için otomatikleştirilmedi;
+  bileşenler ink-testing-library ile testli).
+- 69/69 test yeşil. Kalan Faz 2 işleri: global kurulum (`npm i -g`),
+  ikinci-istemci eş zamanlılığının CLI düzeyinde gösterimi, sohbet geçmişi tablosu.
 
 **Teknik not (Ollama):** topluluk paketleri `ollama-ai-provider`/`-v2` AI SDK v7 + zod v3
 ile uyumsuz → resmî `@ai-sdk/openai-compatible` seçildi (GEREKSINIMLER.md güncellendi).
