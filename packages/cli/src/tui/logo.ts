@@ -1,11 +1,11 @@
 /**
  * Marka logosu — TEK değişim noktası (ROADMAP Faz 2.5).
- * Kaynak: kullanıcının logosu (2026-07-03) — nöral sinaps düğümlü tesseract
- * (hiperküp): camgöbeği dış küp iskeleti, mor iç küp, tek kırmızı sinaps.
- * Terminal uyarlaması: dış kare = dış küp, iç kare = iç küp, köşe çaprazları =
- * boyutlar arası bağlar; ◉ = görseldeki parlayan kırmızı sinaps düğümü.
+ * Kaynak: kullanıcının logosu (2026-07-03) — nöral sinaps düğümlü tesseract:
+ * İZOMETRİK dış küp (camgöbeği iskelet + parlak köşe düğümleri), içinde
+ * izometrik iç küp (mor), ◉ = görseldeki parlayan kırmızı sinaps düğümü.
+ * Görünmeyen (arkada kalan) kenarlar çizilmez — derinlik hissi bundan gelir.
  *
- * Kural: toplam genişlik ≤ 60 sütun, yükseklik ≤ 8 satır.
+ * Kural: toplam genişlik ≤ 60 sütun, yükseklik ≤ 12 satır.
  * Satır içi renk gerektiği için satırlar segment listesidir.
  */
 export interface LogoSegment {
@@ -14,33 +14,65 @@ export interface LogoSegment {
   color?: string;
 }
 
-const EDGE = "cyan"; // dış iskelet + boyut bağları
+const EDGE = "cyan"; // dış küp kenarları
 const NODE = "cyanBright"; // dış köşe düğümleri
-const INNER = "magentaBright"; // iç küp düğümleri
 const INNER_EDGE = "magenta"; // iç küp kenarları
+const INNER_NODE = "magentaBright"; // iç küp düğümleri
 const SYNAPSE = "redBright"; // parlayan sinaps (görseldeki kırmızı düğüm)
-const WORD = ["cyanBright", "cyan", "blueBright"]; // SYMPHONY yazısının satır renkleri
+const WORD = ["cyanBright", "cyan", "blueBright"]; // SYMPHONY satır renkleri
 
 export const LOGO_LINES: readonly LogoSegment[][] = [
   [
-    { text: "  " },
+    { text: "     " },
     { text: "●", color: NODE },
-    { text: "─────────────", color: EDGE },
+    { text: "─────────────────", color: EDGE },
     { text: "●", color: NODE },
   ],
   [
+    { text: "    " },
+    { text: "╱", color: EDGE },
+    { text: "                 " },
+    { text: "╱│", color: EDGE },
+  ],
+  [
+    { text: "   " },
+    { text: "╱", color: EDGE },
+    { text: "                 " },
+    { text: "╱", color: EDGE },
+    { text: " " },
+    { text: "│", color: EDGE },
+  ],
+  [
     { text: "  " },
-    { text: "│ ╲         ╱ │", color: EDGE },
+    { text: "●", color: NODE },
+    { text: "─────────────────", color: EDGE },
+    { text: "●", color: NODE },
+    { text: "  " },
+    { text: "│", color: EDGE },
+  ],
+  [
+    { text: "  " },
+    { text: "│", color: EDGE },
+    { text: "      " },
+    { text: "◆", color: INNER_NODE },
+    { text: "─────", color: INNER_EDGE },
+    { text: "◆", color: INNER_NODE },
+    { text: "    " },
+    { text: "│", color: EDGE },
+    { text: "  " },
+    { text: "│", color: EDGE },
     { text: "   " },
     { text: "╔═╗ ╦ ╦ ╔╦╗ ╔═╗ ╦ ╦ ╔═╗ ╔╗╔ ╦ ╦", color: WORD[0] },
   ],
   [
     { text: "  " },
     { text: "│", color: EDGE },
-    { text: "  " },
-    { text: "◆", color: INNER },
-    { text: "───────", color: INNER_EDGE },
-    { text: "◆", color: INNER },
+    { text: "     " },
+    { text: "╱", color: INNER_EDGE },
+    { text: "     " },
+    { text: "╱│", color: INNER_EDGE },
+    { text: "    " },
+    { text: "│", color: EDGE },
     { text: "  " },
     { text: "│", color: EDGE },
     { text: "   " },
@@ -49,8 +81,14 @@ export const LOGO_LINES: readonly LogoSegment[][] = [
   [
     { text: "  " },
     { text: "│", color: EDGE },
-    { text: "  " },
-    { text: "│       │", color: INNER_EDGE },
+    { text: "    " },
+    { text: "◆", color: INNER_NODE },
+    { text: "─────", color: INNER_EDGE },
+    { text: "◆", color: INNER_NODE },
+    { text: " " },
+    { text: "│", color: INNER_EDGE },
+    { text: "    " },
+    { text: "│", color: EDGE },
     { text: "  " },
     { text: "│", color: EDGE },
     { text: "   " },
@@ -59,18 +97,45 @@ export const LOGO_LINES: readonly LogoSegment[][] = [
   [
     { text: "  " },
     { text: "│", color: EDGE },
-    { text: "  " },
-    { text: "◆", color: INNER },
-    { text: "───────", color: INNER_EDGE },
+    { text: "    " },
+    { text: "│", color: INNER_EDGE },
+    { text: "     " },
+    { text: "│", color: INNER_EDGE },
+    { text: " " },
     { text: "◉", color: SYNAPSE },
+    { text: "    " },
+    { text: "│", color: EDGE },
+    { text: "  " },
+    { text: "●", color: NODE },
+  ],
+  [
     { text: "  " },
     { text: "│", color: EDGE },
+    { text: "    " },
+    { text: "│", color: INNER_EDGE },
+    { text: "     " },
+    { text: "│", color: INNER_EDGE },
+    { text: "╱", color: INNER_EDGE },
+    { text: "     " },
+    { text: "│", color: EDGE },
+    { text: " " },
+    { text: "╱", color: EDGE },
   ],
-  [{ text: "  " }, { text: "│ ╱         ╲ │", color: EDGE }],
+  [
+    { text: "  " },
+    { text: "│", color: EDGE },
+    { text: "    " },
+    { text: "◆", color: INNER_NODE },
+    { text: "─────", color: INNER_EDGE },
+    { text: "◆", color: INNER_NODE },
+    { text: "      " },
+    { text: "│", color: EDGE },
+    { text: "╱", color: EDGE },
+  ],
   [
     { text: "  " },
     { text: "●", color: NODE },
-    { text: "─────────────", color: EDGE },
+    { text: "─────────────────", color: EDGE },
     { text: "●", color: NODE },
   ],
 ];
