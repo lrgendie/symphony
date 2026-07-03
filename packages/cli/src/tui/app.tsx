@@ -1,17 +1,23 @@
-import { Box, Text, render } from "ink";
+import { Box, render } from "ink";
 import { useState, type JSX } from "react";
-import type { ModelInfo } from "@symphony/shared";
+import type { ModelInfo, ProviderHealth, Usage } from "@symphony/shared";
 import { connectToDaemon, type DaemonClient } from "../client/daemon-client.js";
 import { Chat } from "./chat.js";
 import { ModelPicker } from "./model-picker.js";
+import { Welcome } from "./welcome.js";
 
-/** `symphony` (argümansız): model seçici → sohbet. Claude Code akışının aynısı. */
-export function App(props: { client: DaemonClient; models: ModelInfo[] }): JSX.Element {
+/** `symphony` (argümansız): karşılama → model seçici → sohbet. */
+export function App(props: {
+  client: DaemonClient;
+  models: ModelInfo[];
+  providers: ProviderHealth[];
+  totals: Usage;
+}): JSX.Element {
   const [model, setModel] = useState<ModelInfo | null>(null);
 
   return (
     <Box flexDirection="column" padding={1}>
-      <Text bold>🎼 Symphony</Text>
+      <Welcome providers={props.providers} totals={props.totals} />
       {model === null ? (
         <ModelPicker models={props.models} onPick={setModel} />
       ) : (
@@ -23,14 +29,24 @@ export function App(props: { client: DaemonClient; models: ModelInfo[] }): JSX.E
 
 export async function runTui(): Promise<void> {
   const client = await connectToDaemon();
-  const { models } = await client.request("models.list", {});
+  const [{ models }, usage] = await Promise.all([
+    client.request("models.list", {}),
+    client.request("usage.query", {}),
+  ]);
   if (models.length === 0) {
     console.error("Hiç model yok — önce bir sağlayıcı yapılandır (bkz. symphony status).");
     client.close();
     process.exitCode = 1;
     return;
   }
-  const instance = render(<App client={client} models={models} />);
+  const instance = render(
+    <App
+      client={client}
+      models={models}
+      providers={client.snapshot?.providers ?? []}
+      totals={usage.totals}
+    />,
+  );
   await instance.waitUntilExit();
   client.close();
 }

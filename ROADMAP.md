@@ -100,6 +100,16 @@ symphony/
 - **Çıktı:** Terminalde `symphony` → model seç → sohbet et.
 - **Kabul testi:** Temiz terminalde `symphony` daemon'ı otomatik başlatıyor ✅; model seçici tüm sağlayıcıları listeliyor ✅; streaming sohbet akıyor ✅ (canlı, 2026-07-03); aynı anda açık ikinci istemci aynı olayları görüyor ✅ (concurrency.test.ts + `symphony watch`).
 
+### Faz 2.5 — CLI Kimliği: Karşılama Ekranı (küçük dilim)
+- [ ] `symphony` açılışında karşılama ekranı: marka logosu (ASCII/Unicode), sürüm + protokol,
+  tarih, daemon/sağlayıcı durum özeti, toplam kullanım (SQLite'tan), kısayol ipuçları —
+  Claude Code'un oturum başlangıcı karşılaması gibi
+- [ ] Logo tek modülde yaşar (`packages/cli/src/tui/logo.ts`): kullanıcının kendi logosu
+  gelince yalnız o dosya değişir; renk paleti markayla uyumlu
+- **Çıktı:** `symphony` yazınca sistem "merhaba" diyor — kimliği olan bir açılış.
+- **Kabul testi:** Karşılama ekranı logo + tarih + gerçek sağlayıcı durumu + gerçek kullanım
+  toplamını gösteriyor; model seçici akışı bozulmuyor; bileşen testli.
+
 ### Faz 3 — Kod Agent'ı: Sisteme Müdahale (6–8. hafta) ⭐ kalbi burası
 - [ ] Araç seti: `read_file`, `write_file`, `edit`, `glob`, `grep`, `run_command` (PowerShell/bash)
 - [ ] Agent döngüsü: model → tool call → sonuç → model... (Vercel AI SDK tool-calling ile, her modelde aynı)
@@ -117,6 +127,9 @@ symphony/
 - [ ] Model panosu: provider durumları, token kullanımı/maliyet sayaçları, yerel model VRAM durumu
 - [ ] **Yol haritası görselleştirme:** projelerin ROADMAP/plan dosyalarından otomatik üretilen interaktif faz-adım grafiği; hangi adım bitti, hangi adımda hangi agent çalışıyor canlı görünür
 - [ ] Proje görünümü: hangi projede hangi agent ne yapıyor
+- [ ] **CLI → masaüstü otomatik açılış:** terminalde `symphony` başlatılınca masaüstü
+  uygulaması da açılır (kurulu ve kapalıysa) — sistem tek komutla "canlanır".
+  Yapılandırılabilir: `~/.symphony/config.json` → `desktop.autoLaunch` (varsayılan açık)
 - [ ] Terminal ⇄ masaüstü eş zamanlılık testi: CLI'da başlayan iş anında ekranda
 - **Çıktı:** Terminalde agent çalıştırırken masaüstünde canlı izlediğin, yaşayan dashboard.
 - **Kabul testi:** CLI'da başlatılan koşu 1 saniye içinde masaüstünde görünüyor; küre agent durumlarına (thinking/executing/failed) görsel tepki veriyor; token/maliyet sayaçları gerçek kullanım verisiyle artıyor; izin istekleri masaüstünden de cevaplanabiliyor.
@@ -143,6 +156,11 @@ symphony/
 - [ ] CLI dağıtımı: npm paketi + tek dosya binary seçeneği
 - [ ] `symphony sync`: `~/.symphony/` klasörünü özel git deposuyla eşitleme (yeni makinede 2 dakikada kurulum)
 - [ ] Otomatik güncelleme (sürümlü + tek komutla geri alınabilir; güncelleyici çekirdek ayrı ve dokunulmaz)
+- [ ] **Mimari + kullanım PDF rehberi:** sistemin ne yaptığı, mimari şema, kod haritası
+  (hangi paket/dosya ne işe yarar), araçlar/agent'lar/skill'ler ve kodda nerede tanımlı
+  oldukları, protokol özeti, komut başvurusu. Kaynak markdown (`docs/REHBER.md`) olarak
+  yazılır — sistem geliştikçe güncellenir — ve PDF'e derlenir. Tüm sistem tamamlanınca
+  teslim edilir; iskeleti Faz 4 sonunda çıkarılır ki belge kodla birlikte büyüsün
 - **Çıktı:** Kur → giriş yap → senkronla → devam et.
 - **Kabul testi:** Windows installer temiz bir makinede kurulup çalışıyor; `symphony` komutu PATH'te; `symphony sync` ikinci makinede ayarları ve agent tanımlarını geri getiriyor (anahtarlar hariç — onlar yeniden girilir); güncelleme tek komutla geri alınabiliyor.
 

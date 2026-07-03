@@ -18,6 +18,12 @@ liste + döküm çalıştı. **76/76 test yeşil; build+lint+format temiz.**
 
 **Faz 1 durumu:** kod tamam; OpenAI/Google canlı doğrulama anahtar bekliyor.
 
+**Faz 2.5 (aynı gün eklendi ve kodlandı):** TUI karşılama ekranı — logo
+(`tui/logo.ts`, geçici banner; kullanıcı logosu bekleniyor) + sürüm/protokol/tarih +
+sağlayıcı durumu + SQLite kullanım özeti + kısayol ipuçları (`tui/welcome.tsx`, testli).
+ROADMAP'e ayrıca eklendi: **Faz 4** CLI→masaüstü otomatik açılış (`desktop.autoLaunch`),
+**Faz 7** mimari+kod haritası PDF rehberi (`docs/REHBER.md` → PDF; iskelet Faz 4 sonunda).
+
 Daemon (`symphonyd`) canlı: Fastify+ws, port 7770, token auth, hello/snapshot akışı,
 `chat.start` → `chat.delta` yayını → `chat.completed`+maliyet. Anthropic adapter'ı hazır
 (AI SDK v7). Sır kasası: keychain (@napi-rs/keyring) + env yedek. **44 test yeşil.**
@@ -132,8 +138,11 @@ CLI oturum yönetimiyle birlikte tasarlanacak; şimdilik yalnız istek META veri
 
 ## Bekleyen kararlar / kullanıcıdan gerekenler
 
-- [ ] API anahtarları Faz 1'de gerekecek (Anthropic ilk sırada; OpenAI/Google sonra eklenebilir).
-- [ ] Ollama kurulumu Faz 1'de yapılacak.
+- [ ] **Kullanıcı logosu:** karşılama ekranındaki geçici banner, kullanıcının kendi
+  logosuyla değiştirilecek — logo görseli paylaşılınca YALNIZ
+  `packages/cli/src/tui/logo.ts` güncellenir (LOGO_LINES + LOGO_COLORS).
+- [ ] OpenAI/Google API anahtarları (isteğe bağlı — gelince canlı doğrulama yapılır:
+  `pnpm --filter @symphony/core key:set openai`).
 
 ## Notlar
 
