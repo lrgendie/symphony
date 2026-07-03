@@ -1,0 +1,337 @@
+import { randomUUID } from "node:crypto";
+import Fastify from "fastify";
+import { WebSocketServer, WebSocket } from "ws";
+import { pino } from "pino";
+import {
+  ChatStartPayloadSchema,
+  DAEMON_HOST,
+  PROTOCOL_VERSION,
+  createMessage,
+  parseMessage,
+  type ErrorPayload,
+  type ProviderHealth,
+  type RequestPayload,
+  type Snapshot,
+  type Usage,
+} from "@symphony/shared";
+import { ensureSymphonyHome } from "../config/paths.js";
+import { loadConfig } from "../config/config.js";
+import { createSecretStore } from "../secrets/secret-store.js";
+import { AnthropicAdapter } from "../providers/anthropic.js";
+import type { ProviderAdapter } from "../providers/types.js";
+import { EventBus } from "./bus.js";
+import { issueDaemonToken } from "./token.js";
+
+export const DAEMON_VERSION = "0.1.0";
+
+export interface DaemonOptions {
+  /** Test/geliştirme: 0 verilirse boş bir port seçilir. */
+  port?: number;
+  /** Test: `~/.symphony` yerine kullanılacak dizin. */
+  home?: string;
+}
+
+export interface RunningDaemon {
+  port: number;
+  token: string;
+  close(): Promise<void>;
+}
+
+export async function startDaemon(options: DaemonOptions = {}): Promise<RunningDaemon> {
+  const paths = ensureSymphonyHome(options.home);
+  const config = loadConfig(paths);
+  const token = issueDaemonToken(paths.daemonTokenFile);
+  const log = pino({ name: "symphonyd" });
+
+  const secrets = await createSecretStore();
+  const providers = new Map<string, ProviderAdapter>();
+  const anthropic = new AnthropicAdapter(secrets);
+  providers.set(anthropic.name, anthropic);
+
+  const bus = new EventBus();
+  const activeChats = new Map<string, AbortController>();
+
+  async function providerStatuses(): Promise<ProviderHealth[]> {
+    const statuses: ProviderHealth[] = [];
+    for (const provider of providers.values()) {
+      statuses.push({
+        provider: provider.name,
+        status: (await provider.isConfigured()) ? "up" : "down",
+      });
+    }
+    return statuses;
+  }
+
+  async function buildSnapshot(): Promise<Snapshot> {
+    return { runs: [], providers: await providerStatuses(), pendingPermissions: [] };
+  }
+
+  /** WS ve REST'in ortak sohbet yolu: delta'lar TÜM istemcilere yayınlanır. */
+  async function runChat(
+    payload: RequestPayload<"chat.start">,
+    sessionId: string,
+    onDelta?: (text: string) => void,
+  ): Promise<Usage> {
+    const provider = providers.get(payload.provider);
+    if (!provider) {
+      throw makeError("PROVIDER_UNKNOWN", `Bilinmeyen sağlayıcı: ${payload.provider}`);
+    }
+    const abort = new AbortController();
+    activeChats.set(sessionId, abort);
+    try {
+      const stream = provider.streamChat({
+        model: payload.model,
+        messages: payload.messages,
+        temperature: payload.options.temperature,
+        ...(payload.options.maxTokens !== undefined
+          ? { maxTokens: payload.options.maxTokens }
+          : {}),
+        abortSignal: abort.signal,
+      });
+      let usageResult;
+      for (;;) {
+        const next = await stream.next();
+        if (next.done) {
+          usageResult = next.value;
+          break;
+        }
+        bus.broadcast("chat.delta", { sessionId, text: next.value });
+        onDelta?.(next.value);
+      }
+      const usage: Usage = {
+        inputTokens: usageResult.inputTokens,
+        outputTokens: usageResult.outputTokens,
+        costUsd: usageResult.costUsd,
+      };
+      bus.broadcast("chat.completed", { sessionId, usage });
+      bus.broadcast("usage.updated", {
+        provider: payload.provider,
+        model: payload.model,
+        deltaTokens: usage.inputTokens + usage.outputTokens,
+        deltaCostUsd: usage.costUsd,
+        totals: usage, // Faz 1: kalıcı toplamlar SQLite ile gelecek
+      });
+      log.info({ sessionId, model: payload.model, ...usage }, "sohbet tamamlandı");
+      return usage;
+    } finally {
+      activeChats.delete(sessionId);
+    }
+  }
+
+  // ---- REST ----
+
+  const app = Fastify({ logger: false });
+
+  app.get("/api/health", async () => ({
+    ok: true,
+    daemonVersion: DAEMON_VERSION,
+    protocolVersion: PROTOCOL_VERSION,
+  }));
+
+  app.addHook("onRequest", async (request, reply) => {
+    if (request.url === "/api/health") return;
+    if (request.headers.authorization !== `Bearer ${token}`) {
+      await reply
+        .code(401)
+        .send({ code: "AUTH_TOKEN_INVALID", message: "Geçersiz veya eksik daemon token'ı" });
+    }
+  });
+
+  // curl ile kabul testi için SSE ucu: data: {"type":"delta"|"completed"|"error", ...}
+  app.post("/api/chat", async (request, reply) => {
+    const parsed = ChatStartPayloadSchema.safeParse(request.body);
+    if (!parsed.success) {
+      await reply.code(400).send({
+        code: "VALIDATION_PAYLOAD",
+        message: "chat.start şemasına uymuyor",
+        details: { issues: parsed.error.issues },
+      });
+      return;
+    }
+    const sessionId = parsed.data.sessionId ?? randomUUID();
+    reply.raw.writeHead(200, {
+      "content-type": "text/event-stream",
+      "cache-control": "no-cache",
+      connection: "keep-alive",
+    });
+    const send = (event: unknown): void => {
+      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+    send({ type: "session", sessionId });
+    try {
+      const usage = await runChat(parsed.data, sessionId, (text) => send({ type: "delta", text }));
+      send({ type: "completed", usage });
+    } catch (error) {
+      send({ type: "error", ...toErrorPayload(error) });
+    }
+    reply.raw.end();
+  });
+
+  // ---- WebSocket ----
+
+  const wss = new WebSocketServer({ noServer: true });
+
+  app.server.on("upgrade", (request, socket, head) => {
+    if (request.url !== "/ws") {
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(request, socket, head, (ws) => wss.emit("connection", ws));
+  });
+
+  wss.on("connection", (ws: WebSocket) => {
+    let authed = false;
+    const helloTimer = setTimeout(() => {
+      if (!authed) ws.close(4001, "hello zaman aşımı");
+    }, 3000);
+
+    const sendError = (error: ErrorPayload, replyTo: string | null = null): void => {
+      ws.send(JSON.stringify(createMessage("error", error, replyTo)));
+    };
+
+    ws.on("close", () => {
+      clearTimeout(helloTimer);
+      bus.remove(ws);
+    });
+
+    ws.on("message", (raw) => {
+      void (async () => {
+        let input: unknown;
+        try {
+          input = JSON.parse(String(raw));
+        } catch {
+          sendError({ code: "VALIDATION_ENVELOPE", message: "Geçersiz JSON" });
+          return;
+        }
+        const result = parseMessage(input);
+        if (!result.ok) {
+          sendError(result.error);
+          return;
+        }
+        const message = result.message;
+
+        if (!authed) {
+          if (message.type !== "hello") {
+            sendError({ code: "AUTH_HELLO_REQUIRED", message: "İlk mesaj hello olmalı" });
+            ws.close(4002, "hello bekleniyor");
+            return;
+          }
+          const hello = message.payload as RequestPayload<"hello">;
+          if (hello.token !== token) {
+            sendError({ code: "AUTH_TOKEN_INVALID", message: "Geçersiz token" }, message.id);
+            ws.close(4003, "kimlik doğrulanamadı");
+            return;
+          }
+          if (hello.protocolVersion !== PROTOCOL_VERSION) {
+            sendError(
+              {
+                code: "AUTH_PROTOCOL_MISMATCH",
+                message: `Daemon protokol v${PROTOCOL_VERSION}, istemci v${hello.protocolVersion} — istemciyi güncelle`,
+              },
+              message.id,
+            );
+            ws.close(4004, "protokol uyuşmazlığı");
+            return;
+          }
+          authed = true;
+          clearTimeout(helloTimer);
+          bus.add(ws);
+          bus.sendTo(
+            ws,
+            "hello.ok",
+            {
+              daemonVersion: DAEMON_VERSION,
+              protocolVersion: PROTOCOL_VERSION,
+              snapshot: await buildSnapshot(),
+            },
+            message.id,
+          );
+          return;
+        }
+
+        switch (message.type) {
+          case "state.sync": {
+            bus.sendTo(ws, "state.sync.ok", { snapshot: await buildSnapshot() }, message.id);
+            return;
+          }
+          case "chat.start": {
+            const payload = message.payload as RequestPayload<"chat.start">;
+            const sessionId = payload.sessionId ?? randomUUID();
+            bus.sendTo(ws, "chat.start.ok", { sessionId }, message.id);
+            runChat(payload, sessionId).catch((error: unknown) => {
+              sendError(toErrorPayload(error), message.id);
+            });
+            return;
+          }
+          case "chat.cancel": {
+            const payload = message.payload as RequestPayload<"chat.cancel">;
+            activeChats.get(payload.sessionId)?.abort();
+            bus.sendTo(ws, "chat.cancel.ok", {}, message.id);
+            return;
+          }
+          case "models.list": {
+            const models = [...providers.values()].flatMap((p) => p.listModels());
+            bus.sendTo(ws, "models.list.ok", { models }, message.id);
+            return;
+          }
+          case "providers.status": {
+            bus.sendTo(
+              ws,
+              "providers.status.ok",
+              { providers: await providerStatuses() },
+              message.id,
+            );
+            return;
+          }
+          default: {
+            sendError(
+              {
+                code: "VALIDATION_NOT_IMPLEMENTED",
+                message: `'${message.type}' bu fazda desteklenmiyor (bkz. ROADMAP.md)`,
+              },
+              message.id,
+            );
+          }
+        }
+      })().catch((error: unknown) => {
+        sendError(toErrorPayload(error));
+      });
+    });
+  });
+
+  const port = options.port ?? config.daemon.port;
+  await app.listen({ port, host: DAEMON_HOST });
+  const address = app.server.address();
+  const boundPort = typeof address === "object" && address !== null ? address.port : port;
+  log.info({ port: boundPort, protocolVersion: PROTOCOL_VERSION }, "symphonyd dinliyor");
+
+  return {
+    port: boundPort,
+    token,
+    close: async () => {
+      for (const abort of activeChats.values()) abort.abort();
+      wss.close();
+      await app.close();
+    },
+  };
+}
+
+function makeError(code: string, message: string): Error {
+  const error = new Error(message);
+  error.name = code;
+  return error;
+}
+
+function toErrorPayload(error: unknown): ErrorPayload {
+  if (error instanceof Error) {
+    const code = /^(AUTH|PROVIDER|AGENT|PERMISSION|VALIDATION|INTERNAL)_[A-Z0-9_]+$/.test(
+      error.name,
+    )
+      ? error.name
+      : error.message.startsWith("PROVIDER_NOT_CONFIGURED")
+        ? "PROVIDER_NOT_CONFIGURED"
+        : "INTERNAL_ERROR";
+    return { code, message: error.message };
+  }
+  return { code: "INTERNAL_ERROR", message: String(error) };
+}

@@ -80,10 +80,10 @@ symphony/
 - **Çıktı:** `pnpm build` ve `pnpm test` çalışan iskelet repo.
 - **Kabul testi:** Temiz klonda `pnpm install && pnpm build && pnpm test` sıfır hatayla geçer; CI yeşil; `shared`'daki en az bir zod şemasının doğrulama testi vardır.
 
-### Faz 1 — Çekirdek: Provider Katmanı (2–3. hafta)
-- [ ] `symphonyd` süreci: localhost REST + WebSocket sunucusu (Fastify + ws)
-- [ ] Vercel AI SDK ile provider adapter'ları: **Anthropic → OpenAI → Google → Ollama**
-- [ ] API anahtarı yönetimi (keychain) + provider sağlık kontrolü (hangi model ayakta?)
+### Faz 1 — Çekirdek: Provider Katmanı (2–3. hafta) — devam ediyor
+- [x] `symphonyd` süreci: localhost REST + WebSocket sunucusu (Fastify + ws) — token auth, hello akışı, snapshot ✅ 2026-07-03
+- [ ] Vercel AI SDK ile provider adapter'ları: **Anthropic ✅ → OpenAI → Google → Ollama**
+- [x] API anahtarı yönetimi (keychain: @napi-rs/keyring + env yedek) + provider sağlık kontrolü ✅ 2026-07-03
 - [ ] Streaming sohbet: tek uçtan tüm modellerle konuşabilme
 - [ ] SQLite veri katmanı: sohbet geçmişi + her isteğin kaydı (model, süre, token, maliyet, başarı) — ileride router ve kişiselleşme bu veriyle beslenecek
 - [ ] Hata telemetrisi: daemon ve agent hatalarının yapılandırılmış kaydı (hangi işlem, hangi girdi, stack trace) — kendi kendini onarmanın veri kaynağı

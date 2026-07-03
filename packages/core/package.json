@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "symphonyd — Symphony çekirdek daemon'ı (Faz 1'de dolacak; Faz 0: ~/.symphony yapısı)",
+  "description": "symphonyd — Symphony çekirdek daemon'ı: provider katmanı, WS/REST sunucu, sır kasası",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -13,12 +13,24 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "key:set": "tsx src/secrets/set-key.ts"
   },
   "dependencies": {
-    "@symphony/shared": "workspace:*"
+    "@ai-sdk/anthropic": "^4.0.5",
+    "@napi-rs/keyring": "^1.3.0",
+    "@symphony/shared": "workspace:*",
+    "ai": "^7.0.11",
+    "fastify": "^5.9.0",
+    "pino": "^10.3.1",
+    "ws": "^8.21.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^26.1.0"
+    "@types/node": "^26.1.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.22.4"
   }
 }

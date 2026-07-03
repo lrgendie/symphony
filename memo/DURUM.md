@@ -6,10 +6,23 @@
 
 ## Şu an neredeyiz?
 
-**Faz 0 — TAMAMLANDI ✅ (2026-07-03). Sırada: Faz 1 (provider katmanı).**
+**Faz 1 — DEVAM EDİYOR (ilk dikey dilim tamam, 2026-07-03).**
 
-Monorepo ayakta, protokol koda döküldü, testler yeşil, CLI iskeleti çalışıyor.
-GitHub Actions CI kullanıcı tarafından doğrulandı: **yeşil** → Faz 0 kabul testi eksiksiz geçti.
+Daemon (`symphonyd`) canlı: Fastify+ws, port 7770, token auth, hello/snapshot akışı,
+`chat.start` → `chat.delta` yayını → `chat.completed`+maliyet. Anthropic adapter'ı hazır
+(AI SDK v7). Sır kasası: keychain (@napi-rs/keyring) + env yedek. 37 test yeşil.
+
+**⚠️ Kritik teknik not:** Claude 4.7+ modelleri (Opus 4.8, Sonnet 5) `temperature`
+parametresini KABUL ETMİYOR (400 döner) — Anthropic adapter'ı bu parametreyi bilinçli
+olarak API'ye iletmiyor. ADR-008 ilkesi diğer sağlayıcılarda geçerli.
+
+**Bekleyen ilk iş: kullanıcının Anthropic anahtarını kaydetmesi** → sonra curl ile canlı
+streaming kabul testi. Komut:
+```powershell
+$env:SYMPHONY_KEY = "sk-ant-..."
+pnpm --filter @symphony/core key:set anthropic
+Remove-Item Env:SYMPHONY_KEY
+```
 
 ## Bitenler
 
@@ -29,12 +42,12 @@ GitHub Actions CI kullanıcı tarafından doğrulandı: **yeşil** → Faz 0 kab
 
 ## Sıradaki adım (buradan devam)
 
-**→ Faz 1: Çekirdek provider katmanı**
-1. `core`'a Fastify + ws sunucusu (PROTOKOL.md §1: port 7770, token auth, hello akışı)
-2. Vercel AI SDK ile ilk provider: Anthropic (streaming chat, temperature 0 varsayılan)
-3. Anahtar yönetimi: keytar vs @napi-rs/keyring dene (ADR-010), `SecretStore` soyutlaması
-4. SQLite veri katmanı (better-sqlite3): istek kayıtları + hata telemetrisi
-5. Sonra: OpenAI → Google → Ollama adapter'ları, router v1
+**→ Faz 1 kalanlar:**
+1. ✅ Fastify+ws sunucu, ✅ Anthropic adapter, ✅ SecretStore (keychain)
+2. Anahtar kaydı (kullanıcı) → curl ile canlı streaming kabul testi
+3. SQLite veri katmanı (better-sqlite3): istek kayıtları + hata telemetrisi
+4. Ollama adapter'ı (yerel model) → sonra OpenAI/Google
+5. Router v1 (kural tabanlı öneri)
 
 **Faz 0'dan notlar (Faz 1'de lazım olacak):**
 - Node paketi eklerken `tsconfig.json`'a `"types": ["node"]` yazmayı unutma (TS 6 otomatik almıyor)
