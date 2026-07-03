@@ -87,7 +87,7 @@ symphony/
 - [ ] Streaming sohbet: tek uçtan tüm modellerle konuşabilme
 - [x] SQLite veri katmanı: her isteğin kaydı (model, süre, token, maliyet, başarı) + `usage.query` + kalıcı toplamlar ✅ 2026-07-03 — ileride router ve kişiselleşme bu veriyle beslenecek; sohbet geçmişi tablosu Faz 2'de CLI oturumlarıyla eklenecek
 - [x] Hata telemetrisi: daemon hatalarının yapılandırılmış kaydı (hangi işlem, girdi ÖZETİ, stack trace) ✅ 2026-07-03 — kendi kendini onarmanın veri kaynağı; agent hataları Faz 3'te aynı tabloya düşecek
-- [ ] **Model yönlendirici v1 (kural tabanlı):** görev türüne göre öneri — "kod işi → Claude, hızlı özet → yerel Llama, uzun bağlam → Gemini" gibi; donanımını da tanır (VRAM'e göre hangi yerel model kaldırılabilir)
+- [x] **Model yönlendirici v1 (kural tabanlı):** görev türüne göre gerekçeli öneri (kod/hızlı/uzun bağlam/genel) ✅ 2026-07-03 — donanımı tanıyor (nvidia-smi ile VRAM; <5 GB'da yerel öneri geriye düşer), yalnız kullanılabilir sağlayıcılardan önerir, `router.suggest` protokol mesajı canlı
 - **Çıktı:** `curl` ile 4 farklı sağlayıcıdan streaming cevap alınabiliyor.
 - **Kabul testi:** 4 sağlayıcıdan streaming cevap; anahtarlar diskte grep'lenemiyor (yalnız keychain); her istek SQLite'a kayıt düşüyor; `providers.status` gerçek sağlık durumu döndürüyor; router v1 örnek göreve gerekçeli öneri veriyor.
 

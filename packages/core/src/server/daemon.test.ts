@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { rmSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
+import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { WebSocket } from "ws";
@@ -9,13 +10,33 @@ import { startDaemon, type RunningDaemon } from "./daemon.js";
 
 const testHome = join(tmpdir(), `symphony-daemon-test-${Date.now()}`);
 let daemon: RunningDaemon;
+// Sahte Ollama: testler CI'da gerçek Ollama olmadan da deterministik koşar.
+let fakeOllama: Server;
 
 beforeAll(async () => {
-  daemon = await startDaemon({ port: 0, home: testHome });
+  fakeOllama = createServer((req, res) => {
+    if (req.method === "GET" && req.url === "/api/tags") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ models: [{ name: "qwen3:8b" }] }));
+      return;
+    }
+    res.writeHead(404).end();
+  });
+  await new Promise<void>((resolve) => fakeOllama.listen(0, "127.0.0.1", resolve));
+  const address = fakeOllama.address();
+  const ollamaPort = typeof address === "object" && address !== null ? address.port : 0;
+  daemon = await startDaemon({
+    port: 0,
+    home: testHome,
+    ollamaBaseUrl: `http://127.0.0.1:${ollamaPort}`,
+  });
 });
 
 afterAll(async () => {
   await daemon.close();
+  await new Promise<void>((resolve, reject) =>
+    fakeOllama.close((err) => (err ? reject(err) : resolve())),
+  );
   rmSync(testHome, { recursive: true, force: true });
 });
 
@@ -112,6 +133,47 @@ describe("symphonyd", () => {
     expect(reply.type).toBe("error");
     expect((reply.payload as { code: string }).code).toBe("AUTH_HELLO_REQUIRED");
     await new Promise<void>((resolve) => ws.once("close", () => resolve()));
+  });
+
+  it("router.suggest örnek göreve gerekçeli öneri verir (Faz 1 kabul testi)", async () => {
+    const { reply, ws } = await roundTrip(
+      createMessage("hello", {
+        token: daemon.token,
+        client: "cli",
+        protocolVersion: PROTOCOL_VERSION,
+      }),
+    );
+    expect(reply.type).toBe("hello.ok");
+
+    const suggestReply = await request(
+      ws,
+      createMessage("router.suggest", { task: "bu metni özetle" }),
+    );
+    expect(suggestReply.type).toBe("router.suggest.ok");
+    const { suggestions } = suggestReply.payload as {
+      suggestions: Array<{ provider: string; model: string; reason: string; local: boolean }>;
+    };
+    expect(suggestions.length).toBeGreaterThan(0);
+    // Hızlı iş → yerel model önde (sahte Ollama'daki qwen3:8b) ve gerekçesi dolu
+    expect(suggestions[0]).toMatchObject({ provider: "ollama", model: "qwen3:8b", local: true });
+    expect(suggestions[0]?.reason).toContain("yerel");
+    ws.close();
+  });
+
+  it("tek-kopya kilidi: ikinci kopya reddedilir ve token dosyası EZİLMEZ", async () => {
+    const tokenFile = join(testHome, "daemon.token");
+    const tokenBefore = readFileSync(tokenFile, "utf8");
+    expect(tokenBefore).toBe(daemon.token);
+
+    // Aynı portta ikinci kopya: token dosyasına dokunmadan çökmeli (2026-07-03 dersi)
+    await expect(startDaemon({ port: daemon.port, home: testHome })).rejects.toThrow(
+      /zaten bir symphonyd çalışıyor/,
+    );
+    expect(readFileSync(tokenFile, "utf8")).toBe(tokenBefore);
+
+    // Çalışan daemon hâlâ sağlıklı
+    const res = await fetch(`http://127.0.0.1:${daemon.port}/api/health`);
+    expect(res.status).toBe(200);
   });
 
   it("başarısız sohbet SQLite'a istek kaydı + telemetri düşürür; usage.query cevaplar", async () => {

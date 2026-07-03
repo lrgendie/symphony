@@ -2,7 +2,13 @@
 import { PROTOCOL_VERSION } from "@symphony/shared";
 import { startDaemon, DAEMON_VERSION } from "./server/daemon.js";
 
-const daemon = await startDaemon();
+const daemon = await startDaemon().catch((error: unknown) => {
+  if (error instanceof Error && error.name === "DAEMON_ALREADY_RUNNING") {
+    console.error(`⚠️  ${error.message}`);
+    process.exit(1);
+  }
+  throw error;
+});
 console.log(
   `🎼 symphonyd v${DAEMON_VERSION} — 127.0.0.1:${daemon.port} (protokol v${PROTOCOL_VERSION})`,
 );

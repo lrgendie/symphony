@@ -9,6 +9,7 @@ import {
   createMessage,
   parseMessage,
   type ErrorPayload,
+  type ModelInfo,
   type ProviderHealth,
   type RequestPayload,
   type Snapshot,
@@ -21,8 +22,10 @@ import { AnthropicAdapter } from "../providers/anthropic.js";
 import { OllamaAdapter } from "../providers/ollama.js";
 import type { ProviderAdapter } from "../providers/types.js";
 import { DataStore } from "../db/store.js";
+import { detectVramGb } from "../router/hardware.js";
+import { suggestModels } from "../router/router.js";
 import { EventBus } from "./bus.js";
-import { issueDaemonToken } from "./token.js";
+import { generateDaemonToken, persistDaemonToken } from "./token.js";
 
 export const DAEMON_VERSION = "0.1.0";
 
@@ -44,7 +47,24 @@ export interface RunningDaemon {
 export async function startDaemon(options: DaemonOptions = {}): Promise<RunningDaemon> {
   const paths = ensureSymphonyHome(options.home);
   const config = loadConfig(paths);
-  const token = issueDaemonToken(paths.daemonTokenFile);
+  const port = options.port ?? config.daemon.port;
+
+  // Tek-kopya kilidi (2026-07-03 dersi): çalışan bir symphonyd varken ikinci
+  // kopya, token dosyasına DOKUNMADAN burada durdurulur. (port 0 = test/ephemeral,
+  // çakışamaz.) Sondanın yakalayamadığı yabancı süreçlerde EADDRINUSE yine erken
+  // fırlar — token dinleme başarılı olana dek yazılmadığı için dosya güvendedir.
+  if (port !== 0) {
+    const running = await probeRunningDaemon(port);
+    if (running !== null) {
+      throw makeError(
+        "DAEMON_ALREADY_RUNNING",
+        `Port ${port}'de zaten bir symphonyd çalışıyor (v${running.daemonVersion}). ` +
+          "İkinci kopya başlatılmadı; mevcut daemon'ı kullan veya önce onu durdur.",
+      );
+    }
+  }
+
+  const token = generateDaemonToken();
   const log = pino({ name: "symphonyd" });
 
   const secrets = await createSecretStore();
@@ -57,6 +77,20 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   const bus = new EventBus();
   const activeChats = new Map<string, AbortController>();
+
+  // VRAM bir kez tespit edilir (alt süreç maliyeti); ilk router.suggest'te tembel başlar.
+  let vramProbe: Promise<number | null> | null = null;
+  const getVramGb = (): Promise<number | null> => (vramProbe ??= detectVramGb());
+
+  /** Router yalnız KULLANILABİLİR sağlayıcıların modellerini görür. */
+  async function availableModels(): Promise<ModelInfo[]> {
+    const lists = await Promise.all(
+      [...providers.values()].map(async (provider) =>
+        (await provider.isConfigured()) ? provider.listModels() : [],
+      ),
+    );
+    return lists.flat();
+  }
 
   async function providerStatuses(): Promise<ProviderHealth[]> {
     const statuses: ProviderHealth[] = [];
@@ -340,6 +374,28 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             bus.sendTo(ws, "usage.query.ok", store.usageQuery(payload), message.id);
             return;
           }
+          case "router.suggest": {
+            const payload = message.payload as RequestPayload<"router.suggest">;
+            const [models, vramGb] = await Promise.all([availableModels(), getVramGb()]);
+            const suggestions = suggestModels(payload.task, payload.constraints, {
+              models,
+              vramGb,
+            });
+            if (suggestions.length === 0) {
+              sendError(
+                {
+                  code: "PROVIDER_NONE_AVAILABLE",
+                  message:
+                    "Önerilecek model yok: hiçbir sağlayıcı yapılandırılmamış/erişilebilir değil " +
+                    "ya da bütçe sınırı tüm seçenekleri eledi",
+                },
+                message.id,
+              );
+              return;
+            }
+            bus.sendTo(ws, "router.suggest.ok", { suggestions }, message.id);
+            return;
+          }
           default: {
             sendError(
               {
@@ -365,8 +421,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     });
   });
 
-  const port = options.port ?? config.daemon.port;
   await app.listen({ port, host: DAEMON_HOST });
+  // Token dosyası ancak dinleme BAŞARILI olunca yazılır (tek-kopya kilidinin ikinci yarısı).
+  persistDaemonToken(paths.daemonTokenFile, token);
   const address = app.server.address();
   const boundPort = typeof address === "object" && address !== null ? address.port : port;
   log.info({ port: boundPort, protocolVersion: PROTOCOL_VERSION }, "symphonyd dinliyor");
@@ -387,6 +444,20 @@ function makeError(code: string, message: string): Error {
   const error = new Error(message);
   error.name = code;
   return error;
+}
+
+/** Portta çalışan bir symphonyd var mı? Sağlık ucu authsuz olduğu için sondalanabilir. */
+async function probeRunningDaemon(port: number): Promise<{ daemonVersion: string } | null> {
+  try {
+    const response = await fetch(`http://${DAEMON_HOST}:${port}/api/health`, {
+      signal: AbortSignal.timeout(1000),
+    });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { ok?: boolean; daemonVersion?: string };
+    return body.ok === true ? { daemonVersion: body.daemonVersion ?? "?" } : null;
+  } catch {
+    return null;
+  }
 }
 
 function toErrorPayload(error: unknown): ErrorPayload {

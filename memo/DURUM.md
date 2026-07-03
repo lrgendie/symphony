@@ -57,9 +57,16 @@ erişim kilitleniyor. Çözüm: başlarken port kontrolü / tek-kopya kilidi
    `qwen3:8b` (8.2B Q4_K_M, 40k bağlam) indirildi; curl → daemon → yerel model
    Türkçe streaming cevap (19 giriş / 330 çıkış token, $0) + SQLite kaydı doğrulandı.
    **"Hem yerel hem bulut" hedefi kanıtlandı** (ROADMAP İlk Somut Adımlar §5.4).
-4. OpenAI/Google adapter'ları
-5. Router v1 (kural tabanlı öneri)
-6. Daemon tek-kopya kilidi (EADDRINUSE dersi)
+4. ✅ Daemon tek-kopya kilidi (2026-07-03): açılışta sağlık sondası → çalışan
+   symphonyd varsa `DAEMON_ALREADY_RUNNING` ile durur; token dosyası ancak
+   dinleme BAŞARILI olunca yazılır — EADDRINUSE'ta eski token artık ezilmiyor.
+5. ✅ Router v1 (2026-07-03): kural tabanlı, gerekçeli öneri (`router.suggest` canlı).
+   Görev türü çıkarımı kelime-kümesiyle (JS regex \b Türkçe'de çalışmıyor — ders!),
+   VRAM tespiti nvidia-smi'den, yalnız kullanılabilir sağlayıcılardan öneri,
+   preferLocal/maxCostUsd kısıtları uygulanıyor. v2 (Faz 6) aynı arayüzle
+   SQLite skorlarına geçecek.
+6. OpenAI/Google adapter'ları → **kullanıcıdan anahtar kararı bekleniyor**
+   (ikisi de mi, biri mi? Kabul testi "4 sağlayıcı" diyor)
 
 **Teknik not (Ollama):** topluluk paketleri `ollama-ai-provider`/`-v2` AI SDK v7 + zod v3
 ile uyumsuz → resmî `@ai-sdk/openai-compatible` seçildi (GEREKSINIMLER.md güncellendi).
