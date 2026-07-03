@@ -1,5 +1,5 @@
 /**
- * USD / 1M token. Kaynak: Anthropic resmi model kataloğu (2026-06 önbelleği).
+ * USD / 1M token. Kaynak: sağlayıcıların resmi model katalogları (2026-06 önbelleği).
  * Bilinmeyen model (ör. yerel Ollama) → maliyet 0.
  * Fiyat güncellemesi = yalnız bu tablo; kod değişmez.
  */
@@ -11,6 +11,11 @@ const PRICES_PER_MTOK: Record<string, { input: number; output: number }> = {
   "claude-sonnet-5": { input: 3, output: 15 },
   "claude-sonnet-4-6": { input: 3, output: 15 },
   "claude-haiku-4-5": { input: 1, output: 5 },
+  "gpt-5.1": { input: 1.25, output: 10 },
+  "gpt-5-mini": { input: 0.25, output: 2 },
+  "gpt-5-nano": { input: 0.05, output: 0.4 },
+  "gemini-2.5-pro": { input: 1.25, output: 10 },
+  "gemini-2.5-flash": { input: 0.3, output: 2.5 },
 };
 
 export function computeCostUsd(model: string, inputTokens: number, outputTokens: number): number {

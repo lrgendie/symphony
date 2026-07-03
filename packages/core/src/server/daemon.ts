@@ -19,7 +19,9 @@ import { ensureSymphonyHome } from "../config/paths.js";
 import { loadConfig } from "../config/config.js";
 import { createSecretStore } from "../secrets/secret-store.js";
 import { AnthropicAdapter } from "../providers/anthropic.js";
+import { GoogleAdapter } from "../providers/google.js";
 import { OllamaAdapter } from "../providers/ollama.js";
+import { OpenAIAdapter } from "../providers/openai.js";
 import type { ProviderAdapter } from "../providers/types.js";
 import { DataStore } from "../db/store.js";
 import { detectVramGb } from "../router/hardware.js";
@@ -70,10 +72,14 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const secrets = await createSecretStore();
   const store = new DataStore(paths.databaseFile);
   const providers = new Map<string, ProviderAdapter>();
-  const anthropic = new AnthropicAdapter(secrets);
-  providers.set(anthropic.name, anthropic);
-  const ollama = new OllamaAdapter(options.ollamaBaseUrl);
-  providers.set(ollama.name, ollama);
+  for (const adapter of [
+    new AnthropicAdapter(secrets),
+    new OpenAIAdapter(secrets),
+    new GoogleAdapter(secrets),
+    new OllamaAdapter(options.ollamaBaseUrl),
+  ]) {
+    providers.set(adapter.name, adapter);
+  }
 
   const bus = new EventBus();
   const activeChats = new Map<string, AbortController>();
@@ -433,6 +439,8 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     token,
     close: async () => {
       for (const abort of activeChats.values()) abort.abort();
+      // Açık istemci soketleri koparılmazsa app.close() sonsuza dek bekleyebilir.
+      for (const client of wss.clients) client.terminate();
       wss.close();
       await app.close();
       store.close();

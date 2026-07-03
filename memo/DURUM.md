@@ -65,8 +65,14 @@ erişim kilitleniyor. Çözüm: başlarken port kontrolü / tek-kopya kilidi
    VRAM tespiti nvidia-smi'den, yalnız kullanılabilir sağlayıcılardan öneri,
    preferLocal/maxCostUsd kısıtları uygulanıyor. v2 (Faz 6) aynı arayüzle
    SQLite skorlarına geçecek.
-6. OpenAI/Google adapter'ları → **kullanıcıdan anahtar kararı bekleniyor**
-   (ikisi de mi, biri mi? Kabul testi "4 sağlayıcı" diyor)
+6. ✅ OpenAI/Google adapter'ları KODU (2026-07-03): gpt-5.1/mini/nano +
+   gemini-2.5-pro/flash, fiyatlar pricing.ts'te, daemon'da 4 sağlayıcı kayıtlı.
+   GPT-5 ailesi temperature KABUL ETMİYOR (Claude 4.7+ gibi) → iletilmiyor;
+   Gemini'ye iletiliyor. **Canlı test anahtar bekliyor** — kullanıcı anahtar
+   eklerse: `pnpm --filter @symphony/core key:set openai` (veya google).
+
+**Faz 1 kod olarak TAMAM.** Kalan: OpenAI/Google canlı doğrulama (anahtar gelince)
++ kabul testinin "anahtar diskte grep'lenemiyor" koşusu. Sonraki büyük iş: **Faz 2 CLI**.
 
 **Teknik not (Ollama):** topluluk paketleri `ollama-ai-provider`/`-v2` AI SDK v7 + zod v3
 ile uyumsuz → resmî `@ai-sdk/openai-compatible` seçildi (GEREKSINIMLER.md güncellendi).

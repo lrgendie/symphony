@@ -191,8 +191,8 @@ describe("symphonyd", () => {
     const ack = await request(
       ws,
       createMessage("chat.start", {
-        provider: "openai",
-        model: "gpt-test",
+        provider: "yok-boyle-saglayici",
+        model: "hayalet-model",
         messages: [{ role: "user", content: "merhaba" }],
       }),
     );
@@ -206,14 +206,14 @@ describe("symphonyd", () => {
       rows: Array<{ key: string }>;
       totals: { inputTokens: number };
     };
-    expect(usage.rows.map((r) => r.key)).toContain("openai");
+    expect(usage.rows.map((r) => r.key)).toContain("yok-boyle-saglayici");
 
     // Dosyaya gerçekten yazılmış mı? (kabul testi: her istek SQLite'a kayıt düşüyor)
     const db = new DataStore(join(testHome, "data", "symphony.db"));
     try {
       const failed = db
         .recentRequests()
-        .find((r) => r.provider === "openai" && r.model === "gpt-test");
+        .find((r) => r.provider === "yok-boyle-saglayici" && r.model === "hayalet-model");
       expect(failed?.status).toBe("error");
       expect(failed?.errorCode).toBe("PROVIDER_UNKNOWN");
       const telemetry = db.recentTelemetry();
