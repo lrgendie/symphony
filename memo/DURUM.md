@@ -53,10 +53,10 @@ erişim kilitleniyor. Çözüm: başlarken port kontrolü / tek-kopya kilidi
 **→ Faz 1 kalanlar:**
 1. ✅ Fastify+ws sunucu, ✅ Anthropic adapter, ✅ SecretStore, ✅ canlı streaming testi
 2. ✅ SQLite veri katmanı: istek kayıtları + hata telemetrisi + usage.query (2026-07-03)
-3. ✅ Ollama adapter'ı KODU (2026-07-03): `@ai-sdk/openai-compatible` ile /v1 üzerinden;
-   dinamik model listesi (/api/tags), sahte sunuculu testler CI'da koşuyor.
-   **⏳ CANLI TEST BEKLİYOR:** kullanıcı Ollama kuruyor; kurulunca 11434 kontrol et →
-   model indirt (`qwen3:8b` önerisi) → daemon üzerinden gerçek streaming + SQLite kaydı doğrula.
+3. ✅ Ollama adapter'ı + CANLI KABUL TESTİ GEÇTİ (2026-07-03): Ollama kuruldu,
+   `qwen3:8b` (8.2B Q4_K_M, 40k bağlam) indirildi; curl → daemon → yerel model
+   Türkçe streaming cevap (19 giriş / 330 çıkış token, $0) + SQLite kaydı doğrulandı.
+   **"Hem yerel hem bulut" hedefi kanıtlandı** (ROADMAP İlk Somut Adımlar §5.4).
 4. OpenAI/Google adapter'ları
 5. Router v1 (kural tabanlı öneri)
 6. Daemon tek-kopya kilidi (EADDRINUSE dersi)
