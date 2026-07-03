@@ -2,11 +2,21 @@
 
 > Her oturuma bu dosyayı okuyarak başla. Oturum sonunda güncelle.
 
-**Son güncelleme:** 2026-07-03 (Oturum 4 — SQLite veri katmanı)
+**Son güncelleme:** 2026-07-03 (Oturum 9 — Faz 2 KAPANDI)
 
 ## Şu an neredeyiz?
 
-**Faz 1 — DEVAM EDİYOR (SQLite veri katmanı + telemetri tamam, 2026-07-03).**
+**Faz 2 — TAMAM (2026-07-03). Sıradaki: Faz 3 agent motoru (SPEC-AGENT.md).**
+
+Faz 2 kapanışı (Oturum 9): global kurulum (`pnpm setup` + `pnpm add -g link:packages/cli`;
+`symphony` PATH'te — yeni terminal gerek), `symphony watch` (canlı olay akışı) +
+ikinci-istemci eş zamanlılık testi (kabul kriteri kanıtlı), sohbet geçmişi
+(SQLite göç v2: `sessions`+`messages`, replace semantiği; REST `/api/history/*`;
+`symphony history [id-ön-eki]`; TUI artık sabit sessionId gönderiyor → çok turlu
+sohbet tek oturum). Canlı doğrulandı: qwen3:8b ile tur → `symphony history`
+liste + döküm çalıştı. **76/76 test yeşil; build+lint+format temiz.**
+
+**Faz 1 durumu:** kod tamam; OpenAI/Google canlı doğrulama anahtar bekliyor.
 
 Daemon (`symphonyd`) canlı: Fastify+ws, port 7770, token auth, hello/snapshot akışı,
 `chat.start` → `chat.delta` yayını → `chat.completed`+maliyet. Anthropic adapter'ı hazır
@@ -50,7 +60,13 @@ erişim kilitleniyor. Çözüm: başlarken port kontrolü / tek-kopya kilidi
 
 ## Sıradaki adım (buradan devam)
 
-**→ Faz 1 kalanlar:**
+**→ Faz 3: agent motoru** (`docs/SPEC-AGENT.md` MUTLAKA okunarak):
+araç seti (read_file/write_file/edit/glob/grep/run_command), agent döngüsü
+(AI SDK tool-calling), izin sistemi + diff önizleme, MCP istemcisi.
+Kullanıcının asıl beklediği yetenek bu (TUI'de "klasörü taşı" isteği Faz 3 notu).
+Not: qwen3:8b `tools` yetenekli → yerel agent modeli adayı.
+
+**Faz 1'den arta kalan (bloklamıyor):**
 1. ✅ Fastify+ws sunucu, ✅ Anthropic adapter, ✅ SecretStore, ✅ canlı streaming testi
 2. ✅ SQLite veri katmanı: istek kayıtları + hata telemetrisi + usage.query (2026-07-03)
 3. ✅ Ollama adapter'ı + CANLI KABUL TESTİ GEÇTİ (2026-07-03): Ollama kuruldu,
@@ -74,7 +90,7 @@ erişim kilitleniyor. Çözüm: başlarken port kontrolü / tek-kopya kilidi
 **Faz 1 kod olarak TAMAM.** Kalan: OpenAI/Google canlı doğrulama (anahtar gelince).
 Anahtar-diskte-yok kabul koşusu ✅ geçti (grep temiz, yalnız keychain).
 
-## Faz 2 — CLI (başladı 2026-07-03 akşam, ilk dilim TAMAM)
+## Faz 2 — CLI (TAMAM 2026-07-03; ROADMAP kabul testi geçti)
 
 - ✅ **Daemon istemcisi** (`packages/cli/src/client/daemon-client.ts`): WS+hello,
   replyTo korelasyonu, sticky kayıt (chat'in geç hatası aynı TCP paketinde bile
@@ -85,11 +101,21 @@ Anahtar-diskte-yok kabul koşusu ✅ geçti (grep temiz, yalnız keychain).
 - ✅ **Komutlar**: `symphony status` (sağlayıcı sağlığı + SQLite kullanım özeti),
   `symphony models` (4 sağlayıcı, 9 model listelendi). `symphony agents` Faz 3'e.
 - ✅ **Ink TUI** (ink 7 + React 19): model seçici (↑/↓+Enter) → sohbet ekranı
-  (canlı delta akışı, maliyet satırı, Esc iptal). **Kullanıcının canlı TUI
-  denemesi bekleniyor** (etkileşimli olduğu için otomatikleştirilmedi;
-  bileşenler ink-testing-library ile testli).
-- 69/69 test yeşil. Kalan Faz 2 işleri: global kurulum (`npm i -g`),
-  ikinci-istemci eş zamanlılığının CLI düzeyinde gösterimi, sohbet geçmişi tablosu.
+  (canlı delta akışı, maliyet satırı, Esc iptal). Canlı deneme geçti (Oturum 8).
+- ✅ **Global kurulum** (Oturum 9): `pnpm setup` (PNPM_HOME + PATH kayıt defterine)
+  ardından `pnpm add -g link:packages/cli`. Not: pnpm 11'de `pnpm link --global`
+  YOK; npm i -g de workspace:* bağımlılıkları çözemez → link: protokolü şart.
+  Symlink olduğu için `pnpm build` sonrası global komut hep güncel.
+- ✅ **`symphony watch`** + eş zamanlılık kabul testi (Oturum 9): iki DaemonClient,
+  A'nın sohbetini B aynı delta/completed olaylarıyla görüyor (concurrency.test.ts).
+- ✅ **Sohbet geçmişi** (Oturum 9): SQLite göç v2 (`sessions` + `messages`,
+  FK+CASCADE, foreign_keys pragma). Daemon her BAŞARILI turda oturumu upsert edip
+  mesajları TAM geçmiş+cevapla DEĞİŞTİRİYOR (replace, idempotent; eski `at` korunur).
+  REST: `GET /api/history/sessions[?limit]`, `GET /api/history/sessions/:id` (404/401).
+  Cevap şemaları shared'da (`protocol/rest.ts`). CLI: `symphony history [id-ön-eki]`.
+  TUI sabit sessionId üretiyor (useRef) → çok turlu sohbet tek oturumda birikiyor.
+  PROTOKOL.md §1.1 (REST katalog) + §3 (oturum/replace kuralı) eklendi.
+- 76/76 test yeşil; build+lint+format temiz. Faz 2'nin ROADMAP kabul testi kapandı.
 
 **Teknik not (Ollama):** topluluk paketleri `ollama-ai-provider`/`-v2` AI SDK v7 + zod v3
 ile uyumsuz → resmî `@ai-sdk/openai-compatible` seçildi (GEREKSINIMLER.md güncellendi).

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import { useRef, useState, type JSX } from "react";
@@ -18,6 +19,8 @@ export function Chat(props: { client: DaemonClient; model: ModelInfo }): JSX.Ele
   const [streaming, setStreaming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Sabit oturum kimliği: turlar tek sohbet olarak SQLite geçmişine yazılır (PROTOKOL §3).
+  const sessionIdRef = useRef(randomUUID());
 
   useInput((_input, key) => {
     if (key.escape) abortRef.current?.abort();
@@ -43,7 +46,12 @@ export function Chat(props: { client: DaemonClient; model: ModelInfo }): JSX.Ele
     let answer = "";
     props.client
       .chat(
-        { provider: props.model.provider, model: props.model.id, messages },
+        {
+          sessionId: sessionIdRef.current,
+          provider: props.model.provider,
+          model: props.model.id,
+          messages,
+        },
         (delta) => {
           answer += delta;
           setStreaming(answer);

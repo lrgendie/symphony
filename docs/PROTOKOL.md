@@ -15,6 +15,19 @@
   REST'te `Authorization: Bearer <token>` başlığıyla, WS'te bağlantı sonrası ilk mesaj olan
   `hello` içinde gönderir. Token'sız bağlantı 3 sn içinde kapatılır.
 
+### 1.1 REST uçları
+
+| Metot + yol | Auth | Açıklama |
+|---|---|---|
+| `GET /api/health` | yok | Sağlık sondası: `{ ok, daemonVersion, protocolVersion }` |
+| `POST /api/chat` | Bearer | Streaming sohbet (gövde: `chat.start` şeması; cevap: SSE) — curl kabul testlerinin ucu |
+| `GET /api/history/sessions?limit=50` | Bearer | Son sohbet oturumları (yeniden eskiye): `{ sessions: HistorySessionSummary[] }` |
+| `GET /api/history/sessions/:id` | Bearer | Bir oturumun tam dökümü: `{ session, messages: HistoryMessage[] }`; yoksa 404 |
+
+Kalıcı geçmiş SQLite'tadır ve YALNIZ REST ile sorgulanır (§6: olay replay'i yok).
+Cevap şemaları `shared`'dadır: `HistorySessionSummarySchema`, `HistoryMessageSchema`,
+`HistorySessionsResponseSchema`, `HistorySessionDetailResponseSchema`.
+
 ## 2. Zarf (envelope)
 
 Tüm WS mesajları tek zarf tipindedir:
@@ -49,6 +62,12 @@ Tüm WS mesajları tek zarf tipindedir:
 | `providers.status` | `{}` | Sağlayıcı sağlık durumları |
 | `router.suggest` | `{ task, constraints?: { maxCostUsd?, preferLocal? } }` | "Bu iş için hangi model?" önerisi |
 | `usage.query` | `{ from?, to?, groupBy? }` | Token/maliyet raporu |
+
+**Sohbet oturumu ve geçmiş:** `chat.start.sessionId` verilmezse daemon her istek için yeni
+oturum üretir. Çok turlu bir sohbeti TEK oturum olarak kaydettirmek isteyen istemci, ürettiği
+`sessionId`'yi turlar boyunca sabit tutar ve her turda TAM mesaj geçmişini gönderir. Daemon,
+başarıyla biten her turda oturumun mesajlarını bu tam geçmiş + asistan cevabıyla DEĞİŞTİRİR
+(replace — idempotent). Başlık ilk kullanıcı mesajından türetilir. İptal/hata turu geçmişi değiştirmez.
 
 ## 4. Daemon → İstemci (olaylar)
 

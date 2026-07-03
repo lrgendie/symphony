@@ -1,5 +1,11 @@
 import Database from "better-sqlite3";
-import type { Usage } from "@symphony/shared";
+import type {
+  ChatMessage,
+  HistoryMessage,
+  HistorySessionDetailResponse,
+  HistorySessionSummary,
+  Usage,
+} from "@symphony/shared";
 
 /**
  * Veri katmanı (ADR-006): tüm kalıcı veri tek SQLite dosyasında
@@ -42,6 +48,28 @@ const MIGRATIONS: readonly string[] = [
   );
   CREATE INDEX idx_telemetry_at ON telemetry (at);
   CREATE INDEX idx_telemetry_code ON telemetry (code);
+  `,
+  // v2 — sohbet geçmişi (Faz 2): oturumlar + mesajlar. Mesajlar her başarılı
+  // turda TAM geçmişle değiştirilir (PROTOKOL §3 — replace, idempotent).
+  `
+  CREATE TABLE sessions (
+    id         TEXT PRIMARY KEY,
+    provider   TEXT NOT NULL,
+    model      TEXT NOT NULL,
+    title      TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE INDEX idx_sessions_updated_at ON sessions (updated_at);
+
+  CREATE TABLE messages (
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    idx        INTEGER NOT NULL,
+    role       TEXT NOT NULL CHECK (role IN ('system', 'user', 'assistant')),
+    content    TEXT NOT NULL,
+    at         INTEGER NOT NULL,
+    PRIMARY KEY (session_id, idx)
+  );
   `,
 ];
 
@@ -128,6 +156,50 @@ interface SumRow {
   cost_usd: number | null;
 }
 
+export interface ChatTurnRecord {
+  sessionId: string;
+  provider: string;
+  model: string;
+  /** İstemcinin gönderdiği TAM mesaj geçmişi (asistan cevabı hariç). */
+  messages: ChatMessage[];
+  assistantText: string;
+}
+
+interface SessionRow {
+  id: string;
+  provider: string;
+  model: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+  message_count: number;
+}
+
+interface MessageRow {
+  idx: number;
+  role: string;
+  content: string;
+  at: number;
+}
+
+/** Başlık ilk kullanıcı mesajından türetilir: tek satır, en çok 80 karakter. */
+function deriveTitle(messages: ChatMessage[]): string {
+  const first = messages.find((m) => m.role === "user")?.content ?? "";
+  return first.replace(/\s+/g, " ").trim().slice(0, 80);
+}
+
+function toSessionSummary(row: SessionRow): HistorySessionSummary {
+  return {
+    sessionId: row.id,
+    provider: row.provider,
+    model: row.model,
+    title: row.title,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    messageCount: row.message_count,
+  };
+}
+
 export class DataStore {
   private readonly db: Database.Database;
 
@@ -135,6 +207,8 @@ export class DataStore {
     this.db = new Database(file);
     // WAL: daemon yazar, testler/araçlar aynı anda okuyabilir; tek dosya ilkesi korunur.
     this.db.pragma("journal_mode = WAL");
+    // messages.session_id REFERENCES + ON DELETE CASCADE ancak bununla işler.
+    this.db.pragma("foreign_keys = ON");
     this.migrate();
   }
 
@@ -259,6 +333,84 @@ export class DataStore {
         outputTokens: totals.output_tokens ?? 0,
         costUsd: totals.cost_usd ?? 0,
       },
+    };
+  }
+
+  /**
+   * Başarıyla biten bir sohbet turunu kaydeder (PROTOKOL §3): oturum upsert
+   * edilir, mesajlar TAM geçmiş + asistan cevabıyla DEĞİŞTİRİLİR. Değişmeyen
+   * satırların `at` zamanı korunur (mesajın ilk yazıldığı tur).
+   */
+  saveChatTurn(turn: ChatTurnRecord): void {
+    const now = Date.now();
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO sessions (id, provider, model, title, created_at, updated_at)
+           VALUES (@id, @provider, @model, @title, @now, @now)
+           ON CONFLICT (id) DO UPDATE SET
+             provider = @provider, model = @model, title = @title, updated_at = @now`,
+        )
+        .run({
+          id: turn.sessionId,
+          provider: turn.provider,
+          model: turn.model,
+          title: deriveTitle(turn.messages),
+          now,
+        });
+
+      const previous = this.db
+        .prepare(`SELECT idx, at FROM messages WHERE session_id = ?`)
+        .all(turn.sessionId) as Array<{ idx: number; at: number }>;
+      const previousAt = new Map(previous.map((row) => [row.idx, row.at]));
+      this.db.prepare(`DELETE FROM messages WHERE session_id = ?`).run(turn.sessionId);
+
+      const insert = this.db.prepare(
+        `INSERT INTO messages (session_id, idx, role, content, at)
+         VALUES (?, ?, ?, ?, ?)`,
+      );
+      const all: ChatMessage[] = [
+        ...turn.messages,
+        { role: "assistant", content: turn.assistantText },
+      ];
+      all.forEach((message, idx) => {
+        insert.run(turn.sessionId, idx, message.role, message.content, previousAt.get(idx) ?? now);
+      });
+    })();
+  }
+
+  /** Son sohbet oturumları (yeniden eskiye) — REST /api/history/sessions. */
+  listSessions(limit = 50): HistorySessionSummary[] {
+    const rows = this.db
+      .prepare(
+        `SELECT s.*,
+                (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
+         FROM sessions s ORDER BY s.updated_at DESC, s.id LIMIT ?`,
+      )
+      .all(limit) as SessionRow[];
+    return rows.map(toSessionSummary);
+  }
+
+  /** Bir oturumun tam dökümü — REST /api/history/sessions/:id. Yoksa null. */
+  sessionDetail(sessionId: string): HistorySessionDetailResponse | null {
+    const row = this.db
+      .prepare(
+        `SELECT s.*,
+                (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
+         FROM sessions s WHERE s.id = ?`,
+      )
+      .get(sessionId) as SessionRow | undefined;
+    if (row === undefined) return null;
+    const messages = this.db
+      .prepare(`SELECT idx, role, content, at FROM messages WHERE session_id = ? ORDER BY idx`)
+      .all(sessionId) as MessageRow[];
+    return {
+      session: toSessionSummary(row),
+      messages: messages.map((m): HistoryMessage => ({
+        role: m.role as HistoryMessage["role"],
+        content: m.content,
+        at: m.at,
+      })),
     };
   }
 

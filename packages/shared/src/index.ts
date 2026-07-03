@@ -6,3 +6,4 @@ export * from "./protocol/agent-state.js";
 export * from "./protocol/requests.js";
 export * from "./protocol/events.js";
 export * from "./protocol/envelope.js";
+export * from "./protocol/rest.js";

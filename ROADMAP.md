@@ -84,20 +84,21 @@ symphony/
 - [x] `symphonyd` süreci: localhost REST + WebSocket sunucusu (Fastify + ws) — token auth, hello akışı, snapshot ✅ 2026-07-03
 - [x] Vercel AI SDK ile provider adapter'ları: **Anthropic ✅ (canlı) → Ollama ✅ (canlı: qwen3:8b, $0) → OpenAI ✅ (kod; canlı test anahtar bekliyor) → Google ✅ (kod; canlı test anahtar bekliyor)** 2026-07-03
 - [x] API anahtarı yönetimi (keychain: @napi-rs/keyring + env yedek) + provider sağlık kontrolü ✅ 2026-07-03
-- [ ] Streaming sohbet: tek uçtan tüm modellerle konuşabilme
+- [x] Streaming sohbet: tek uçtan tüm modellerle konuşabilme ✅ 2026-07-03 — Anthropic + Ollama canlı doğrulandı; OpenAI/Google kod hazır, canlı doğrulama anahtar bekliyor
 - [x] SQLite veri katmanı: her isteğin kaydı (model, süre, token, maliyet, başarı) + `usage.query` + kalıcı toplamlar ✅ 2026-07-03 — ileride router ve kişiselleşme bu veriyle beslenecek; sohbet geçmişi tablosu Faz 2'de CLI oturumlarıyla eklenecek
 - [x] Hata telemetrisi: daemon hatalarının yapılandırılmış kaydı (hangi işlem, girdi ÖZETİ, stack trace) ✅ 2026-07-03 — kendi kendini onarmanın veri kaynağı; agent hataları Faz 3'te aynı tabloya düşecek
 - [x] **Model yönlendirici v1 (kural tabanlı):** görev türüne göre gerekçeli öneri (kod/hızlı/uzun bağlam/genel) ✅ 2026-07-03 — donanımı tanıyor (nvidia-smi ile VRAM; <5 GB'da yerel öneri geriye düşer), yalnız kullanılabilir sağlayıcılardan önerir, `router.suggest` protokol mesajı canlı
 - **Çıktı:** `curl` ile 4 farklı sağlayıcıdan streaming cevap alınabiliyor.
 - **Kabul testi:** 4 sağlayıcıdan streaming cevap; anahtarlar diskte grep'lenemiyor (yalnız keychain); her istek SQLite'a kayıt düşüyor; `providers.status` gerçek sağlık durumu döndürüyor; router v1 örnek göreve gerekçeli öneri veriyor.
 
-### Faz 2 — CLI: `symphony` Komutu (4–5. hafta) — devam ediyor
-- [x] Ink TUI: açılışta model seçici (↑/↓+Enter, tüm sağlayıcılar) + streaming sohbet ekranı (Esc iptal) ✅ 2026-07-03 — kullanıcının canlı TUI denemesi bekleniyor
+### Faz 2 — CLI: `symphony` Komutu (4–5. hafta) ✅ 2026-07-03
+- [x] Ink TUI: açılışta model seçici (↑/↓+Enter, tüm sağlayıcılar) + streaming sohbet ekranı (Esc iptal) ✅ 2026-07-03 — kullanıcının canlı TUI denemesi geçti
 - [x] `symphony` yazınca daemon çalışmıyorsa otomatik başlatma ✅ 2026-07-03 — kabul koşusu geçti: temiz terminalde `status` daemon'ı spawn etti
-- [x] Komutlar: `symphony` (TUI), `symphony models`, `symphony status` ✅ 2026-07-03 — `symphony agents` Faz 3'te (agent motoru gerekiyor)
-- [ ] Global kurulum: `npm i -g` ile PATH'e `symphony` komutu
+- [x] Komutlar: `symphony` (TUI), `symphony models`, `symphony status`, `symphony watch` (canlı olay akışı), `symphony history` (sohbet geçmişi) ✅ 2026-07-03 — `symphony agents` Faz 3'te (agent motoru gerekiyor)
+- [x] Global kurulum: PATH'e `symphony` komutu ✅ 2026-07-03 — `pnpm setup` + `pnpm add -g link:packages/cli` (workspace bağımlılıkları nedeniyle npm yerine pnpm link; symlink olduğu için her build otomatik yansır)
+- [x] Sohbet geçmişi: SQLite `sessions`+`messages` (göç v2, replace semantiği), REST `/api/history/*`, TUI sabit sessionId ✅ 2026-07-03 — canlı doğrulandı
 - **Çıktı:** Terminalde `symphony` → model seç → sohbet et.
-- **Kabul testi:** Temiz terminalde `symphony` daemon'ı otomatik başlatıyor; model seçici tüm sağlayıcıları listeliyor; streaming sohbet akıyor; aynı anda açık ikinci istemci aynı olayları görüyor.
+- **Kabul testi:** Temiz terminalde `symphony` daemon'ı otomatik başlatıyor ✅; model seçici tüm sağlayıcıları listeliyor ✅; streaming sohbet akıyor ✅ (canlı, 2026-07-03); aynı anda açık ikinci istemci aynı olayları görüyor ✅ (concurrency.test.ts + `symphony watch`).
 
 ### Faz 3 — Kod Agent'ı: Sisteme Müdahale (6–8. hafta) ⭐ kalbi burası
 - [ ] Araç seti: `read_file`, `write_file`, `edit`, `glob`, `grep`, `run_command` (PowerShell/bash)

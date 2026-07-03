@@ -121,6 +121,95 @@ describe("DataStore", () => {
     expect(entries[1]?.stack).toContain("runChat");
   });
 
+  it("saveChatTurn: oturum + mesajlar yazılır, başlık ilk kullanıcı mesajından", () => {
+    openStore();
+    const sessionId = crypto.randomUUID();
+    store.saveChatTurn({
+      sessionId,
+      provider: "ollama",
+      model: "qwen3:8b",
+      messages: [{ role: "user", content: "  Merhaba\ndünya, nasılsın?  " }],
+      assistantText: "İyiyim!",
+    });
+
+    const sessions = store.listSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({
+      sessionId,
+      provider: "ollama",
+      model: "qwen3:8b",
+      title: "Merhaba dünya, nasılsın?",
+      messageCount: 2,
+    });
+
+    const detail = store.sessionDetail(sessionId);
+    expect(detail?.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(detail?.messages[1]?.content).toBe("İyiyim!");
+  });
+
+  it("saveChatTurn: ikinci tur mesajları DEĞİŞTİRİR (replace) ve eski `at` korunur", () => {
+    openStore();
+    const sessionId = crypto.randomUUID();
+    store.saveChatTurn({
+      sessionId,
+      provider: "ollama",
+      model: "qwen3:8b",
+      messages: [{ role: "user", content: "merhaba" }],
+      assistantText: "Merhaba!",
+    });
+    const firstTurn = store.sessionDetail(sessionId);
+    const firstAt = firstTurn?.messages[0]?.at;
+
+    // İkinci tur: istemci TAM geçmişi gönderir (PROTOKOL §3)
+    store.saveChatTurn({
+      sessionId,
+      provider: "ollama",
+      model: "qwen3:8b",
+      messages: [
+        { role: "user", content: "merhaba" },
+        { role: "assistant", content: "Merhaba!" },
+        { role: "user", content: "nasılsın?" },
+      ],
+      assistantText: "İyiyim!",
+    });
+
+    expect(store.listSessions()).toHaveLength(1); // yeni oturum AÇILMADI
+    const detail = store.sessionDetail(sessionId);
+    expect(detail?.messages.map((m) => m.content)).toEqual([
+      "merhaba",
+      "Merhaba!",
+      "nasılsın?",
+      "İyiyim!",
+    ]);
+    expect(detail?.messages[0]?.at).toBe(firstAt); // ilk turun zamanı ezilmedi
+    expect(detail?.session.messageCount).toBe(4);
+  });
+
+  it("listSessions tüm oturumları verir; sessionDetail bilinmeyen id'de null", () => {
+    openStore();
+    store.saveChatTurn({
+      sessionId: crypto.randomUUID(),
+      provider: "ollama",
+      model: "qwen3:8b",
+      messages: [{ role: "user", content: "eski" }],
+      assistantText: "a",
+    });
+    const newerId = crypto.randomUUID();
+    store.saveChatTurn({
+      sessionId: newerId,
+      provider: "anthropic",
+      model: "claude-opus-4-8",
+      messages: [{ role: "user", content: "yeni" }],
+      assistantText: "b",
+    });
+
+    const sessions = store.listSessions();
+    expect(sessions).toHaveLength(2);
+    // updated_at aynı milisaniyeye düşebilir → en azından yeni oturum listede önde ya da eşit
+    expect(sessions.map((s) => s.sessionId)).toContain(newerId);
+    expect(store.sessionDetail("yok-boyle-oturum")).toBeNull();
+  });
+
   it("göç bir kez koşar: aynı dosya yeniden açılınca veri durur", () => {
     openStore();
     const file = join(dir, "symphony.db");

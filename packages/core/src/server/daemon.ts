@@ -141,12 +141,14 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         abortSignal: abort.signal,
       });
       let usageResult;
+      let answer = "";
       for (;;) {
         const next = await stream.next();
         if (next.done) {
           usageResult = next.value;
           break;
         }
+        answer += next.value;
         bus.broadcast("chat.delta", { sessionId, text: next.value });
         onDelta?.(next.value);
       }
@@ -164,6 +166,14 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         durationMs: Date.now() - startedAt,
         usage,
         status: "ok",
+      });
+      // Sohbet geçmişi (PROTOKOL §3): yalnız başarılı tur oturumu günceller.
+      store.saveChatTurn({
+        sessionId,
+        provider: payload.provider,
+        model: payload.model,
+        messages: payload.messages,
+        assistantText: answer,
       });
       bus.broadcast("chat.completed", { sessionId, usage });
       bus.broadcast("usage.updated", {
@@ -257,6 +267,25 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       send({ type: "error", ...toErrorPayload(error) });
     }
     reply.raw.end();
+  });
+
+  // Sohbet geçmişi REST ile sorgulanır (PROTOKOL §1.1) — olay replay'i yok (ADR-011).
+  app.get("/api/history/sessions", async (request) => {
+    const rawLimit = Number((request.query as { limit?: string }).limit ?? 50);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 500) : 50;
+    return { sessions: store.listSessions(limit) };
+  });
+
+  app.get("/api/history/sessions/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const detail = store.sessionDetail(id);
+    if (detail === null) {
+      return reply.code(404).send({
+        code: "VALIDATION_SESSION_NOT_FOUND",
+        message: `Oturum bulunamadı: ${id}`,
+      });
+    }
+    return detail;
   });
 
   // ---- WebSocket ----

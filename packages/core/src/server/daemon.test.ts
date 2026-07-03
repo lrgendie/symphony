@@ -13,11 +13,28 @@ let daemon: RunningDaemon;
 // Sahte Ollama: testler CI'da gerçek Ollama olmadan da deterministik koşar.
 let fakeOllama: Server;
 
+const SSE_CHUNKS = [
+  `{"id":"c1","object":"chat.completion.chunk","created":1,"model":"qwen3:8b","choices":[{"index":0,"delta":{"role":"assistant","content":"Mer"},"finish_reason":null}]}`,
+  `{"id":"c1","object":"chat.completion.chunk","created":1,"model":"qwen3:8b","choices":[{"index":0,"delta":{"content":"haba"},"finish_reason":null}]}`,
+  `{"id":"c1","object":"chat.completion.chunk","created":1,"model":"qwen3:8b","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+  `{"id":"c1","object":"chat.completion.chunk","created":1,"model":"qwen3:8b","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":2,"total_tokens":9}}`,
+];
+
 beforeAll(async () => {
   fakeOllama = createServer((req, res) => {
     if (req.method === "GET" && req.url === "/api/tags") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ models: [{ name: "qwen3:8b" }] }));
+      return;
+    }
+    if (req.method === "POST" && req.url === "/v1/chat/completions") {
+      req.resume();
+      req.on("end", () => {
+        res.writeHead(200, { "content-type": "text/event-stream" });
+        for (const chunk of SSE_CHUNKS) res.write(`data: ${chunk}\n\n`);
+        res.write("data: [DONE]\n\n");
+        res.end();
+      });
       return;
     }
     res.writeHead(404).end();
@@ -174,6 +191,74 @@ describe("symphonyd", () => {
     // Çalışan daemon hâlâ sağlıklı
     const res = await fetch(`http://127.0.0.1:${daemon.port}/api/health`);
     expect(res.status).toBe(200);
+  });
+
+  it("iki turlu sohbet TEK oturum olarak geçmişe yazılır; REST geçmiş uçları çalışır", async () => {
+    const { reply, ws } = await roundTrip(
+      createMessage("hello", {
+        token: daemon.token,
+        client: "cli",
+        protocolVersion: PROTOCOL_VERSION,
+      }),
+    );
+    expect(reply.type).toBe("hello.ok");
+
+    const sessionId = crypto.randomUUID();
+    const runTurn = async (messages: Array<{ role: string; content: string }>): Promise<void> => {
+      const completed = waitFor(
+        ws,
+        (env) =>
+          env.type === "chat.completed" &&
+          (env.payload as { sessionId: string }).sessionId === sessionId,
+      );
+      const ack = await request(
+        ws,
+        createMessage("chat.start", { sessionId, provider: "ollama", model: "qwen3:8b", messages }),
+      );
+      expect(ack.type).toBe("chat.start.ok");
+      await completed;
+    };
+
+    await runTurn([{ role: "user", content: "merhaba" }]);
+    await runTurn([
+      { role: "user", content: "merhaba" },
+      { role: "assistant", content: "Merhaba" },
+      { role: "user", content: "nasılsın?" },
+    ]);
+
+    const auth = { headers: { authorization: `Bearer ${daemon.token}` } };
+    const listRes = await fetch(`http://127.0.0.1:${daemon.port}/api/history/sessions`, auth);
+    expect(listRes.status).toBe(200);
+    const list = (await listRes.json()) as {
+      sessions: Array<{ sessionId: string; title: string; messageCount: number }>;
+    };
+    const session = list.sessions.find((s) => s.sessionId === sessionId);
+    expect(session).toMatchObject({ title: "merhaba", messageCount: 4 }); // tek oturum, replace
+
+    const detailRes = await fetch(
+      `http://127.0.0.1:${daemon.port}/api/history/sessions/${sessionId}`,
+      auth,
+    );
+    expect(detailRes.status).toBe(200);
+    const detail = (await detailRes.json()) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(detail.messages.map((m) => m.content)).toEqual([
+      "merhaba",
+      "Merhaba",
+      "nasılsın?",
+      "Merhaba", // asistanın 2. tur cevabı (sahte Ollama hep "Merhaba" der)
+    ]);
+
+    // Bilinmeyen oturum 404; token'sız istek 401
+    const missing = await fetch(
+      `http://127.0.0.1:${daemon.port}/api/history/sessions/${crypto.randomUUID()}`,
+      auth,
+    );
+    expect(missing.status).toBe(404);
+    const unauthorized = await fetch(`http://127.0.0.1:${daemon.port}/api/history/sessions`);
+    expect(unauthorized.status).toBe(401);
+    ws.close();
   });
 
   it("başarısız sohbet SQLite'a istek kaydı + telemetri düşürür; usage.query cevaplar", async () => {

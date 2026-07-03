@@ -4,6 +4,8 @@ import { Command } from "commander";
 import { PROTOCOL_VERSION } from "@symphony/shared";
 import { modelsCommand } from "./commands/models.js";
 import { statusCommand } from "./commands/status.js";
+import { watchCommand } from "./commands/watch.js";
+import { historyCommand } from "./commands/history.js";
 
 const program = new Command();
 
@@ -21,6 +23,16 @@ program
   .command("status")
   .description("Daemon, sağlayıcı sağlığı ve kullanım özeti")
   .action(wrap(statusCommand));
+
+program
+  .command("watch")
+  .description("Daemon olay akışını canlı izle (tüm istemcilerin sohbetleri)")
+  .action(wrap(watchCommand));
+
+program
+  .command("history [oturum]")
+  .description("Sohbet geçmişi: oturum listesi ya da tek oturumun dökümü (id ön eki yeter)")
+  .action((oturum?: string) => historyCommand(oturum).catch(fail));
 
 // Argümansız `symphony` → TUI (model seçici + sohbet)
 program.action(
