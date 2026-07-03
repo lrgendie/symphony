@@ -2,15 +2,22 @@
 
 > Her oturuma bu dosyayı okuyarak başla. Oturum sonunda güncelle.
 
-**Son güncelleme:** 2026-07-03 (Oturum 1 devamı)
+**Son güncelleme:** 2026-07-03 (Oturum 4 — SQLite veri katmanı)
 
 ## Şu an neredeyiz?
 
-**Faz 1 — DEVAM EDİYOR (ilk dikey dilim tamam, 2026-07-03).**
+**Faz 1 — DEVAM EDİYOR (SQLite veri katmanı + telemetri tamam, 2026-07-03).**
 
 Daemon (`symphonyd`) canlı: Fastify+ws, port 7770, token auth, hello/snapshot akışı,
 `chat.start` → `chat.delta` yayını → `chat.completed`+maliyet. Anthropic adapter'ı hazır
-(AI SDK v7). Sır kasası: keychain (@napi-rs/keyring) + env yedek. 37 test yeşil.
+(AI SDK v7). Sır kasası: keychain (@napi-rs/keyring) + env yedek. **44 test yeşil.**
+
+**✅ YENİ (2026-07-03, Oturum 4):** SQLite veri katmanı (`packages/core/src/db/store.ts`,
+better-sqlite3, WAL, `user_version` göçleri). Her istek — başarı/hata/iptal —
+`requests` tablosuna düşüyor; gerçek hatalar `telemetry` tablosuna (scope, kod, mesaj,
+stack, girdi ÖZETİ — ham içerik asla). `usage.updated.totals` artık SQLite'tan kalıcı;
+`usage.query` WS mesajı çalışıyor (provider/model/gün gruplaması + zaman aralığı).
+DataStore `@symphony/core`'dan export ediliyor (Doktor agent Faz 8'de bunu okuyacak).
 
 **⚠️ Kritik teknik not:** Claude 4.7+ modelleri (Opus 4.8, Sonnet 5) `temperature`
 parametresini KABUL ETMİYOR (400 döner) — Anthropic adapter'ı bu parametreyi bilinçli
@@ -45,10 +52,13 @@ erişim kilitleniyor. Çözüm: başlarken port kontrolü / tek-kopya kilidi
 
 **→ Faz 1 kalanlar:**
 1. ✅ Fastify+ws sunucu, ✅ Anthropic adapter, ✅ SecretStore, ✅ canlı streaming testi
-2. SQLite veri katmanı (better-sqlite3): istek kayıtları + hata telemetrisi
+2. ✅ SQLite veri katmanı: istek kayıtları + hata telemetrisi + usage.query (2026-07-03)
 3. Ollama adapter'ı (yerel model — kullanıcıya Ollama kurulumu gerekecek) → sonra OpenAI/Google
 4. Router v1 (kural tabanlı öneri)
 5. Daemon tek-kopya kilidi (EADDRINUSE dersi)
+
+**Not:** "Sohbet geçmişi" tablosu (mesaj içerikleri) bilinçli olarak Faz 2'ye bırakıldı —
+CLI oturum yönetimiyle birlikte tasarlanacak; şimdilik yalnız istek META verisi saklanıyor.
 
 **Faz 0'dan notlar (Faz 1'de lazım olacak):**
 - Node paketi eklerken `tsconfig.json`'a `"types": ["node"]` yazmayı unutma (TS 6 otomatik almıyor)

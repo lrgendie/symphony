@@ -19,6 +19,7 @@ import { loadConfig } from "../config/config.js";
 import { createSecretStore } from "../secrets/secret-store.js";
 import { AnthropicAdapter } from "../providers/anthropic.js";
 import type { ProviderAdapter } from "../providers/types.js";
+import { DataStore } from "../db/store.js";
 import { EventBus } from "./bus.js";
 import { issueDaemonToken } from "./token.js";
 
@@ -44,6 +45,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const log = pino({ name: "symphonyd" });
 
   const secrets = await createSecretStore();
+  const store = new DataStore(paths.databaseFile);
   const providers = new Map<string, ProviderAdapter>();
   const anthropic = new AnthropicAdapter(secrets);
   providers.set(anthropic.name, anthropic);
@@ -66,19 +68,24 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     return { runs: [], providers: await providerStatuses(), pendingPermissions: [] };
   }
 
-  /** WS ve REST'in ortak sohbet yolu: delta'lar TÜM istemcilere yayınlanır. */
+  /**
+   * WS ve REST'in ortak sohbet yolu: delta'lar TÜM istemcilere yayınlanır.
+   * Her istek — başarı, hata, iptal — `requests` tablosuna kayıt düşer;
+   * gerçek hatalar (iptal değil) ayrıca telemetriye yazılır (ROADMAP Faz 1).
+   */
   async function runChat(
     payload: RequestPayload<"chat.start">,
     sessionId: string,
     onDelta?: (text: string) => void,
   ): Promise<Usage> {
-    const provider = providers.get(payload.provider);
-    if (!provider) {
-      throw makeError("PROVIDER_UNKNOWN", `Bilinmeyen sağlayıcı: ${payload.provider}`);
-    }
+    const startedAt = Date.now();
     const abort = new AbortController();
     activeChats.set(sessionId, abort);
     try {
+      const provider = providers.get(payload.provider);
+      if (!provider) {
+        throw makeError("PROVIDER_UNKNOWN", `Bilinmeyen sağlayıcı: ${payload.provider}`);
+      }
       const stream = provider.streamChat({
         model: payload.model,
         messages: payload.messages,
@@ -103,16 +110,56 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         outputTokens: usageResult.outputTokens,
         costUsd: usageResult.costUsd,
       };
+      store.recordRequest({
+        id: randomUUID(),
+        sessionId,
+        provider: payload.provider,
+        model: payload.model,
+        startedAt,
+        durationMs: Date.now() - startedAt,
+        usage,
+        status: "ok",
+      });
       bus.broadcast("chat.completed", { sessionId, usage });
       bus.broadcast("usage.updated", {
         provider: payload.provider,
         model: payload.model,
         deltaTokens: usage.inputTokens + usage.outputTokens,
         deltaCostUsd: usage.costUsd,
-        totals: usage, // Faz 1: kalıcı toplamlar SQLite ile gelecek
+        totals: store.usageTotals(payload.provider, payload.model),
       });
       log.info({ sessionId, model: payload.model, ...usage }, "sohbet tamamlandı");
       return usage;
+    } catch (error) {
+      const cancelled = abort.signal.aborted;
+      const errorPayload = toErrorPayload(error);
+      store.recordRequest({
+        id: randomUUID(),
+        sessionId,
+        provider: payload.provider,
+        model: payload.model,
+        startedAt,
+        durationMs: Date.now() - startedAt,
+        usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+        status: cancelled ? "cancelled" : "error",
+        errorCode: errorPayload.code,
+      });
+      if (!cancelled) {
+        store.recordTelemetry({
+          scope: "chat",
+          code: errorPayload.code,
+          message: errorPayload.message,
+          ...(error instanceof Error && error.stack !== undefined ? { stack: error.stack } : {}),
+          // Girdi ÖZETİ — ham mesaj içeriği asla yazılmaz (SPEC-AGENT §7).
+          context: {
+            provider: payload.provider,
+            model: payload.model,
+            sessionId,
+            messageCount: payload.messages.length,
+          },
+        });
+      }
+      throw error;
     } finally {
       activeChats.delete(sessionId);
     }
@@ -283,6 +330,11 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             );
             return;
           }
+          case "usage.query": {
+            const payload = message.payload as RequestPayload<"usage.query">;
+            bus.sendTo(ws, "usage.query.ok", store.usageQuery(payload), message.id);
+            return;
+          }
           default: {
             sendError(
               {
@@ -294,7 +346,16 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           }
         }
       })().catch((error: unknown) => {
-        sendError(toErrorPayload(error));
+        // Buraya düşen her şey beklenmeyen daemon hatasıdır → telemetriye yaz.
+        // (runChat kendi hatasını zaten kaydediyor; o yol buradan geçmez.)
+        const errorPayload = toErrorPayload(error);
+        store.recordTelemetry({
+          scope: "ws.message",
+          code: errorPayload.code,
+          message: errorPayload.message,
+          ...(error instanceof Error && error.stack !== undefined ? { stack: error.stack } : {}),
+        });
+        sendError(errorPayload);
       });
     });
   });
@@ -312,6 +373,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       for (const abort of activeChats.values()) abort.abort();
       wss.close();
       await app.close();
+      store.close();
     },
   };
 }

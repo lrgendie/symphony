@@ -3,6 +3,7 @@ export { PROTOCOL_VERSION, DEFAULT_DAEMON_PORT, DAEMON_HOST } from "@symphony/sh
 export * from "./config/paths.js";
 export * from "./config/config.js";
 export * from "./secrets/secret-store.js";
+export * from "./db/store.js";
 export * from "./providers/types.js";
 export * from "./providers/pricing.js";
 export * from "./providers/anthropic.js";
