@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { streamText } from "ai";
+import { streamText, type LanguageModel } from "ai";
 import type { ModelInfo } from "@symphony/shared";
 import type { SecretStore } from "../secrets/secret-store.js";
 import { computeCostUsd } from "./pricing.js";
@@ -24,6 +24,8 @@ const MODELS: ModelInfo[] = [
 
 export class GoogleAdapter implements ProviderAdapter {
   readonly name = "google";
+  // Gemini sampling destekler → ADR-008 gereği temperature (varsayılan 0) İLETİLİR.
+  readonly forwardsTemperature = true;
 
   constructor(private readonly secrets: SecretStore) {}
 
@@ -35,7 +37,7 @@ export class GoogleAdapter implements ProviderAdapter {
     return (await this.secrets.get(this.name)) !== null;
   }
 
-  async *streamChat(request: ChatStreamRequest): AsyncGenerator<string, ChatUsageResult, void> {
+  async languageModel(modelId: string): Promise<LanguageModel> {
     const apiKey = await this.secrets.get(this.name);
     if (!apiKey) {
       throw new Error(
@@ -43,11 +45,12 @@ export class GoogleAdapter implements ProviderAdapter {
           "Kaydetmek için: pnpm --filter @symphony/core key:set google",
       );
     }
-    const google = createGoogleGenerativeAI({ apiKey });
+    return createGoogleGenerativeAI({ apiKey })(modelId);
+  }
 
-    // Gemini sampling destekler → ADR-008 gereği temperature (varsayılan 0) İLETİLİR.
+  async *streamChat(request: ChatStreamRequest): AsyncGenerator<string, ChatUsageResult, void> {
     const result = streamText({
-      model: google(request.model),
+      model: await this.languageModel(request.model),
       messages: request.messages,
       temperature: request.temperature,
       ...(request.maxTokens !== undefined ? { maxOutputTokens: request.maxTokens } : {}),

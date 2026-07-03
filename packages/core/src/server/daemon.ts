@@ -26,6 +26,8 @@ import type { ProviderAdapter } from "../providers/types.js";
 import { DataStore } from "../db/store.js";
 import { detectVramGb } from "../router/hardware.js";
 import { suggestModels } from "../router/router.js";
+import { AgentEngine } from "../agent/engine.js";
+import { ensureDefaultAgent } from "../agent/definition.js";
 import { EventBus } from "./bus.js";
 import { generateDaemonToken, persistDaemonToken } from "./token.js";
 
@@ -38,6 +40,8 @@ export interface DaemonOptions {
   home?: string;
   /** Test: sahte Ollama sunucusuna yönlendirme. Varsayılan: http://127.0.0.1:11434 */
   ollamaBaseUrl?: string;
+  /** YALNIZ test: gerçek adapter'ların yerine geçer (agent motoru senaryoları için). */
+  testProviders?: ProviderAdapter[];
 }
 
 export interface RunningDaemon {
@@ -71,8 +75,13 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   const secrets = await createSecretStore();
   const store = new DataStore(paths.databaseFile);
+  // SPEC-AGENT §4: önceki ömürden yarım kalan koşular failed(AGENT_DAEMON_RESTART).
+  const interrupted = store.markInterruptedAgentRuns();
+  if (interrupted > 0) log.warn({ interrupted }, "yarım kalmış agent koşuları failed işaretlendi");
+  ensureDefaultAgent(paths.agentsDir);
+
   const providers = new Map<string, ProviderAdapter>();
-  for (const adapter of [
+  for (const adapter of options.testProviders ?? [
     new AnthropicAdapter(secrets),
     new OpenAIAdapter(secrets),
     new GoogleAdapter(secrets),
@@ -109,8 +118,28 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     return statuses;
   }
 
+  const engine = new AgentEngine({
+    providers,
+    bus,
+    store,
+    log,
+    agentsDir: paths.agentsDir,
+    permissionsFile: paths.permissionsFile,
+    // "boşsa router seçer" (SPEC-AGENT §1): ilk öneri kullanılır.
+    pickModel: async (task) => {
+      const [models, vramGb] = await Promise.all([availableModels(), getVramGb()]);
+      const suggestions = suggestModels(task, undefined, { models, vramGb });
+      const first = suggestions[0];
+      return first === undefined ? null : { provider: first.provider, model: first.model };
+    },
+  });
+
   async function buildSnapshot(): Promise<Snapshot> {
-    return { runs: [], providers: await providerStatuses(), pendingPermissions: [] };
+    return {
+      runs: engine.activeRuns(),
+      providers: await providerStatuses(),
+      pendingPermissions: engine.pendingPermissions(),
+    };
   }
 
   /**
@@ -302,6 +331,8 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   wss.on("connection", (ws: WebSocket) => {
     let authed = false;
+    /** hello.client — permission.resolved.resolvedBy bu bilgiyle doldurulur. */
+    let clientKind: "cli" | "desktop" | "web" = "cli";
     const helloTimer = setTimeout(() => {
       if (!authed) ws.close(4001, "hello zaman aşımı");
     }, 3000);
@@ -355,6 +386,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             return;
           }
           authed = true;
+          clientKind = hello.client;
           clearTimeout(helloTimer);
           bus.add(ws);
           bus.sendTo(
@@ -393,6 +425,42 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           case "models.list": {
             const lists = await Promise.all([...providers.values()].map((p) => p.listModels()));
             bus.sendTo(ws, "models.list.ok", { models: lists.flat() }, message.id);
+            return;
+          }
+          case "agents.list": {
+            bus.sendTo(ws, "agents.list.ok", { agents: engine.listAgents() }, message.id);
+            return;
+          }
+          case "agent.start": {
+            const payload = message.payload as RequestPayload<"agent.start">;
+            try {
+              const { runId } = await engine.start(payload);
+              bus.sendTo(ws, "agent.start.ok", { runId }, message.id);
+            } catch (error) {
+              // Beklenen doğrulama hataları (AGENT_UNKNOWN, PERMISSION_JAIL...) —
+              // telemetriye değil, isteği yapana gider.
+              sendError(toErrorPayload(error), message.id);
+            }
+            return;
+          }
+          case "agent.cancel": {
+            const payload = message.payload as RequestPayload<"agent.cancel">;
+            try {
+              engine.cancel(payload.runId);
+              bus.sendTo(ws, "agent.cancel.ok", {}, message.id);
+            } catch (error) {
+              sendError(toErrorPayload(error), message.id);
+            }
+            return;
+          }
+          case "permission.respond": {
+            const payload = message.payload as RequestPayload<"permission.respond">;
+            try {
+              engine.respond(payload, clientKind);
+              bus.sendTo(ws, "permission.respond.ok", {}, message.id);
+            } catch (error) {
+              sendError(toErrorPayload(error), message.id);
+            }
             return;
           }
           case "providers.status": {
@@ -467,6 +535,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     port: boundPort,
     token,
     close: async () => {
+      engine.cancelAll();
       for (const abort of activeChats.values()) abort.abort();
       // Açık istemci soketleri koparılmazsa app.close() sonsuza dek bekleyebilir.
       for (const client of wss.clients) client.terminate();

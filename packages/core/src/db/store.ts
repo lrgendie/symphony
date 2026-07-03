@@ -71,6 +71,42 @@ const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (session_id, idx)
   );
   `,
+  // v3 — agent koşuları (Faz 3, SPEC-AGENT §7): koşu meta + adım kayıtları.
+  // Ham dosya içerikleri DEĞİL, özetler saklanır; Doktor agent (Faz 8) bunları okur.
+  `
+  CREATE TABLE agent_runs (
+    id            TEXT PRIMARY KEY,
+    agent_id      TEXT NOT NULL,
+    task          TEXT NOT NULL,
+    provider      TEXT NOT NULL,
+    model         TEXT NOT NULL,
+    cwd           TEXT NOT NULL,
+    state         TEXT NOT NULL CHECK (state IN
+      ('queued','thinking','awaiting_permission','executing_tool','completed','failed','cancelled')),
+    result        TEXT,
+    error_code    TEXT,
+    steps         INTEGER NOT NULL DEFAULT 0,
+    input_tokens  INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd      REAL NOT NULL DEFAULT 0,
+    started_at    INTEGER NOT NULL,
+    finished_at   INTEGER
+  );
+  CREATE INDEX idx_agent_runs_started_at ON agent_runs (started_at);
+
+  CREATE TABLE agent_steps (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id       TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+    step         INTEGER NOT NULL,
+    tool         TEXT NOT NULL,
+    args_summary TEXT NOT NULL,
+    ok           INTEGER NOT NULL,
+    error_code   TEXT,
+    duration_ms  INTEGER NOT NULL,
+    at           INTEGER NOT NULL
+  );
+  CREATE INDEX idx_agent_steps_run_id ON agent_steps (run_id);
+  `,
 ];
 
 export type RequestStatus = "ok" | "error" | "cancelled";
@@ -454,7 +490,122 @@ export class DataStore {
     }));
   }
 
+  // ---- Agent koşuları (v3, SPEC-AGENT §7) ----
+
+  createAgentRun(record: AgentRunCreate): void {
+    this.db
+      .prepare(
+        `INSERT INTO agent_runs (id, agent_id, task, provider, model, cwd, state, started_at)
+         VALUES (@id, @agentId, @task, @provider, @model, @cwd, 'queued', @startedAt)`,
+      )
+      .run(record);
+  }
+
+  updateAgentRunState(id: string, state: string): void {
+    this.db.prepare(`UPDATE agent_runs SET state = ? WHERE id = ?`).run(state, id);
+  }
+
+  finishAgentRun(id: string, finish: AgentRunFinish): void {
+    this.db
+      .prepare(
+        `UPDATE agent_runs SET
+           state = @state, result = @result, error_code = @errorCode, steps = @steps,
+           input_tokens = @inputTokens, output_tokens = @outputTokens, cost_usd = @costUsd,
+           finished_at = @finishedAt
+         WHERE id = @id`,
+      )
+      .run({
+        id,
+        state: finish.state,
+        result: finish.result,
+        errorCode: finish.errorCode,
+        steps: finish.steps,
+        inputTokens: finish.usage.inputTokens,
+        outputTokens: finish.usage.outputTokens,
+        costUsd: finish.usage.costUsd,
+        finishedAt: Date.now(),
+      });
+  }
+
+  recordAgentStep(record: AgentStepRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO agent_steps (run_id, step, tool, args_summary, ok, error_code, duration_ms, at)
+         VALUES (@runId, @step, @tool, @argsSummary, @ok, @errorCode, @durationMs, @at)`,
+      )
+      .run({ ...record, ok: record.ok ? 1 : 0, at: Date.now() });
+  }
+
+  /**
+   * Daemon açılışı (SPEC-AGENT §4): önceki ömürden yarım kalmış koşular
+   * failed(AGENT_DAEMON_RESTART) işaretlenir — otomatik devam YOK (v1 kararı).
+   */
+  markInterruptedAgentRuns(): number {
+    const result = this.db
+      .prepare(
+        `UPDATE agent_runs
+         SET state = 'failed', error_code = 'AGENT_DAEMON_RESTART', finished_at = ?
+         WHERE state NOT IN ('completed', 'failed', 'cancelled')`,
+      )
+      .run(Date.now());
+    return result.changes;
+  }
+
+  /** Son koşular (yeniden eskiye) — CLI listesi ve testler için. */
+  recentAgentRuns(limit = 50): AgentRunRow[] {
+    return this.db
+      .prepare(`SELECT * FROM agent_runs ORDER BY started_at DESC, id LIMIT ?`)
+      .all(limit) as AgentRunRow[];
+  }
+
   close(): void {
     this.db.close();
   }
+}
+
+export interface AgentRunCreate {
+  id: string;
+  agentId: string;
+  task: string;
+  provider: string;
+  model: string;
+  cwd: string;
+  startedAt: number;
+}
+
+export interface AgentRunFinish {
+  state: "completed" | "failed" | "cancelled";
+  result: string | null;
+  errorCode: string | null;
+  usage: Usage;
+  steps: number;
+}
+
+export interface AgentStepRecord {
+  runId: string;
+  step: number;
+  tool: string;
+  argsSummary: string;
+  ok: boolean;
+  errorCode: string | null;
+  durationMs: number;
+}
+
+/** agent_runs satırı (SQLite sütun adlarıyla) — rapor/test amaçlı ham görünüm. */
+export interface AgentRunRow {
+  id: string;
+  agent_id: string;
+  task: string;
+  provider: string;
+  model: string;
+  cwd: string;
+  state: string;
+  result: string | null;
+  error_code: string | null;
+  steps: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+  started_at: number;
+  finished_at: number | null;
 }

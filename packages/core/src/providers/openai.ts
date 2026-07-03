@@ -1,5 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { streamText } from "ai";
+import { streamText, type LanguageModel } from "ai";
 import type { ModelInfo } from "@symphony/shared";
 import type { SecretStore } from "../secrets/secret-store.js";
 import { computeCostUsd } from "./pricing.js";
@@ -31,6 +31,9 @@ const MODELS: ModelInfo[] = [
 
 export class OpenAIAdapter implements ProviderAdapter {
   readonly name = "openai";
+  // GPT-5 ailesi (akıl yürüten modeller) sampling parametrelerini KABUL ETMEZ —
+  // temperature göndermek 400 döndürür. ADR-008 determinizmi istem düzeyinde sağlanır.
+  readonly forwardsTemperature = false;
 
   constructor(private readonly secrets: SecretStore) {}
 
@@ -42,7 +45,7 @@ export class OpenAIAdapter implements ProviderAdapter {
     return (await this.secrets.get(this.name)) !== null;
   }
 
-  async *streamChat(request: ChatStreamRequest): AsyncGenerator<string, ChatUsageResult, void> {
+  async languageModel(modelId: string): Promise<LanguageModel> {
     const apiKey = await this.secrets.get(this.name);
     if (!apiKey) {
       throw new Error(
@@ -50,13 +53,12 @@ export class OpenAIAdapter implements ProviderAdapter {
           "Kaydetmek için: pnpm --filter @symphony/core key:set openai",
       );
     }
-    const openai = createOpenAI({ apiKey });
+    return createOpenAI({ apiKey })(modelId);
+  }
 
-    // GPT-5 ailesi (akıl yürüten modeller) sampling parametrelerini KABUL ETMEZ —
-    // temperature göndermek 400 döndürür. ADR-008 determinizmi bu ailede istem
-    // düzeyinde sağlanır; request.temperature bilinçli olarak API'ye iletilmez.
+  async *streamChat(request: ChatStreamRequest): AsyncGenerator<string, ChatUsageResult, void> {
     const result = streamText({
-      model: openai(request.model),
+      model: await this.languageModel(request.model),
       messages: request.messages,
       ...(request.maxTokens !== undefined ? { maxOutputTokens: request.maxTokens } : {}),
       ...(request.abortSignal !== undefined ? { abortSignal: request.abortSignal } : {}),

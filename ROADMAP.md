@@ -3,6 +3,12 @@
 > Yerel + bulut LLM'leri ve agent'ları tek merkezden yöneten, koda müdahale edebilen,
 > Windows / macOS / ARM üzerinde çalışan, terminal + masaüstü senkron orkestrasyon platformu.
 
+> **📌 Model devri notu (2026-07-04):** Tasarım Fable 5 ile yapıldı; Fable'ın haftalık
+> limiti dolduğunda işi Opus (veya başka bir model) devralır. Devralan model işe
+> başlamadan önce **`memo/DEVIR.md`** okumak ZORUNDADIR: mimari özet, iş disiplini,
+> Faz 3 kalanları ve bu projede kanla öğrenilmiş teknik tuzaklar orada. Oturum
+> başlangıç rutini: `memo/DURUM.md` + `memo/BAGLAM.md` (geniş kod taraması yasak).
+
 ---
 
 ## 1. Temel Mimari Karar: "Daemon Merkezli" Tasarım
@@ -111,14 +117,15 @@ symphony/
   toplamını gösteriyor; model seçici akışı bozulmuyor; bileşen testli.
 
 ### Faz 3 — Kod Agent'ı: Sisteme Müdahale (6–8. hafta) ⭐ kalbi burası
-- [ ] Araç seti: `read_file`, `write_file`, `edit`, `glob`, `grep`, `run_command` (PowerShell/bash)
-- [ ] Agent döngüsü: model → tool call → sonuç → model... (Vercel AI SDK tool-calling ile, her modelde aynı)
-- [ ] **İzin sistemi:** her dosya yazma / komut çalıştırma öncesi onay (Claude Code'daki gibi), "her zaman izin ver" listesi
-- [ ] Diff önizleme: agent dosya değiştirmeden önce ne değişeceğini göster
+- [x] Araç seti: `read_file`, `write_file`, `edit`, `glob`, `grep`, `run_command` (PowerShell/bash) ✅ 2026-07-04 — workspace jail + sır maskeleme + temiz env dâhil (`core/src/agent/tools.ts`, testli)
+- [x] Agent döngüsü: model → tool call → sonuç → model... (Vercel AI SDK tool-calling ile, her modelde aynı) ✅ 2026-07-04 — maxSteps sigortası, AGENT_TOOL_LOOP, iptal, durum makinesi (`engine.ts`)
+- [x] **İzin sistemi:** her dosya yazma / komut çalıştırma öncesi onay (Claude Code'daki gibi), "her zaman izin ver" listesi ✅ 2026-07-04 — deny>allow>risk varsayılanı; destructive'de always_allow yok
+- [x] Diff önizleme: agent dosya değiştirmeden önce ne değişeceğini göster ✅ 2026-07-04 — bayat-diff (PERMISSION_STALE_DIFF) denetimiyle
 - [ ] MCP istemci desteği: harici MCP sunucularını agent'lara araç olarak bağlama
 - [ ] **Eklenti sistemi:** `symphony add <github-repo | npm-paket | mcp-sunucu>` — GitHub'daki bir aracı veya MCP sunucusunu indirip agent'lara araç olarak kaydetme; ilk örnek eklenti: Playwright tabanlı web scraping aracı
+- [ ] TUI'de agent modu: izin isteği kutusu + diff görünümü (CLI `symphony agent` komutu var, sıra Ink arayüzünde)
 - **Çıktı:** "şu dosyadaki bug'ı düzelt" diyebildiğin, onayınla kodu değiştiren agent.
-- **Kabul testi:** Agent diff gösterip onay almadan tek bayt yazamıyor (izinsiz yazma girişimi testle kanıtlanmış şekilde engelli); workspace dışına çıkamıyor; deny cevabı koşuyu kırmıyor; bir harici MCP sunucusu bağlanıp araç olarak çağrılıyor. Davranışlar `docs/SPEC-AGENT.md`'ye uygun.
+- **Kabul testi:** Agent diff gösterip onay almadan tek bayt yazamıyor (izinsiz yazma girişimi testle kanıtlanmış şekilde engelli) ✅; workspace dışına çıkamıyor ✅; deny cevabı koşuyu kırmıyor ✅ (üçü de `engine.test.ts` + `daemon-agent.test.ts`, 2026-07-04); bir harici MCP sunucusu bağlanıp araç olarak çağrılıyor (bekliyor). Davranışlar `docs/SPEC-AGENT.md`'ye uygun.
 
 ### Faz 4 — Masaüstü: Orkestra Sahnesi (9–11. hafta)
 - [ ] Tauri 2 + React dashboard, daemon'un WS akışına bağlanır

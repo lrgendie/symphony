@@ -6,6 +6,8 @@ import { modelsCommand } from "./commands/models.js";
 import { statusCommand } from "./commands/status.js";
 import { watchCommand } from "./commands/watch.js";
 import { historyCommand } from "./commands/history.js";
+import { agentsCommand } from "./commands/agents.js";
+import { agentRunCommand } from "./commands/agent.js";
 
 const program = new Command();
 
@@ -28,6 +30,21 @@ program
   .command("watch")
   .description("Daemon olay akışını canlı izle (tüm istemcilerin sohbetleri)")
   .action(wrap(watchCommand));
+
+program
+  .command("agents")
+  .description("Kayıtlı agent tanımlarını listele (~/.symphony/agents)")
+  .action(wrap(agentsCommand));
+
+program
+  .command("agent <ad> <görev>")
+  .description("Agent koşusu başlat: dosya okur/yazar, komut çalıştırır — izinle (Faz 3)")
+  .option("--cwd <dizin>", "çalışma alanı (varsayılan: bulunduğun dizin)")
+  .option("--model <model>", "model (provider ile birlikte; boşsa router seçer)")
+  .option("--provider <sağlayıcı>", "sağlayıcı (model ile birlikte)")
+  .action((ad: string, gorev: string, opts: { cwd?: string; model?: string; provider?: string }) =>
+    agentRunCommand(ad, gorev, opts).catch(fail),
+  );
 
 program
   .command("history [oturum]")

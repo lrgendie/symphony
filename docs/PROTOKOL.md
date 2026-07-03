@@ -59,6 +59,7 @@ Tüm WS mesajları tek zarf tipindedir:
 | `agent.cancel` | `{ runId }` | Koşan agent'ı iptal et |
 | `permission.respond` | `{ requestId, decision: "allow"\|"deny"\|"always_allow" }` | Bekleyen izin isteğine cevap |
 | `models.list` | `{}` | Tüm sağlayıcıların kullanılabilir modelleri |
+| `agents.list` | `{}` | Kayıtlı agent tanımları (`~/.symphony/agents/*.md`). Cevap: `agents.list.ok { agents: AgentSummary[] }` |
 | `providers.status` | `{}` | Sağlayıcı sağlık durumları |
 | `router.suggest` | `{ task, constraints?: { maxCostUsd?, preferLocal? } }` | "Bu iş için hangi model?" önerisi |
 | `usage.query` | `{ from?, to?, groupBy? }` | Token/maliyet raporu |

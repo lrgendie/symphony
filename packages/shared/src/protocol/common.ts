@@ -77,6 +77,20 @@ export const SnapshotSchema = z
   .strip();
 export type Snapshot = z.infer<typeof SnapshotSchema>;
 
+/** `agents.list.ok` satırı: agent tanımının kimlik kartı (SPEC-AGENT.md §1). */
+export const AgentSummarySchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string(),
+    provider: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+    tools: z.array(z.string().min(1)),
+    maxSteps: z.number().int().positive(),
+  })
+  .strip();
+export type AgentSummary = z.infer<typeof AgentSummarySchema>;
+
 export const ModelInfoSchema = z
   .object({
     provider: z.string().min(1),

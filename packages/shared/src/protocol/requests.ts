@@ -58,6 +58,8 @@ export const PermissionRespondPayloadSchema = z
 
 export const ModelsListPayloadSchema = z.object({}).strip();
 
+export const AgentsListPayloadSchema = z.object({}).strip();
+
 export const ProvidersStatusPayloadSchema = z.object({}).strip();
 
 export const RouterSuggestPayloadSchema = z
@@ -90,6 +92,7 @@ export const REQUEST_PAYLOAD_SCHEMAS = {
   "agent.cancel": AgentCancelPayloadSchema,
   "permission.respond": PermissionRespondPayloadSchema,
   "models.list": ModelsListPayloadSchema,
+  "agents.list": AgentsListPayloadSchema,
   "providers.status": ProvidersStatusPayloadSchema,
   "router.suggest": RouterSuggestPayloadSchema,
   "usage.query": UsageQueryPayloadSchema,

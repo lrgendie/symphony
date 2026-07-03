@@ -41,7 +41,10 @@
 | `better-sqlite3` | Yerel veri katmanı: geçmiş, telemetri, skorlar |
 | `keytar` | API anahtarlarını OS keychain'inde saklama |
 | `pino` | Yapılandırılmış loglama (hata telemetrisinin temeli) |
-| `execa` | Agent'ın komut çalıştırma aracı (PowerShell/bash) |
+| `execa` | Agent'ın komut çalıştırma aracı (PowerShell/bash) ✅ kuruldu 2026-07-04 |
+| `tinyglobby` | Agent `glob`/`grep` araçlarının dosya tarayıcısı (fast-glob'dan küçük, vitest de kullanıyor) ✅ 2026-07-04 |
+| `picomatch` | İzin kurallarında glob desen eşleme (`permissions.json`) ✅ 2026-07-04 |
+| `diff` | İzin isteklerindeki birleşik diff üretimi (SPEC-AGENT §6) ✅ 2026-07-04 |
 | `simple-git` | Agent'ın git işlemleri + oturum yedekleme |
 
 ### `packages/cli` — `symphony` komutu

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  AgentSummarySchema,
   ErrorPayloadSchema,
   ModelInfoSchema,
   ProviderHealthSchema,
@@ -32,6 +33,8 @@ export const AckPayloadSchema = z.object({}).strip();
 export const AgentStartOkPayloadSchema = z.object({ runId: z.string().uuid() }).strip();
 
 export const ModelsListOkPayloadSchema = z.object({ models: z.array(ModelInfoSchema) }).strip();
+
+export const AgentsListOkPayloadSchema = z.object({ agents: z.array(AgentSummarySchema) }).strip();
 
 export const ProvidersStatusOkPayloadSchema = z
   .object({ providers: z.array(ProviderHealthSchema) })
@@ -171,6 +174,7 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   "agent.cancel.ok": AckPayloadSchema,
   "permission.respond.ok": AckPayloadSchema,
   "models.list.ok": ModelsListOkPayloadSchema,
+  "agents.list.ok": AgentsListOkPayloadSchema,
   "providers.status.ok": ProvidersStatusOkPayloadSchema,
   "router.suggest.ok": RouterSuggestOkPayloadSchema,
   "usage.query.ok": UsageQueryOkPayloadSchema,

@@ -13,7 +13,11 @@ ve masaüstü (Tauri) aynı daemon'a bağlı iki eş zamanlı arayüzdür.
 ## Her oturumda ilk iş
 
 1. `memo/DURUM.md` oku → kaldığımız yer ve sıradaki adım orada.
-2. Oturum sonunda: `memo/DURUM.md` güncelle + `memo/oturumlar/YYYY-AA-GG.md` günlüğü yaz.
+2. `memo/BAGLAM.md` oku → dosya haritası + "görev → ne okumalı" tablosu orada.
+   **Geniş kod taraması yapma**; yalnız o oturumda dokunacağın dosyaları, haritadan
+   bulup hedefli oku (token bütçesi kuralları BAGLAM.md sonunda).
+3. Oturum sonunda: `memo/DURUM.md` + (yapısal değişiklik olduysa) `memo/BAGLAM.md`
+   güncelle + `memo/oturumlar/YYYY-AA-GG.md` günlüğü yaz.
    (Commit+push'u SessionEnd hook'u otomatik yapar; elle yapıyorsan mesaj formatı: `oturum: ...`)
 
 ## Belge haritası

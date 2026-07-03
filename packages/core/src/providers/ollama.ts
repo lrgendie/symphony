@@ -1,5 +1,5 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { streamText } from "ai";
+import { streamText, type LanguageModel } from "ai";
 import type { ModelInfo } from "@symphony/shared";
 import type { ChatStreamRequest, ChatUsageResult, ProviderAdapter } from "./types.js";
 
@@ -27,8 +27,20 @@ interface OllamaTagsResponse {
  */
 export class OllamaAdapter implements ProviderAdapter {
   readonly name = "ollama";
+  // Ollama sampling parametrelerini destekler → ADR-008 gereği temperature İLETİLİR.
+  readonly forwardsTemperature = true;
 
   constructor(private readonly baseUrl: string = DEFAULT_OLLAMA_BASE_URL) {}
+
+  languageModel(modelId: string): Promise<LanguageModel> {
+    return Promise.resolve(
+      createOpenAICompatible({
+        name: this.name,
+        baseURL: `${this.baseUrl}/v1`,
+        includeUsage: true,
+      }).chatModel(modelId),
+    );
+  }
 
   async listModels(): Promise<ModelInfo[]> {
     const tags = await this.fetchTags();
@@ -49,16 +61,8 @@ export class OllamaAdapter implements ProviderAdapter {
   }
 
   async *streamChat(request: ChatStreamRequest): AsyncGenerator<string, ChatUsageResult, void> {
-    const ollama = createOpenAICompatible({
-      name: this.name,
-      baseURL: `${this.baseUrl}/v1`,
-      includeUsage: true,
-    });
-
-    // Ollama sampling parametrelerini destekler → ADR-008 gereği temperature
-    // (varsayılan 0) burada API'ye AKTARILIR (Anthropic'in aksine).
     const result = streamText({
-      model: ollama.chatModel(request.model),
+      model: await this.languageModel(request.model),
       messages: request.messages,
       temperature: request.temperature,
       ...(request.maxTokens !== undefined ? { maxOutputTokens: request.maxTokens } : {}),
