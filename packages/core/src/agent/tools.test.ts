@@ -115,8 +115,11 @@ describe("araç seti (SPEC-AGENT §2)", () => {
     await expect(
       AGENT_TOOLS.read_file.execute({ path: "../../etc/passwd" }, ctx, signal()),
     ).rejects.toThrowError(AgentError);
+    // İleri eğik çizgi HEM Windows HEM POSIX'te yol ayracıdır → `..` her iki platformda da
+    // kaçıştır. (Eski `..\\kacak.txt` yalnız Windows'ta kaçıyordu; Linux CI'da `\` sıradan
+    // karakter olduğu için tek dosya adı sayılıp kaçmıyor, test yanlış yere patlıyordu.)
     expect(() =>
-      AGENT_TOOLS.write_file.permissionTarget({ path: "..\\kacak.txt", content: "x" }, ctx),
+      AGENT_TOOLS.write_file.permissionTarget({ path: "../kacak.txt", content: "x" }, ctx),
     ).toThrowError(AgentError);
   });
 });
