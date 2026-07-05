@@ -332,7 +332,10 @@ const DESTRUCTIVE_COMMAND_PATTERNS: readonly RegExp[] = [
   /\bcurl\b.*(-X\s*(POST|PUT|DELETE|PATCH)|--data|\s-d\s|--upload-file)/i,
   /invoke-(webrequest|restmethod).*-method\s*(post|put|delete|patch)/i,
   /\bwget\b.*--(post-data|post-file)/i,
-  /\b(format|mkfs)\b/i,
+  // (?!-): "format"/"mkfs" disk biçimlendirme komutlarını yakalar (format C:, mkfs.ext4);
+  // PowerShell'in zararsız Format-Table/Format-List/Format-Wide gibi görüntüleme
+  // cmdlet'lerini (her zaman tireyle devam eder) YANLIŞ POZİTİF olarak işaretlemez.
+  /\b(format|mkfs)\b(?!-)/i,
 ];
 
 export function isDestructiveCommand(command: string): boolean {

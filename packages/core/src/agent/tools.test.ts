@@ -95,6 +95,16 @@ describe("araç seti (SPEC-AGENT §2)", () => {
     expect(AGENT_TOOLS.run_command.riskClass({ command: "pnpm build" })).toBe("mutating");
   });
 
+  it("format/mkfs sezgiseli PowerShell'in Format-* cmdlet'lerini yanlış pozitif işaretlemez", () => {
+    // Gerçek koşuda görüldü (2026-07-05): Format-Table salt-okunur bir listeleme
+    // cmdlet'i ama eski desen \b(format|mkfs)\b onu disk biçimlendirmeyle karıştırıyordu.
+    expect(isDestructiveCommand("Get-ChildItem | Format-Table -AutoSize")).toBe(false);
+    expect(isDestructiveCommand("Get-ChildItem | Format-List")).toBe(false);
+    expect(isDestructiveCommand("Get-Process | Format-Wide")).toBe(false);
+    expect(isDestructiveCommand("format C:")).toBe(true); // gerçek disk biçimlendirme hâlâ yakalanır
+    expect(isDestructiveCommand("mkfs.ext4 /dev/sda1")).toBe(true);
+  });
+
   it("maskSecrets anahtar desenlerini yıldızlar (SPEC §8.3)", () => {
     expect(maskSecrets("anahtar: sk-abc123def456ghj olsun")).toBe("anahtar: *** olsun");
     expect(maskSecrets("AIzaSyB1234567890abc")).toBe("***");

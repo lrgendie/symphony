@@ -32,11 +32,39 @@ dashboard'a bağlama) yine mevcut modelle sürebilir.
 Başlamadan önce kullanıcıyla netleşecekler: Rust toolchain kurulu mu (GEREKSINIMLER.md'de
 "Faz 4'te kurulacak" işaretli), Windows'ta Tauri derlemesi denenmiş mi.
 
+## Yeni: `duzenleyici` agent'ı + gerçek dünya bulgusu (2026-07-05, Faz 3 sonrası)
+
+Kullanıcının asıl hedefi ajanların GERÇEK dosya sistemini (masaüstü, klasör taşıma) yönetmesi —
+bu zaten mümkündü (`--cwd` jail'i neresi verilirse orayı sınırlar, proje klasörüne özel bir
+kısıtlama yok), yalnız kullanıcı bunu bilmiyordu. Çözüm: `~/.symphony/agents/duzenleyici.md`
+eklendi (tools: read_file/glob/grep/run_command — write_file/edit yok, dosya İÇERİĞİ değil
+düzenini değiştiriyor; sistem promptu: önce incele, riskli işlemden önce özetle, silme
+komutu çalıştırma).
+
+Gerçek masaüstünde (`--cwd "C:\Users\...\Desktop"`, Claude Sonnet 5) canlı denendi — ve bir
+**gerçek hata bulundu:** `Get-ChildItem | Format-Table` gibi zararsız, salt-okunur PowerShell
+komutları `isDestructiveCommand`'daki `\b(format|mkfs)\b` deseni yüzünden YANLIŞ POZİTİF
+olarak `destructive` sınıflanıyordu ("Format-Table" içindeki "Format" kelimesini disk
+biçimlendirmeyle karıştırıyordu). Düzeltme: `\b(format|mkfs)\b(?!-)` (PowerShell'in tire ile
+devam eden Format-* cmdlet'lerini hariç tutar, gerçek `format C:`/`mkfs.ext4` hâlâ yakalanır).
+Regresyon testi eklendi (`tools.test.ts`). 143/143 test yeşil. Düzeltmeden sonra agent gerçek
+masaüstünü inceleyip (10 klasör, 11 dosya) tutarlı bir gruplama önerisi üretti, hiçbir şeyi
+taşımadan önce onay istedi — SPEC §4 "önce özetle" kuralına birebir uydu.
+
+**Ayrı gözlem (düzeltilmedi, bilgi amaçlı):** `symphony agent` komutunu ben (Claude Code)
+piped/sabit stdin ile (`printf "e\n" | ...`) test ederken readline zamanlaması yüzünden
+`ERR_USE_AFTER_CLOSE` ile izin cevabı gönderilemedi — ama TOOL YİNE DE ÇALIŞMADI (izin
+kapısı beklemede kaldı, hiçbir şey yürütülmedi). `yes "e" | ...` deseni sorunsuz çalıştı.
+Gerçek bir terminalde (kullanıcı gerçekten yazarken) stdin hiç EOF'a düşmediği için bu
+senaryo oluşmaz — CLI'ye dokunmaya gerek yok.
+
 ## Bekleyenler / kullanıcıdan gerekenler
 
 - [ ] **TUI agent modu canlı doğrulaması** (yukarıda — Faz 3'ü tamamen kapatan son adım).
 - [ ] OpenAI/Google API anahtarları (gelince: `pnpm --filter @symphony/core key:set openai`).
 - [ ] Faz 4 öncesi: Rust toolchain (rustup+MSVC) kurulumu.
+- [ ] `duzenleyici` agent'ının masaüstü önerisini kullanıcı onaylarsa: gerçek taşıma işlemi
+      (bir sonraki oturumda ya da bu oturumda kullanıcı isterse).
 
 ## Geçmiş fazlar (özet — ayrıntı oturum günlüklerinde)
 
