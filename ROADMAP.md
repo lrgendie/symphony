@@ -149,11 +149,13 @@ symphony/
   + `packages/desktop` (Tauri 2, `ui/dist`'i sarar, token'ı `~/.symphony/daemon.token`'dan
   okuyup webview'e enjekte eder). cargo build ✅, wire-protokol smoke testi ✅ (daemon
   `client:"desktop"` bağlantısını kabul edip snapshot döndü), store birim testleri ✅ (6).
-  **Not:** pencere görsel doğrulaması kullanıcıya kaldı (TUI'deki aynı Bash/TTY sınırı).
+  **Pencere görsel doğrulaması KULLANICI tarafından yapıldı ✅ 2026-07-05** — `desktop:dev`
+  ile pencere açıldı, canlı akış çalıştı.
 - [ ] **"Living Interface" sahnesi:** Three.js parçacık küresi merkezde — boşta yavaşça nefes alır, agent düşünürken dalgalanır, araç çalıştırırken hızlanır, hatada renk değiştirir. Her agent'ın kendi küçük "yaşam formu" olur
 - [~] **Şef Paneli:** aktif agent'lar (kim çalışıyor, hangi araç, hangi dosya), canlı log akışı —
-  dilim 1'de MİNİMAL yapıldı (aktif koşular + tek satırlık canlı olay akışı + izin bekleyen
-  sayısı); "hangi dosya" ayrıntısı ve zengin görünüm sonraki dilim
+  dilim 1: aktif koşular + canlı olay akışı; **dilim 2 (2026-07-05): izin istekleri masaüstünden
+  CEVAPLANABİLİYOR** (kart + renkli diff + Evet/Bu koşu/Daima/Hayır → `permission.respond`,
+  ilk cevap kazanır, SPEC §5). "hangi dosya" zengin görünümü sonraki dilim
 - [~] Model panosu: provider durumları ✅ (canlı up/down/degraded), token kullanımı/maliyet
   sayaçları + yerel model VRAM durumu — sonraki dilim
 - [ ] **Yol haritası görselleştirme:** projelerin ROADMAP/plan dosyalarından otomatik üretilen interaktif faz-adım grafiği; hangi adım bitti, hangi adımda hangi agent çalışıyor canlı görünür
@@ -163,7 +165,11 @@ symphony/
   Yapılandırılabilir: `~/.symphony/config.json` → `desktop.autoLaunch` (varsayılan açık)
 - [ ] Terminal ⇄ masaüstü eş zamanlılık testi: CLI'da başlayan iş anında ekranda
 - **Çıktı:** Terminalde agent çalıştırırken masaüstünde canlı izlediğin, yaşayan dashboard.
-- **Kabul testi:** CLI'da başlatılan koşu 1 saniye içinde masaüstünde görünüyor; küre agent durumlarına (thinking/executing/failed) görsel tepki veriyor; token/maliyet sayaçları gerçek kullanım verisiyle artıyor; izin istekleri masaüstünden de cevaplanabiliyor.
+- **Kabul testi:** CLI'da başlatılan koşu 1 saniye içinde masaüstünde görünüyor ✅ (dilim 1,
+  kullanıcı doğruladı); küre agent durumlarına (thinking/executing/failed) görsel tepki veriyor
+  (Living Interface — bekliyor); token/maliyet sayaçları gerçek kullanım verisiyle artıyor
+  (model panosu — bekliyor); izin istekleri masaüstünden de cevaplanabiliyor ✅ (dilim 2, kod +
+  store testleri; buton tıklama görsel doğrulaması kullanıcıya kaldı).
 
 ### Faz 5 — Orkestrasyon: Çoklu Agent (12–14. hafta)
 - [ ] Görev kuyruğu: birden çok agent'ı paralel çalıştırma, birbirine iş devretme

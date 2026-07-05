@@ -1,5 +1,11 @@
 import { create } from "zustand";
-import type { ActiveRun, EventType, ProviderHealth, Snapshot } from "@symphony/shared";
+import type {
+  ActiveRun,
+  EventType,
+  PendingPermission,
+  ProviderHealth,
+  Snapshot,
+} from "@symphony/shared";
 
 /**
  * WS olaylarıyla beslenen tek durum kaynağı (zustand). DaemonConnection (daemon/client.ts)
@@ -27,12 +33,14 @@ interface UiState {
   daemonVersion: string | null;
   providers: ProviderHealth[];
   runs: ActiveRun[];
-  pendingPermissions: number;
+  pendingPermissions: PendingPermission[];
   log: LogItem[];
   setStatus: (status: ConnStatus) => void;
   setError: (error: string | null) => void;
   applySnapshot: (snapshot: Snapshot, daemonVersion: string) => void;
   handleEvent: (type: EventType, payload: unknown) => void;
+  /** İstek gönderildikten sonra iyimser kaldırma (permission.resolved zaten teyit eder). */
+  removePending: (requestId: string) => void;
 }
 
 /** args özeti/uzun metinleri kısaltır (log satırı tek satır kalsın). */
@@ -67,18 +75,22 @@ export const useStore = create<UiState>((set) => {
     daemonVersion: null,
     providers: [],
     runs: [],
-    pendingPermissions: 0,
+    pendingPermissions: [],
     log: [],
 
     setStatus: (status) => set({ status, ...(status === "connected" ? { error: null } : {}) }),
     setError: (error) => set({ error }),
+    removePending: (requestId) =>
+      set((state) => ({
+        pendingPermissions: state.pendingPermissions.filter((p) => p.requestId !== requestId),
+      })),
 
     applySnapshot: (snapshot, daemonVersion) =>
       set({
         daemonVersion,
         providers: snapshot.providers,
         runs: snapshot.runs,
-        pendingPermissions: snapshot.pendingPermissions.length,
+        pendingPermissions: snapshot.pendingPermissions,
       }),
 
     handleEvent: (type, payload) => {
@@ -114,14 +126,22 @@ export const useStore = create<UiState>((set) => {
           return;
         }
         case "agent.tool.requested": {
-          const p = payload as { tool: string; riskClass: string };
-          set((state) => ({ pendingPermissions: state.pendingPermissions + 1 }));
+          // Olay yükü PendingPermission'la aynı alanlara sahip (runId/requestId/tool/args/riskClass/diff).
+          const p = payload as PendingPermission;
+          set((state) => ({
+            pendingPermissions: [
+              ...state.pendingPermissions.filter((x) => x.requestId !== p.requestId),
+              p,
+            ],
+          }));
           pushLog("warn", `🔐 izin bekliyor: ${p.tool} [${p.riskClass}]`);
           return;
         }
         case "permission.resolved": {
-          const p = payload as { decision: string; resolvedBy?: string };
-          set((state) => ({ pendingPermissions: Math.max(0, state.pendingPermissions - 1) }));
+          const p = payload as { requestId: string; decision: string; resolvedBy?: string };
+          set((state) => ({
+            pendingPermissions: state.pendingPermissions.filter((x) => x.requestId !== p.requestId),
+          }));
           pushLog("info", `🔓 izin kararı: ${p.decision}${p.resolvedBy !== undefined ? ` (${p.resolvedBy})` : ""}`);
           return;
         }

@@ -18,6 +18,9 @@ import { useStore } from "../store";
 
 const BACKOFF_MS = [500, 1000, 2000, 4000, 8000, 15000];
 
+/** İzin kararı (SPEC-AGENT §5) — masaüstünden de gönderilebilir; ilk cevap kazanır. */
+export type PermissionDecision = "allow" | "deny" | "always_allow" | "allow_for_run";
+
 export class DaemonConnection {
   private ws: WebSocket | null = null;
   private closed = false;
@@ -35,7 +38,24 @@ export class DaemonConnection {
     this.ws = null;
   }
 
+  /**
+   * İzin isteğine cevap gönderir (permission.respond). Fire-and-forget: asıl teyit,
+   * daemon'ın TÜM istemcilere yaydığı `permission.resolved` olayıdır (store onu dinler).
+   * Bağlı değilse sessizce düşer (kart yeniden bağlanınca snapshot'tan geri gelir).
+   */
+  respond(requestId: string, decision: PermissionDecision): void {
+    const ws = this.ws;
+    if (ws === null || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify(createMessage("permission.respond", { requestId, decision })));
+  }
+
   private open(): void {
+    // Aynı anda birden çok soket açılmasın (StrictMode çift-mount / yeniden bağlanma).
+    if (this.ws !== null) {
+      this.ws.onclose = null;
+      this.ws.close();
+      this.ws = null;
+    }
     const boot = getBootstrap();
     const store = useStore.getState();
     if (boot === null) {
@@ -106,3 +126,6 @@ export class DaemonConnection {
     store.handleEvent(type as EventType, payload);
   }
 }
+
+/** Uygulama boyunca tek bağlantı — App effect'i start/stop eder, bileşenler respond() çağırır. */
+export const daemon = new DaemonConnection();

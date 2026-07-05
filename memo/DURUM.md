@@ -3,7 +3,20 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-05 (Oturum 11, Opus devraldı — Faz 4 dilim 1: masaüstü dashboard)
+**Son güncelleme:** 2026-07-05 (Oturum 11, Opus — Faz 4 dilim 1 + dilim 2: dashboard + masaüstünden izin cevaplama)
+
+## Dilim 2 (2026-07-05): masaüstünden izin cevaplama — BİTTİ ve testli
+
+Dashboard artık salt-okunur DEĞİL — gerçek kontrol yüzeyi. Bekleyen her izin isteği kart
+olarak render ediliyor (tool + riskClass + args + renkli diff), butonlar: Evet / Bu koşu
+boyunca / Daima izin ver / Hayır (destructive'de yalnız Evet/Hayır — CLI/TUI ile aynı kural).
+Tıklama `permission.respond`'u WS ile daemon'a gönderiyor; daemon `permission.resolved`'ı TÜM
+istemcilere yayıyor (ilk cevap kazanır — CLI'da başlayan bir agent'ın iznini masaüstünden
+onaylayabilirsin, SPEC §5). `store.pendingPermissions` artık sayı değil `PendingPermission[]`
+(tam detay); `daemon` modül-seviye singleton oldu (App start/stop, kart respond çağırır).
+7 store testi (tam detay saklama, requestId'e göre temizleme, removePending). Faz 4 kabul
+testi "izin istekleri masaüstünden de cevaplanabiliyor" ✅ (kod+test; buton tıklama görsel
+doğrulaması kullanıcıya — dilim 1'deki gibi).
 
 ## Şu an neredeyiz? — Faz 4 (masaüstü) dilim 1 BİTTİ ve doğrulandı
 
@@ -30,24 +43,26 @@ geçilecek yer. Kullanıcı "önce Rust kur, Tauri kabuğuyla başla" dedi.
 testi** ✅ — gerçek daemon'a `client:"desktop"` ile bağlanıp snapshot alındı (daemon daha önce
 hiç desktop istemcisi görmemişti; UI'nin yaklaşımı canlı çalışıyor).
 
-**Kullanıcıdan bekleyen — pencerenin GÖRSEL doğrulaması:** `cargo build` config+Rust'ı kanıtlar
-ama pencereyi açıp canlı akışı görmek Bash'ten yapılamaz (TUI'deki aynı sınır). Kullanıcı:
-`pnpm --filter @symphony/desktop desktop:dev` → pencere açılır, vite de başlar; terminalde ayrı
-bir `symphony agent …` başlatınca olayların 1 sn içinde dashboard'a düştüğünü gözler. (Tarayıcıda
-denemek isterse: `pnpm --filter @symphony/ui dev:token` sonra `... dev`.) **Ön koşul: daemon
-çalışıyor olmalı** (token dosyası ancak daemon dinlerken yazılır); yoksa dashboard "daemon
-çalışmıyor olabilir" uyarısı gösterir.
+**Pencere görsel doğrulaması KULLANICI tarafından yapıldı ✅ 2026-07-05** —
+`pnpm --filter @symphony/desktop desktop:dev` (proje dizininden!) pencereyi açtı, canlı akış
+çalıştı. (Kullanıcı ilk denemede ev dizininden çalıştırıp hata aldı — pnpm ağaçta yukarıdaki
+başka bir workspace'i bulup ön-install'da patladı; proje dizininden sorunsuz.) **Ön koşul:
+daemon çalışıyor olmalı** (token dosyası ancak daemon dinlerken yazılır); yoksa dashboard
+"daemon çalışmıyor olabilir" uyarısı gösterir.
+
+Çalıştırma notu (DEVIR için): `desktop:dev` MUTLAKA proje kökünden çalıştırılmalı
+(`cd C:\Users\brkn2\Desktop\OPTIMUS\symphony` önce). Tarayıcı dev alternatifi:
+`pnpm --filter @symphony/ui dev:token` sonra `... dev`.
 
 ## Sıradaki adım (Faz 4 sonraki dilimler)
 
-1. **Görsel doğrulama** (yukarıda, kullanıcıdan) — dilim 1'i tam kapatan adım.
-2. **"Living Interface"** — Three.js parçacık küresi (`@react-three/fiber`); sistem durumuna
-   göre nefes alır/dalgalanır/renk değiştirir. Tasarım ağırlıklı, Opus için ideal.
-3. **Şef Paneli zenginleştirme** — koşu başına araç/dosya ayrıntısı, izin isteklerini
-   masaüstünden CEVAPLAMA (`permission.respond` — UI şu an read-only; yazma eklenince
-   PROTOKOL zaten hazır, `allow_for_run` dahil).
-4. **Model panosu** — token/maliyet sayaçları (usage.updated olayları zaten geliyor), VRAM.
-5. **CLI → masaüstü otomatik açılış** (config `desktop.autoLaunch`).
+1. **"Living Interface"** — Three.js parçacık küresi (`@react-three/fiber`); sistem durumuna
+   göre nefes alır/dalgalanır/renk değiştirir. Tasarım ağırlıklı, Opus için ideal. (Kullanıcı
+   ekranı izlerken yapılınca daha anlamlı.)
+2. **Model panosu** — token/maliyet sayaçları (`usage.updated` olayları zaten geliyor, store
+   henüz toplamıyor), yerel model VRAM.
+3. **Şef Paneli zenginleştirme** — koşu başına araç/dosya ayrıntısı, adım geçmişi.
+4. **CLI → masaüstü otomatik açılış** (config `desktop.autoLaunch`).
 
 ## Bekleyenler / kullanıcıdan gerekenler
 

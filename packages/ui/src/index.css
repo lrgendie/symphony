@@ -223,6 +223,99 @@ body {
   white-space: nowrap;
 }
 
+/* ---- İzin kartı ---- */
+.panel-perm {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: linear-gradient(180deg, rgba(251, 191, 36, 0.06), var(--panel));
+}
+.perm {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  margin-bottom: 8px;
+}
+.perm:last-child {
+  margin-bottom: 0;
+}
+.perm-destructive {
+  border-color: rgba(239, 68, 68, 0.5);
+}
+.perm-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.risk {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--line);
+}
+.risk-mutating {
+  background: rgba(34, 211, 238, 0.16);
+  color: var(--cyan);
+}
+.risk-destructive {
+  background: rgba(239, 68, 68, 0.16);
+  color: var(--red);
+}
+.perm-args {
+  margin: 6px 0;
+  font-size: 12px;
+  word-break: break-all;
+}
+.diff {
+  margin: 6px 0;
+  padding: 8px;
+  background: #0d0f16;
+  border-radius: 6px;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.diff div {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.d-add {
+  color: var(--green);
+}
+.d-del {
+  color: var(--red);
+}
+.d-ctx {
+  color: var(--dim);
+}
+.perm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.btn {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.btn:hover {
+  border-color: var(--cyan);
+}
+.btn-yes {
+  border-color: rgba(52, 211, 153, 0.5);
+  color: var(--green);
+}
+.btn-no {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: var(--red);
+}
+
 /* ---- Log akışı ---- */
 .log {
   flex: 1;

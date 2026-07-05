@@ -17,7 +17,7 @@ beforeEach(() => {
     daemonVersion: null,
     providers: [],
     runs: [],
-    pendingPermissions: 0,
+    pendingPermissions: [],
     log: [],
   });
 });
@@ -36,7 +36,7 @@ describe("ui store", () => {
     expect(s.daemonVersion).toBe("0.1.0");
     expect(s.providers).toHaveLength(1);
     expect(s.runs[0]?.agentId).toBe("coder");
-    expect(s.pendingPermissions).toBe(1);
+    expect(s.pendingPermissions).toHaveLength(1);
   });
 
   it("agent.run yaşam döngüsü: started → state → completed koşuyu ekler/günceller/kaldırır", () => {
@@ -53,14 +53,35 @@ describe("ui store", () => {
     expect(useStore.getState().log[0]?.tone).toBe("good");
   });
 
-  it("izin akışı: tool.requested bekleyeni artırır, permission.resolved azaltır", () => {
+  it("izin akışı: tool.requested tam detay saklar (kart render edebilsin), permission.resolved requestId'e göre temizler", () => {
     const store = useStore.getState();
-    store.handleEvent("agent.tool.requested", { runId: RUN, requestId: "r", tool: "run_command", args: {}, riskClass: "destructive" });
-    expect(useStore.getState().pendingPermissions).toBe(1);
+    store.handleEvent("agent.tool.requested", {
+      runId: RUN,
+      requestId: "r",
+      tool: "write_file",
+      args: { path: "a.txt" },
+      riskClass: "mutating",
+      diff: "--- a.txt\n+++ a.txt\n+yeni",
+    });
+    const pending = useStore.getState().pendingPermissions;
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ requestId: "r", tool: "write_file", diff: expect.stringContaining("+yeni") });
     expect(useStore.getState().log[0]?.tone).toBe("warn");
 
-    store.handleEvent("permission.resolved", { requestId: "r", decision: "allow", resolvedBy: "cli" });
-    expect(useStore.getState().pendingPermissions).toBe(0);
+    // Başka bir requestId'nin resolved'ı bu bekleyeni SİLMEZ.
+    store.handleEvent("permission.resolved", { requestId: "baska", decision: "deny" });
+    expect(useStore.getState().pendingPermissions).toHaveLength(1);
+
+    store.handleEvent("permission.resolved", { requestId: "r", decision: "allow", resolvedBy: "desktop" });
+    expect(useStore.getState().pendingPermissions).toHaveLength(0);
+  });
+
+  it("removePending (masaüstünden cevaplayınca iyimser kaldırma) requestId'e göre siler", () => {
+    const store = useStore.getState();
+    store.handleEvent("agent.tool.requested", { runId: RUN, requestId: "x", tool: "run_command", args: {}, riskClass: "destructive" });
+    expect(useStore.getState().pendingPermissions).toHaveLength(1);
+    store.removePending("x");
+    expect(useStore.getState().pendingPermissions).toHaveLength(0);
   });
 
   it("provider.health mevcut sağlayıcıyı günceller (çift eklemez)", () => {

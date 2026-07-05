@@ -1,18 +1,18 @@
 import { useEffect, useRef } from "react";
-import { PROTOCOL_VERSION } from "@symphony/shared";
-import { DaemonConnection } from "./daemon/client";
+import { PROTOCOL_VERSION, type PendingPermission } from "@symphony/shared";
+import { daemon, type PermissionDecision } from "./daemon/client";
 import { useStore, type ConnStatus, type LogTone } from "./store";
 
 /**
- * Faz 4 dilim 1 — "Şef Paneli" minimal: bağlantı durumu, sağlayıcı sağlığı,
- * aktif agent koşuları ve canlı olay akışı. Terminalde başlatılan bir koşu
- * buraya 1 sn içinde düşer (daemon EventBus tüm istemcilere yayınlar, ADR-001).
+ * Faz 4 dilim 1-2 — "Şef Paneli": bağlantı durumu, sağlayıcı sağlığı, aktif agent
+ * koşuları, İZİN İSTEKLERİ (masaüstünden cevaplanabilir) ve canlı olay akışı.
+ * Terminalde başlatılan bir koşunun izin isteği buraya düşer; buradan verilen karar
+ * daemon üzerinden TÜM istemcilere yayılır (ilk cevap kazanır, SPEC-AGENT §5).
  */
 export function App(): React.JSX.Element {
   useEffect(() => {
-    const connection = new DaemonConnection();
-    connection.start();
-    return () => connection.stop();
+    daemon.start();
+    return () => daemon.stop();
   }, []);
 
   const status = useStore((s) => s.status);
@@ -23,7 +23,7 @@ export function App(): React.JSX.Element {
   const pending = useStore((s) => s.pendingPermissions);
   const log = useStore((s) => s.log);
 
-  const active = runs.length > 0 || pending > 0;
+  const active = runs.length > 0 || pending.length > 0;
 
   return (
     <div className="app">
@@ -42,6 +42,17 @@ export function App(): React.JSX.Element {
 
       {error !== null && <div className="banner banner-error">{error}</div>}
 
+      {pending.length > 0 && (
+        <section className="panel panel-perm">
+          <h2>
+            İzin bekliyor <span className="count count-warn">{pending.length}</span>
+          </h2>
+          {pending.map((p) => (
+            <PermissionCard key={p.requestId} permission={p} />
+          ))}
+        </section>
+      )}
+
       <section className="panel">
         <h2>Sağlayıcılar</h2>
         <div className="chips">
@@ -57,7 +68,6 @@ export function App(): React.JSX.Element {
       <section className="panel">
         <h2>
           Aktif koşular <span className="count">{runs.length}</span>
-          {pending > 0 && <span className="count count-warn">{pending} izin bekliyor</span>}
         </h2>
         {runs.length === 0 ? (
           <p className="dim empty">Şu an çalışan agent yok. Terminalde `symphony agent …` başlat.</p>
@@ -80,6 +90,60 @@ export function App(): React.JSX.Element {
         <LogFeed items={log} />
       </section>
     </div>
+  );
+}
+
+function PermissionCard({ permission }: { permission: PendingPermission }): React.JSX.Element {
+  // destructive'de "bu koşu boyunca"/"daima" SUNULMAZ (SPEC-AGENT §5, CLI/TUI ile aynı).
+  const canAlways = permission.riskClass !== "destructive";
+  const respond = (decision: PermissionDecision): void => {
+    daemon.respond(permission.requestId, decision);
+    // İyimser kaldırma; permission.resolved yayını da aynı requestId'yi temizler (idempotent).
+    useStore.getState().removePending(permission.requestId);
+  };
+  return (
+    <div className={`perm perm-${permission.riskClass}`}>
+      <div className="perm-head">
+        🔐 <b>{permission.tool}</b>
+        <span className={`risk risk-${permission.riskClass}`}>{permission.riskClass}</span>
+      </div>
+      <div className="perm-args dim">{JSON.stringify(permission.args)}</div>
+      {permission.diff !== undefined && <Diff diff={permission.diff} />}
+      <div className="perm-actions">
+        <button type="button" className="btn btn-yes" onClick={() => respond("allow")}>
+          Evet
+        </button>
+        {canAlways && (
+          <button type="button" className="btn" onClick={() => respond("allow_for_run")}>
+            Bu koşu boyunca
+          </button>
+        )}
+        {canAlways && (
+          <button type="button" className="btn" onClick={() => respond("always_allow")}>
+            Daima izin ver
+          </button>
+        )}
+        <button type="button" className="btn btn-no" onClick={() => respond("deny")}>
+          Hayır
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Diff({ diff }: { diff: string }): React.JSX.Element {
+  return (
+    <pre className="diff">
+      {diff.split("\n").map((line, i) => {
+        const added = line.startsWith("+") && !line.startsWith("+++");
+        const removed = line.startsWith("-") && !line.startsWith("---");
+        return (
+          <div key={i} className={added ? "d-add" : removed ? "d-del" : "d-ctx"}>
+            {line}
+          </div>
+        );
+      })}
+    </pre>
   );
 }
 
