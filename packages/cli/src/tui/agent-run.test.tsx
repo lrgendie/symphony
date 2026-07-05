@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { render } from "ink-testing-library";
+import type { ModelInfo } from "@symphony/shared";
 import type { DaemonClient } from "../client/daemon-client.js";
 import { AgentRun } from "./agent-run.js";
 
 const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 const RUN_ID = "11111111-1111-4111-8111-111111111111";
+
+const models: ModelInfo[] = [
+  { provider: "anthropic", id: "claude-sonnet-5", local: false },
+  { provider: "ollama", id: "qwen3:8b", local: true },
+];
 
 interface FakeClient {
   client: DaemonClient;
@@ -42,11 +48,75 @@ function fakeClient(startResolves = true): FakeClient {
   };
 }
 
-describe("AgentRun (TUI agent modu)", () => {
+type Stdin = ReturnType<typeof render>["stdin"];
+
+/** cwd ekranında varsayılanı kabul eder, model ekranında "Router seçsin"i seçer. */
+async function skipCwdAndModel(stdin: Stdin): Promise<void> {
+  await tick();
+  stdin.write("\r"); // cwd: varsayılanı kabul et
+  await tick();
+  stdin.write("\r"); // model: Router seçsin (ilk seçenek)
+  await tick();
+}
+
+describe("AgentRun — çalışma dizini ve model adımları", () => {
+  it("önce cwd, sonra model, sonra görev sorar (bu sıra)", async () => {
+    const fake = fakeClient();
+    const { lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+    );
+    await tick();
+    expect(lastFrame()).toContain("Çalışma dizini");
+  });
+
+  it("cwd ekranında Enter, verilen varsayılan cwd'yi kullanır", async () => {
+    const fake = fakeClient();
+    const { stdin } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws/varsayilan" models={models} />,
+    );
+    await skipCwdAndModel(stdin);
+    stdin.write("görev");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    expect(fake.requests[0]?.payload).toMatchObject({ cwd: "/ws/varsayilan" });
+  });
+
+  it("model ekranında ↓+Enter belirli bir modeli seçer, request'e provider/model eklenir", async () => {
+    const fake = fakeClient();
+    const { stdin } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />);
+    await tick();
+    stdin.write("\r"); // cwd varsayılan
+    await tick();
+    stdin.write("[B"); // aşağı ok: ilk gerçek model (claude-sonnet-5)
+    await tick();
+    stdin.write("\r");
+    await tick();
+    stdin.write("görev");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    expect(fake.requests[0]?.payload).toMatchObject({ provider: "anthropic", model: "claude-sonnet-5" });
+  });
+
+  it("Router seçilirse request'te provider/model alanı OLMAZ", async () => {
+    const fake = fakeClient();
+    const { stdin } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />);
+    await skipCwdAndModel(stdin);
+    stdin.write("görev");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    expect(fake.requests[0]?.payload).not.toHaveProperty("provider");
+    expect(fake.requests[0]?.payload).not.toHaveProperty("model");
+  });
+});
+
+describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
   it("görev girilip Enter'a basılınca agent.start gönderir", async () => {
     const fake = fakeClient();
-    const { stdin } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" />);
-    await tick();
+    const { stdin } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />);
+    await skipCwdAndModel(stdin);
     stdin.write("bug'ı düzelt");
     await tick();
     stdin.write("\r");
@@ -60,8 +130,10 @@ describe("AgentRun (TUI agent modu)", () => {
 
   it("agent.tool.requested → izin kutusu render eder (risk sınıfı + diff renkli)", async () => {
     const fake = fakeClient();
-    const { stdin, lastFrame } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" />);
-    await tick();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+    );
+    await skipCwdAndModel(stdin);
     stdin.write("dosya yaz");
     await tick();
     stdin.write("\r");
@@ -86,8 +158,10 @@ describe("AgentRun (TUI agent modu)", () => {
 
   it("'e' tuşu → permission.respond allow gönderir, kutu kapanır", async () => {
     const fake = fakeClient();
-    const { stdin, lastFrame } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" />);
-    await tick();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+    );
+    await skipCwdAndModel(stdin);
     stdin.write("dosya yaz");
     await tick();
     stdin.write("\r");
@@ -112,8 +186,10 @@ describe("AgentRun (TUI agent modu)", () => {
 
   it("destructive risk sınıfında 'daima' seçeneği sunulmaz", async () => {
     const fake = fakeClient();
-    const { stdin, lastFrame } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" />);
-    await tick();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+    );
+    await skipCwdAndModel(stdin);
     stdin.write("sil");
     await tick();
     stdin.write("\r");
@@ -142,8 +218,10 @@ describe("AgentRun (TUI agent modu)", () => {
 
   it("agent.run.completed → sonuç ve token/maliyet satırını gösterir", async () => {
     const fake = fakeClient();
-    const { stdin, lastFrame } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" />);
-    await tick();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+    );
+    await skipCwdAndModel(stdin);
     stdin.write("özet çıkar");
     await tick();
     stdin.write("\r");
@@ -164,8 +242,10 @@ describe("AgentRun (TUI agent modu)", () => {
 
   it("agent.run.failed → hata kodunu gösterir", async () => {
     const fake = fakeClient();
-    const { stdin, lastFrame } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" />);
-    await tick();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+    );
+    await skipCwdAndModel(stdin);
     stdin.write("imkansız görev");
     await tick();
     stdin.write("\r");
@@ -184,8 +264,10 @@ describe("AgentRun (TUI agent modu)", () => {
 
   it("agent.start reddedilirse (örn. AGENT_UNKNOWN) hata satırı gösterir", async () => {
     const fake = fakeClient(false);
-    const { stdin, lastFrame } = render(<AgentRun client={fake.client} agentId="yok-boyle" cwd="/ws" />);
-    await tick();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="yok-boyle" cwd="/ws" models={models} />,
+    );
+    await skipCwdAndModel(stdin);
     stdin.write("görev");
     await tick();
     stdin.write("\r");

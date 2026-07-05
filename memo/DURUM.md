@@ -58,9 +58,29 @@ kapısı beklemede kaldı, hiçbir şey yürütülmedi). `yes "e" | ...` deseni 
 Gerçek bir terminalde (kullanıcı gerçekten yazarken) stdin hiç EOF'a düşmediği için bu
 senaryo oluşmaz — CLI'ye dokunmaya gerek yok.
 
+## TUI agent modu düzeltmesi: cwd + model artık sessizce varsayılmıyor (2026-07-05)
+
+Kullanıcı gerçek terminalde TUI'yi denedi: ev dizininden (`C:\Users\brkn2`, Desktop'tan değil)
+başlattı, model router'a bırakıldı (qwen3:8b, ücretsiz yerel model) → agent ev dizinindeki
+`.gradle`/`.android`/`.cache` gibi onlarca alakasız geliştirme klasörünü gezip konudan koptu,
+alakasız bir "Android Gradle" cevabı üretti. İki kök neden: (1) TUI `cwd`'yi hep "neredeysen
+orası" alıyordu, sormuyordu; (2) TUI model seçtirmiyordu, sessizce router'a (küçük yerel
+modele) bırakıyordu — kullanıcı hangi modelin çalıştığını bilmiyordu.
+
+Düzeltme: `agent-run.tsx`'e görev girişinden ÖNCE iki adım eklendi — (1) çalışma dizini
+(metin girişi, varsayılan: bulunduğun dizin, değiştirilebilir), (2) model seçici (yeni
+`AgentModelPicker`, "Router seçsin (önerilen)" ilk seçenek + tüm modeller). `app.tsx` artık
+`models` prop'unu `AgentRun`'a da geçiyor. 4 yeni test (cwd varsayılanı, belirli model seçimi
+→ request'e provider/model eklenir, router seçimi → eklenmez) — toplam 147/147 yeşil.
+
+**Yine dürüst not:** Bu düzeltmeyi de gerçek terminalde bizzat deneyemedim (aynı raw-mode TTY
+sınırı). 11 agent-run testi mantığı kanıtlıyor; kullanıcının bir kez daha denemesi gerekiyor —
+bu sefer masaüstü dizinini AÇIKÇA girip (varsayılanı değiştirerek) güçlü bir model seçerek.
+
 ## Bekleyenler / kullanıcıdan gerekenler
 
 - [ ] **TUI agent modu canlı doğrulaması** (yukarıda — Faz 3'ü tamamen kapatan son adım).
+      Bu sefer: çalışma dizini adımında Desktop yolunu YAZ, model adımında Claude seç.
 - [ ] OpenAI/Google API anahtarları (gelince: `pnpm --filter @symphony/core key:set openai`).
 - [ ] Faz 4 öncesi: Rust toolchain (rustup+MSVC) kurulumu.
 - [ ] `duzenleyici` agent'ının masaüstü önerisini kullanıcı onaylarsa: gerçek taşıma işlemi

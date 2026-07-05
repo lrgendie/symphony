@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import { useEffect, useRef, useState, type JSX } from "react";
-import type { PendingPermission, Usage } from "@symphony/shared";
+import type { ModelInfo, PendingPermission, Usage } from "@symphony/shared";
 import type { DaemonClient } from "../client/daemon-client.js";
 
 interface ToolLogEntry {
@@ -19,18 +19,30 @@ interface RunOutcome {
   errorMessage?: string;
 }
 
+type ModelChoice = ModelInfo | "router";
+
 /**
- * TUI agent modu (ROADMAP Faz 3): görev girişi → agent.start → izin kutusu (tek tuş
- * e/d/h) + renkli diff + canlı araç günlüğü → sonuç/hata. `symphony agent <ad> <görev>`
- * (cli/src/commands/agent.ts) ile AYNI olaylara abone olur — yalnız sunum katmanı Ink.
+ * TUI agent modu (ROADMAP Faz 3): çalışma dizini onayı → model seçimi → görev girişi →
+ * agent.start → izin kutusu (tek tuş e/d/h) + renkli diff + canlı araç günlüğü →
+ * sonuç/hata. `symphony agent <ad> <görev>` (cli/src/commands/agent.ts) ile AYNI
+ * olaylara abone olur — yalnız sunum katmanı Ink.
+ *
+ * Çalışma dizini ve model ADIM OLARAK sorulur (varsayılan: bulunduğun dizin / router
+ * seçimi) — sessizce "neredeysen orası" almak kullanıcıyı şaşırtabiliyor: yanlış dizinde
+ * başlatılan bir koşu, agent'ın alakasız/devasa bir ağaçta (ör. ev dizini) gezinip
+ * konudan sapmasına yol açabilir (2026-07-05, gerçek kullanıcı testinde görüldü).
  */
 export function AgentRun(props: {
   client: DaemonClient;
   agentId: string;
   cwd: string;
+  models: ModelInfo[];
 }): JSX.Element {
+  const [cwd, setCwd] = useState<string | null>(null);
+  const [cwdDraft, setCwdDraft] = useState(props.cwd);
+  const [modelChoice, setModelChoice] = useState<ModelChoice | null>(null);
   const [task, setTask] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  const [taskDraft, setTaskDraft] = useState("");
   const [runId, setRunId] = useState<string | null>(null);
   const [thinking, setThinking] = useState(false);
   const [log, setLog] = useState<ToolLogEntry[]>([]);
@@ -40,7 +52,7 @@ export function AgentRun(props: {
   const runIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (task === null) return;
+    if (task === null || cwd === null) return;
     const mine = (id: string): boolean => runIdRef.current !== null && id === runIdRef.current;
 
     const offs = [
@@ -76,8 +88,12 @@ export function AgentRun(props: {
       }),
     ];
 
+    const modelFields =
+      modelChoice !== null && modelChoice !== "router"
+        ? { provider: modelChoice.provider, model: modelChoice.id }
+        : {};
     props.client
-      .request("agent.start", { agentId: props.agentId, task, cwd: props.cwd })
+      .request("agent.start", { agentId: props.agentId, task, cwd, ...modelFields })
       .then((ok) => {
         runIdRef.current = ok.runId;
         setRunId(ok.runId);
@@ -89,7 +105,7 @@ export function AgentRun(props: {
     return () => {
       for (const off of offs) off();
     };
-  }, [task]);
+  }, [task, cwd]);
 
   useInput((input, key) => {
     if (pending !== null) {
@@ -116,16 +132,41 @@ export function AgentRun(props: {
     }
   });
 
+  if (cwd === null) {
+    return (
+      <Box flexDirection="column">
+        <Text bold>{props.agentId}</Text>
+        <Text dimColor>Çalışma dizini (Enter: olduğu gibi kabul et):</Text>
+        <Box>
+          <Text color="cyan">{"> "}</Text>
+          <TextInput
+            value={cwdDraft}
+            onChange={setCwdDraft}
+            onSubmit={(value) => {
+              const trimmed = value.trim();
+              setCwd(trimmed.length > 0 ? trimmed : props.cwd);
+            }}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  if (modelChoice === null) {
+    return <AgentModelPicker models={props.models} onPick={setModelChoice} />;
+  }
+
   if (task === null) {
     return (
       <Box flexDirection="column">
         <Text bold>{props.agentId}</Text>
+        <Text dimColor>{cwd}</Text>
         <Text dimColor>Görev nedir?</Text>
         <Box>
           <Text color="cyan">{"> "}</Text>
           <TextInput
-            value={draft}
-            onChange={setDraft}
+            value={taskDraft}
+            onChange={setTaskDraft}
             onSubmit={(value) => {
               const trimmed = value.trim();
               if (trimmed.length > 0) setTask(trimmed);
@@ -139,7 +180,8 @@ export function AgentRun(props: {
   return (
     <Box flexDirection="column">
       <Text dimColor>
-        🤖 {props.agentId} · {props.cwd}
+        🤖 {props.agentId} · {cwd}
+        {modelChoice !== "router" ? ` · ${modelChoice.provider}/${modelChoice.id}` : " · router seçti"}
         {runId !== null ? ` · koşu ${runId.slice(0, 8)}` : ""} — Esc: iptal
       </Text>
       {startError !== null && <Text color="red">⚠ {startError}</Text>}
@@ -152,6 +194,49 @@ export function AgentRun(props: {
       {thinking && pending === null && outcome === null && <Text dimColor>· düşünüyor…</Text>}
       {pending !== null && <PermissionBox permission={pending} />}
       {outcome !== null && <Outcome outcome={outcome} />}
+    </Box>
+  );
+}
+
+/** Model seçici + "router seçsin" seçeneği (model-picker.tsx ile aynı ↑/↓+Enter deseni). */
+function AgentModelPicker(props: {
+  models: ModelInfo[];
+  onPick: (choice: ModelChoice) => void;
+}): JSX.Element {
+  const options: ModelChoice[] = ["router", ...props.models];
+  const [index, setIndex] = useState(0);
+
+  useInput((_input, key) => {
+    if (key.upArrow) setIndex((i) => (i > 0 ? i - 1 : options.length - 1));
+    if (key.downArrow) setIndex((i) => (i < options.length - 1 ? i + 1 : 0));
+    if (key.return) {
+      const choice = options[index];
+      if (choice !== undefined) props.onPick(choice);
+    }
+  });
+
+  return (
+    <Box flexDirection="column">
+      <Text bold>Hangi model? (↑/↓ + Enter):</Text>
+      {options.map((choice, i) => {
+        const selected = i === index;
+        const label =
+          choice === "router" ? (
+            <>
+              Router seçsin <Text dimColor>(önerilen — göreve göre otomatik seçer)</Text>
+            </>
+          ) : (
+            <>
+              {choice.provider}/{choice.id} <Text dimColor>[{choice.local ? "yerel" : "bulut"}]</Text>
+            </>
+          );
+        return (
+          <Text key={choice === "router" ? "router" : `${choice.provider}/${choice.id}`} color={selected ? "cyan" : undefined}>
+            {selected ? "❯ " : "  "}
+            {label}
+          </Text>
+        );
+      })}
     </Box>
   );
 }
