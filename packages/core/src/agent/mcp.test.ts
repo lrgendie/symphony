@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -10,9 +11,12 @@ import type { ToolContext } from "./tools.js";
 import {
   connectMcpServers,
   loadMcpServerConfigs,
+  registerMcpServer,
   wrapMcpTool,
   type McpCallToolFn,
 } from "./mcp.js";
+
+const echoFixture = fileURLToPath(new URL("./__fixtures__/echo-mcp-server.mjs", import.meta.url));
 
 /**
  * MCP istemcisi testleri (ADR-007, SPEC-AGENT §2). `wrapMcpTool` sahte `callTool`
@@ -120,6 +124,41 @@ describe("connectMcpServers", () => {
       name: "AGENT_MCP_CONNECT_FAILED",
     });
   }, 10_000);
+});
+
+describe("registerMcpServer (symphony add, gerçek stdio alt süreç)", () => {
+  it("başarılı bağlantıda kayıt defterine yazar ve HAM araç adlarını döner", async () => {
+    const file = join(base, "register-success.json");
+    const toolNames = await registerMcpServer(file, "echo-server", {
+      command: process.execPath,
+      args: [echoFixture],
+    });
+    expect(toolNames).toEqual(["echo"]);
+    expect(loadMcpServerConfigs(file)["echo-server"]).toEqual({
+      command: process.execPath,
+      args: [echoFixture],
+    });
+  }, 15_000);
+
+  it("bağlantı başarısızsa kayıt defterine hiç yazmaz", async () => {
+    const file = join(base, "register-fail.json");
+    await expect(
+      registerMcpServer(file, "bozuk", { command: "symphony-test-olmayan-komut-xyz", args: [] }),
+    ).rejects.toMatchObject({ name: "AGENT_MCP_CONNECT_FAILED" });
+    expect(existsSync(file)).toBe(false);
+  }, 15_000);
+
+  it("var olan kayıt defterine EKLER, diğer sunucuları silmez", async () => {
+    const file = join(base, "register-merge.json");
+    writeFileSync(
+      file,
+      JSON.stringify({ servers: { onceki: { command: "npx", args: ["-y", "onceki-paket"] } } }),
+      "utf8",
+    );
+    await registerMcpServer(file, "echo-server", { command: process.execPath, args: [echoFixture] });
+    const configs = loadMcpServerConfigs(file);
+    expect(Object.keys(configs).sort()).toEqual(["echo-server", "onceki"]);
+  }, 15_000);
 });
 
 describe("gerçek MCP protokolü uçtan uca (in-memory transport, alt süreç yok)", () => {

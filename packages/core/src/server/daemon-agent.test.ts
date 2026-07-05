@@ -2,11 +2,17 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import { MockLanguageModelV3 } from "ai/test";
 import { createMessage, PROTOCOL_VERSION, type Envelope, type ModelInfo } from "@symphony/shared";
 import type { ChatStreamRequest, ChatUsageResult, ProviderAdapter } from "../providers/types.js";
+import { loadMcpServerConfigs } from "../agent/mcp.js";
 import { startDaemon, type RunningDaemon } from "./daemon.js";
+
+const echoFixture = fileURLToPath(
+  new URL("../agent/__fixtures__/echo-mcp-server.mjs", import.meta.url),
+);
 
 /**
  * Uçtan uca (WS) agent akışı: agent.start → agent.tool.requested →
@@ -198,4 +204,30 @@ describe("daemon agent akışı (PROTOKOL §8 örneği)", () => {
     expect((reply.payload as { code: string }).code).toBe("AGENT_UNKNOWN_RUN");
     client.ws.close();
   });
+
+  it("mcp.addServer: gerçek sunucuya bağlanıp doğrular ve mcp-servers.json'a kaydeder", async () => {
+    const client = await connect();
+    client.ws.send(
+      JSON.stringify(
+        createMessage("mcp.addServer", {
+          name: "echo-test",
+          command: process.execPath,
+          args: [echoFixture],
+        }),
+      ),
+    );
+    const reply = await waitFor(
+      client,
+      (env) => env.type === "mcp.addServer.ok" || env.type === "error",
+    );
+    expect(reply.type).toBe("mcp.addServer.ok");
+    const payload = reply.payload as { name: string; tools: string[] };
+    expect(payload.name).toBe("echo-test");
+    expect(payload.tools).toEqual(["echo"]);
+    expect(loadMcpServerConfigs(join(home, "mcp-servers.json"))["echo-test"]).toEqual({
+      command: process.execPath,
+      args: [echoFixture],
+    });
+    client.ws.close();
+  }, 15_000);
 });

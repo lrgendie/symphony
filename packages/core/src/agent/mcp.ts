@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { jsonSchema, type JSONSchema7 } from "ai";
@@ -110,7 +110,10 @@ export function wrapMcpTool(
   };
 }
 
-async function connectOne(serverName: string, config: McpServerConfig): Promise<McpConnection> {
+export async function connectOne(
+  serverName: string,
+  config: McpServerConfig,
+): Promise<McpConnection> {
   const transport = new StdioClientTransport({
     command: config.command,
     args: config.args,
@@ -178,4 +181,27 @@ export async function connectMcpServers(
 
 export async function closeMcpConnections(connections: readonly McpConnection[]): Promise<void> {
   await Promise.allSettled(connections.map((connection) => connection.close()));
+}
+
+/**
+ * Eklenti sistemi (ROADMAP Faz 3, SPEC-AGENT §2.1, `symphony add`): sunucuya CANLI bağlanıp
+ * doğrular (yanlış paket adı/bozuk komut hemen görülür), sonra kayıt defterine yazar.
+ * Bağlantı başarısız olursa dosyaya HİÇ dokunulmaz — kayıt defteri yarım/bozuk girdi almaz.
+ */
+export async function registerMcpServer(
+  serversFile: string,
+  name: string,
+  config: McpServerConfig,
+): Promise<string[]> {
+  const connection = await connectOne(name, config);
+  // Kullanıcıya sunucunun HAM araç adları gösterilir — `mcp__<sunucu>__` öneki bir agent
+  // koşusu içindeki namespace çakışmasını önlemek için var, kayıt sonucunda anlamsız.
+  const prefix = `mcp__${name}__`;
+  const toolNames = connection.tools.map((toolSpec) => toolSpec.name.slice(prefix.length));
+  await connection.close();
+
+  const existing = loadMcpServerConfigs(serversFile);
+  const next = { ...existing, [name]: config };
+  writeFileSync(serversFile, `${JSON.stringify({ servers: next }, null, 2)}\n`, "utf8");
+  return toolNames;
 }

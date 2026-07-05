@@ -8,6 +8,7 @@ import { watchCommand } from "./commands/watch.js";
 import { historyCommand } from "./commands/history.js";
 import { agentsCommand } from "./commands/agents.js";
 import { agentRunCommand } from "./commands/agent.js";
+import { addCommand } from "./commands/add.js";
 
 const program = new Command();
 
@@ -44,6 +45,14 @@ program
   .option("--provider <sağlayıcı>", "sağlayıcı (model ile birlikte)")
   .action((ad: string, gorev: string, opts: { cwd?: string; model?: string; provider?: string }) =>
     agentRunCommand(ad, gorev, opts).catch(fail),
+  );
+
+program
+  .command("add <npm-paketi> [ekstra...]")
+  .description("MCP sunucusunu (npm paketi) canlı doğrulayıp agent aracı olarak kaydet")
+  .option("--name <ad>", "kayıt adı (varsayılan: paket adından türetilir)")
+  .action((paket: string, ekstra: string[], opts: { name?: string }) =>
+    addCommand(paket, ekstra, opts).catch(fail),
   );
 
 program

@@ -28,6 +28,7 @@ import { detectVramGb } from "../router/hardware.js";
 import { suggestModels } from "../router/router.js";
 import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent } from "../agent/definition.js";
+import { registerMcpServer } from "../agent/mcp.js";
 import { EventBus } from "./bus.js";
 import { generateDaemonToken, persistDaemonToken } from "./token.js";
 
@@ -498,6 +499,19 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
               return;
             }
             bus.sendTo(ws, "router.suggest.ok", { suggestions }, message.id);
+            return;
+          }
+          case "mcp.addServer": {
+            const payload = message.payload as RequestPayload<"mcp.addServer">;
+            try {
+              const tools = await registerMcpServer(paths.mcpServersFile, payload.name, {
+                command: payload.command,
+                args: payload.args,
+              });
+              bus.sendTo(ws, "mcp.addServer.ok", { name: payload.name, tools }, message.id);
+            } catch (error) {
+              sendError(toErrorPayload(error), message.id);
+            }
             return;
           }
           default: {

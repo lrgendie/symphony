@@ -64,7 +64,8 @@
 ### packages/cli/src — symphony komutu
 - `index.ts` — commander kayıtları; argümansız → TUI
 - `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`)
-- `commands/` — status/models/watch/history/agents/agent (her komut tek dosya)
+- `commands/` — status/models/watch/history/agents/agent/add (her komut tek dosya)
+  - `add.ts` — `symphony add <npm-paketi>`: eklenti sistemi, `mcp.addServer` isteği atar
 - `tui/` — Ink: app.tsx (akış), welcome.tsx (karşılama), model-picker, chat, logo.ts
 
 ## Değişmez hatırlatmalar (tam listesi CLAUDE.md'de)

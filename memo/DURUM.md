@@ -3,7 +3,22 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-05 (Oturum 11 — canlı doğrulama + MCP istemcisi TAMAM: 126/126 test yeşil)
+**Son güncelleme:** 2026-07-05 (Oturum 11 — canlı doğrulama + MCP istemcisi + eklenti sistemi TAMAM: 130/130 test yeşil)
+
+## Eklenti sistemi (`symphony add`) — aynı oturumda MCP'nin ardından bitti
+
+v1 kapsamı: yalnız **npm paketi** (`github-repo`/doğrudan `mcp-sunucu` kaynağı ertelendi —
+build/sandbox belirsizliği ayrı bir dilim gerektirir, ROADMAP'e not düşüldü). Yeni protokol
+isteği `mcp.addServer` (PROTOKOL.md §3/§4 güncellendi, önce belge sonra shared şeması):
+daemon sunucuya CANLI bağlanıp `tools/list` doğrular (yanlış paket adı/bozuk komut hemen
+görülür, dosyaya YAZILMAZ), başarılıysa `~/.symphony/mcp-servers.json`'a ekler (var olan
+sunucuları silmeden). CLI: `symphony add <npm-paketi> [--name ad] [-- ekstra...]`.
+4 yeni test (2 mcp.test.ts + 1 daemon-agent.test.ts + merge testi) gerçek stdio alt süreçle
+(`agent/__fixtures__/echo-mcp-server.mjs`, network'e bağımlı değil). **Canlı kanıt:**
+`symphony add @playwright/mcp` → ROADMAP'in adını verdiği ilk örnek eklenti gerçekten
+çalıştı, 23 gerçek araç bulundu (`browser_click`, `browser_navigate`, ...), kayıt defterine
+eklendi, alt süreç temiz kapandı (doğrulandı). `~/.symphony/mcp-servers.json`'da artık iki
+sunucu var: `filesystem` (önceki test) + `playwright-mcp`.
 
 ## Şu an neredeyiz?
 
@@ -27,7 +42,7 @@ kalsın istendi.
 gerekmedi (bkz. aşağıdaki "Model kararı" notu — gerekçe hâlâ geçerli: bu iş ADR-007/SPEC-AGENT'ın
 uygulaması, yeni mimari karar değil).
 
-**Faz 3 (agent motoru) ilk dikey dilim BİTTİ ve testli: 126/126 test yeşil; build+lint temiz.**
+**Faz 3 (agent motoru) ilk dikey dilim BİTTİ ve testli: 130/130 test yeşil; build+lint temiz.**
 **Canlı doğrulama da geçti (2026-07-05):** `symphony agent coder "memo/DURUM.md dosyasının ilk
 bölümünü oku ve tek cümleyle özetle" --provider ollama --model qwen3:8b` uçtan uca çalıştı —
 daemon otomatik açıldı, coder.md tanımı yüklendi, qwen3:8b `read_file` aracını doğru çağırdı,
@@ -73,13 +88,12 @@ onaysız tek bayt yazamıyor ✅ · deny koşuyu kırmıyor ✅ · jail dışın
 
 ## Sıradaki adım (buradan devam — ayrıntılı yol DEVIR.md'de)
 
-1. **Eklenti sistemi:** `symphony add <kaynak>` — GitHub'daki bir aracı veya MCP sunucusunu
-   indirip `~/.symphony/mcp-servers.json`'a kaydetme. İlk örnek: Playwright scraping MCP'si
-   (ROADMAP'te adı geçiyor). mcp.ts + mcp-servers.json altyapısı hazır, `symphony add` yalnız
-   kayıt defterine yazan bir CLI komutu olacak.
-2. **TUI agent modu:** izin kutusu + diff görünümü (`cli/src/tui/`). MCP izin istekleri de
+1. **TUI agent modu:** izin kutusu + diff görünümü (`cli/src/tui/`). MCP izin istekleri de
    `agent.tool.requested` üzerinden aynı yoldan geliyor — CLI tarafı zaten hazır (`agent.ts`),
    TUI'de eşdeğeri eksik.
+2. (İsteğe bağlı, küçük) `symphony add`'e `--remove <ad>` ya da `--list` eklenebilir — v1
+   bilinçli olarak yalnız ekleme yapıyor, kullanıcı `mcp-servers.json`'ı elle de düzenleyebilir
+   (permissions.json ile aynı felsefe).
 
 ## Bekleyenler / kullanıcıdan gerekenler
 

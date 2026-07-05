@@ -75,6 +75,15 @@ export const RouterSuggestPayloadSchema = z
   })
   .strip();
 
+/** Eklenti sistemi (ROADMAP Faz 3, SPEC-AGENT §2.1): daemon canlı bağlanıp doğrular. */
+export const McpAddServerPayloadSchema = z
+  .object({
+    name: z.string().min(1),
+    command: z.string().min(1),
+    args: z.array(z.string()).default([]),
+  })
+  .strip();
+
 export const UsageQueryPayloadSchema = z
   .object({
     from: z.number().int().nonnegative().optional(),
@@ -96,6 +105,7 @@ export const REQUEST_PAYLOAD_SCHEMAS = {
   "providers.status": ProvidersStatusPayloadSchema,
   "router.suggest": RouterSuggestPayloadSchema,
   "usage.query": UsageQueryPayloadSchema,
+  "mcp.addServer": McpAddServerPayloadSchema,
 } as const;
 
 export type RequestType = keyof typeof REQUEST_PAYLOAD_SCHEMAS;

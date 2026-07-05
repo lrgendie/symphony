@@ -59,6 +59,10 @@ export const RouterSuggestOkPayloadSchema = z
   })
   .strip();
 
+export const McpAddServerOkPayloadSchema = z
+  .object({ name: z.string().min(1), tools: z.array(z.string().min(1)) })
+  .strip();
+
 export const UsageQueryOkPayloadSchema = z
   .object({
     rows: z.array(
@@ -178,6 +182,7 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   "providers.status.ok": ProvidersStatusOkPayloadSchema,
   "router.suggest.ok": RouterSuggestOkPayloadSchema,
   "usage.query.ok": UsageQueryOkPayloadSchema,
+  "mcp.addServer.ok": McpAddServerOkPayloadSchema,
   "chat.delta": ChatDeltaPayloadSchema,
   "chat.completed": ChatCompletedPayloadSchema,
   "agent.run.started": AgentRunStartedPayloadSchema,

@@ -63,6 +63,7 @@ Tüm WS mesajları tek zarf tipindedir:
 | `providers.status` | `{}` | Sağlayıcı sağlık durumları |
 | `router.suggest` | `{ task, constraints?: { maxCostUsd?, preferLocal? } }` | "Bu iş için hangi model?" önerisi |
 | `usage.query` | `{ from?, to?, groupBy? }` | Token/maliyet raporu |
+| `mcp.addServer` | `{ name, command, args? }` | Eklenti sistemi (ROADMAP Faz 3, SPEC-AGENT §2.1): MCP sunucusuna canlı bağlanıp doğrular, `~/.symphony/mcp-servers.json`'a kaydeder. Cevap: `mcp.addServer.ok { name, tools: string[] }`; bağlantı başarısızsa `AGENT_MCP_CONNECT_FAILED` ile `error` — dosyaya YAZILMAZ |
 
 **Sohbet oturumu ve geçmiş:** `chat.start.sessionId` verilmezse daemon her istek için yeni
 oturum üretir. Çok turlu bir sohbeti TEK oturum olarak kaydettirmek isteyen istemci, ürettiği
