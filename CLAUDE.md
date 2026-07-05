@@ -29,6 +29,7 @@ ve masaüstü (Tauri) aynı daemon'a bağlı iki eş zamanlı arayüzdür.
 | `docs/SPEC-AGENT.md` | Agent motoru + izin sistemi şartnamesi | Faz 3+ işlerinde **mutlaka** |
 | `docs/kararlar/KARARLAR.md` | Mimari kararlar ve gerekçeleri (ADR) | Teknoloji değiştirmek istediğinde |
 | `docs/GEREKSINIMLER.md` | Kütüphane envanteri, dizin planı | Bağımlılık eklerken |
+| `docs/TASARIM.md` | Görsel dil, palet, "yaşayan arayüz" vizyonu | Arayüz (ui/desktop) görsel işinde **mutlaka** |
 
 ## Dokunulmaz kurallar
 

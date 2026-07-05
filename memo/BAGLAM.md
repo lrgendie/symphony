@@ -15,6 +15,7 @@
 | Veri katmanı / yeni tablo | `core/src/db/store.ts` (göçler dosyanın başında) |
 | CLI komutu ekleme | `cli/src/index.ts` + `cli/src/commands/` içinde benzer bir komut |
 | TUI değişikliği | `cli/src/tui/app.tsx` + hedef bileşen |
+| Arayüz GÖRSEL/tasarım işi (renk, animasyon, düzen) | `docs/TASARIM.md` (görsel anayasa) — ÖNCE oku |
 | Dashboard (masaüstü) değişikliği | `ui/src/App.tsx` + `ui/src/store.ts` (WS→durum) + `ui/src/daemon/client.ts` |
 | Tauri kabuk / token enjeksiyonu | `desktop/src-tauri/src/lib.rs` + `desktop/src-tauri/tauri.conf.json` |
 | Daemon davranışı | `core/src/server/daemon.ts` (tek dosya, ~600 satır) |

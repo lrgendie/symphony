@@ -151,7 +151,7 @@ symphony/
   `client:"desktop"` bağlantısını kabul edip snapshot döndü), store birim testleri ✅ (6).
   **Pencere görsel doğrulaması KULLANICI tarafından yapıldı ✅ 2026-07-05** — `desktop:dev`
   ile pencere açıldı, canlı akış çalıştı.
-- [ ] **"Living Interface" sahnesi:** Three.js parçacık küresi merkezde — boşta yavaşça nefes alır, agent düşünürken dalgalanır, araç çalıştırırken hızlanır, hatada renk değiştirir. Her agent'ın kendi küçük "yaşam formu" olur
+- [ ] **"Living Interface" sahnesi:** Three.js parçacık küresi merkezde — boşta yavaşça nefes alır, agent düşünürken dalgalanır, araç çalıştırırken hızlanır, hatada renk değiştirir. Her agent'ın kendi küçük "yaşam formu" olur. **Görsel yön: `docs/TASARIM.md` (kullanıcının referans görselleri `Tasarım/`).** Tesseract'ın canlı mimari haritasına dönüşmesi de burada.
 - [~] **Şef Paneli:** aktif agent'lar (kim çalışıyor, hangi araç, hangi dosya), canlı log akışı —
   dilim 1: aktif koşular + canlı olay akışı; **dilim 2 (2026-07-05): izin istekleri masaüstünden
   CEVAPLANABİLİYOR** (kart + renkli diff + Evet/Bu koşu/Daima/Hayır → `permission.respond`,
@@ -192,6 +192,11 @@ symphony/
       (bu faza sıra gelince) yapılacak; bu not sırf kapsam kararını kaybetmemek için düşüldü.
 - [ ] **Kendini geliştirme döngüsü:** haftalık kullanım özeti üzerinden sistemin kendi yönlendirme kurallarını ve agent tanımlarını güncelleme önerisi (onayınla uygulanır)
 - [ ] Geri bildirim sinyalleri: cevabı beğenme/düzeltme, agent çıktısını geri alma gibi olaylar skorlara işlenir
+- [ ] **Bağlam Haritası (yaşayan bilgi grafiği):** kullanıcının konuşmaları/projeleri/geliştirmeleri
+      zamanla *compound* eden, keşfedilebilir bir nöral graf olarak görünür (Obsidian graph benzeri,
+      zamansal). Verisi çoğunlukla MEVCUT SQLite'ta (sessions/messages/agent_runs). Görsel yön:
+      `docs/TASARIM.md §3` (kullanıcının referans görseli `Tasarım/`). Faz 4 dashboard + bu hafıza
+      birleşince "seni tanıyan yaşayan arayüz" tamamlanır. Ayrı büyük dilim (protokol eki gerekebilir).
 - **Çıktı:** "Şu PDF'leri özetleyecek bir şey lazım" dediğinde donanımına, geçmişine ve bütçene göre doğru modeli öneren; seni tanıdıkça isabeti artan sistem.
 - **Kabul testi:** Router v2 önerileri gerçek kullanım skorlarına dayanıyor ve gerekçesini gösteriyor; kullanıcı hafızasına yazılan bir tercih yeni oturumda agent bağlamında görülüyor; haftalık rapor üretiliyor; tüm öğrenme verisi lokalde kalıyor (dışarı istek testle doğrulanmış şekilde yok).
 
