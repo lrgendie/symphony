@@ -41,7 +41,7 @@ import {
  * motora delege eder.
  */
 
-type PermissionDecision = "allow" | "deny" | "always_allow";
+type PermissionDecision = "allow" | "deny" | "always_allow" | "allow_for_run";
 type ClientKind = "cli" | "desktop" | "web";
 
 export interface AgentEngineDeps {
@@ -74,6 +74,8 @@ interface ActiveRunRecord {
   abort: AbortController;
   pending: PendingPermissionInternal | null;
   startedAt: number;
+  /** `allow_for_run` ile onaylanan araç adları — yalnız bu koşu için, diske YAZILMAZ (SPEC §5). */
+  trustedForRun: Set<string>;
 }
 
 /** AI SDK v7 araç çağrısının motorun kullandığı kesiti (invalid = şemadan geçmedi). */
@@ -173,6 +175,7 @@ export class AgentEngine {
       abort: new AbortController(),
       pending: null,
       startedAt: Date.now(),
+      trustedForRun: new Set(),
     };
     this.runs.set(run.runId, run);
     this.deps.store.createAgentRun({
@@ -400,7 +403,13 @@ export class AgentEngine {
       return this.toolFailed(run, spec.name, summary, error, 0);
     }
 
-    const ruleDecision = permissions.decide(spec.name, target, riskClass);
+    const fileDecision = permissions.decide(spec.name, target, riskClass);
+    // Koşu-içi güven (allow_for_run, SPEC §5): permissions.json'dan BAĞIMSIZ, yalnız
+    // bellekte; deny/allow dosya kuralları hep önceliklidir, destructive çağrıda geçersizdir.
+    const ruleDecision =
+      fileDecision === "ask" && riskClass !== "destructive" && run.trustedForRun.has(spec.name)
+        ? "allow"
+        : fileDecision;
     if (ruleDecision === "deny") {
       return this.toolFailed(
         run,
@@ -439,6 +448,17 @@ export class AgentEngine {
               );
             } else {
               permissions.addAllowRule(spec.name, target);
+            }
+          }
+          if (decision === "allow_for_run") {
+            if (riskClass === "destructive") {
+              // SPEC §5: destructive'de allow_for_run de sunulmaz; gelirse tek seferlik izin sayılır.
+              this.deps.log.warn(
+                { runId: run.runId, tool: spec.name },
+                "destructive araçta allow_for_run uygulanmadı (tek seferlik izin)",
+              );
+            } else {
+              run.trustedForRun.add(spec.name);
             }
           }
           // Bayat diff denetimi (SPEC §6): onay anında disk değiştiyse yeni diff'le yeniden sor.

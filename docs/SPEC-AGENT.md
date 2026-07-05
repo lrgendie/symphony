@@ -105,14 +105,24 @@ Kural dosyası `~/.symphony/permissions.json`:
 }
 ```
 
-Karar sırası: **deny kuralı > allow kuralı > risk sınıfı varsayılanı**.
+Karar sırası: **deny kuralı > allow kuralı > koşu-içi güven (bkz. altta) > risk sınıfı varsayılanı**.
 
 - Kurala uymayan `mutating/destructive` çağrı → `agent.tool.requested` olayı yayınlanır,
   koşu `awaiting_permission`'a geçer, **süresiz beklenir** (insan kararı zaman aşımına uğramaz).
 - `permission.respond`:
   - `allow` → yalnız bu çağrı çalışır.
-  - `always_allow` → çalışır + eşleşen kural `permissions.json`'a yazılır
+  - `always_allow` → çalışır + eşleşen kural `permissions.json`'a **kalıcı** yazılır
     (`destructive` sınıfında bu seçenek sunulmaz).
+  - `allow_for_run` (2026-07-05 eklendi) → çalışır + o ARACIN adı bu koşunun bellek-içi
+    güven kümesine eklenir: aynı koşuda aynı araca yapılan SONRAKİ çağrılar (riski
+    `destructive` OLMADIĞI sürece) tekrar sormadan otomatik izinli sayılır. Diske
+    YAZILMAZ, koşu bitince (completed/failed/cancelled fark etmez) kaybolur — bir
+    sonraki koşu yine sıfırdan sorar. Amaç: tek bir denetlenen görev içinde (ör. "masaüstümü
+    düzenle" → birden çok farklı `Move-Item` çağrısı) her çağrıda yeniden onay istememek,
+    `always_allow`'un KALICI genişletmesinden farklı olarak. `destructive` sınıfında
+    bu seçenek de sunulmaz — araç adı koşu-içi güvenilir olsa bile o anki çağrı
+    `destructive` ise yine sorulur (ör. aynı koşuda önce zararsız bir `run_command`
+    `allow_for_run` ile onaylanmış olsa bile sonraki bir `rm -rf` çağrısı yine sorar).
   - `deny` → araç çalışmaz; modele "kullanıcı reddetti" tool-hatası döner (model rota değiştirebilir).
 - Aynı anda birden çok istemci bağlıysa ilk gelen cevap geçerlidir; diğerlerine
   `permission.resolved` bilgisi düşer (çifte onay çakışması olmaz).

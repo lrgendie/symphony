@@ -49,18 +49,20 @@ export async function agentRunCommand(
         );
         console.log(chalk.dim(JSON.stringify(payload.args, null, 2)));
         if (payload.diff !== undefined) console.log(renderDiff(payload.diff));
-        // destructive'de "daima" SUNULMAZ (SPEC-AGENT §5).
+        // destructive'de "bu koşu boyunca"/"daima" SUNULMAZ (SPEC-AGENT §5).
         const canAlways = payload.riskClass !== "destructive";
         const prompt = canAlways
-          ? "[e]vet / [d]aima izin ver / [h]ayır > "
+          ? "[e]vet / [b]u koşu boyunca / [d]aima izin ver / [h]ayır > "
           : "[e]vet / [h]ayır > ";
         const answer = (await readline.question(prompt)).trim().toLowerCase();
         const decision =
           answer === "e" || answer === "evet"
             ? "allow"
-            : canAlways && (answer === "d" || answer === "daima")
-              ? "always_allow"
-              : "deny";
+            : canAlways && (answer === "b" || answer === "bu koşu")
+              ? "allow_for_run"
+              : canAlways && (answer === "d" || answer === "daima")
+                ? "always_allow"
+                : "deny";
         await client.request("permission.respond", { requestId: payload.requestId, decision });
       })().catch((error: unknown) => {
         // Başka istemci bizden önce cevapladıysa PERMISSION_UNKNOWN_REQUEST normaldir.

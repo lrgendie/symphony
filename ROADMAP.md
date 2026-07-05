@@ -168,7 +168,14 @@ symphony/
 ### Faz 6 — Zeka Katmanı: Seni Tanıyan Symphony (15–17. hafta)
 - [ ] **Model yönlendirici v2 (öğrenen):** Faz 1'den beri biriken kayıtlardan (hangi model hangi görevde başarılı/hızlı/ucuz oldu) skor tablosu; "bu işi kime verelim?" sorusuna veriyle cevap
 - [ ] Soru sorulduğunda otomatik öneri: "Bu görev için yerel Qwen yeterli (ücretsiz, ~3sn) — ama en yüksek kalite istersen Claude öneririm (~$0.04)" gibi şeffaf gerekçeli seçenek sunma
-- [ ] **Kullanıcı hafızası:** tercihlerini, kod stilini, sık kullandığın projeleri ve düzeltmelerini hatırlayan kalıcı profil (`~/.symphony/memory/`) — her agent bu bağlamla başlar
+- [ ] **Kullanıcı hafızası:** tercihlerini, kod stilini, sık kullandığın projeleri ve düzeltmelerini hatırlayan kalıcı profil (`~/.symphony/memory/`) — her agent bu bağlamla başlar.
+      **Kapsam kararı (2026-07-05):** `~/.symphony/memory/profil.md` yalnız KULLANICI/asistan
+      (Claude Code gibi bir yazma aracı üzerinden) tarafından yazılır; **agent'lar kendi
+      başlarına bu dosyaya YAZAMAZ** — yalnız okur, sistem promptuna eklenir. Gerekçe: bir
+      agent'ın kendi güvenini/bağlamını kendi genişletmesi riskli (yanlış/yanıltıcı bir
+      "gerçek" yazarsa sonraki TÜM agent'ları etkiler); bu zaten Faz 6'nın kendi notuyla
+      uyumlu ("kendi güncelleme onayınla uygulanır"). Şimdilik YAPILMADI — vakti gelince
+      (bu faza sıra gelince) yapılacak; bu not sırf kapsam kararını kaybetmemek için düşüldü.
 - [ ] **Kendini geliştirme döngüsü:** haftalık kullanım özeti üzerinden sistemin kendi yönlendirme kurallarını ve agent tanımlarını güncelleme önerisi (onayınla uygulanır)
 - [ ] Geri bildirim sinyalleri: cevabı beğenme/düzeltme, agent çıktısını geri alma gibi olaylar skorlara işlenir
 - **Çıktı:** "Şu PDF'leri özetleyecek bir şey lazım" dediğinde donanımına, geçmişine ve bütçene göre doğru modeli öneren; seni tanıdıkça isabeti artan sistem.

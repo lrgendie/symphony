@@ -153,7 +153,36 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
     expect(frame).toContain("izin isteği: write_file");
     expect(frame).toContain("mutating");
     expect(frame).toContain("+yeni satır");
+    expect(frame).toContain("[b]u koşu boyunca");
     expect(frame).toContain("[d]aima izin ver");
+  });
+
+  it("'b' tuşu → permission.respond allow_for_run gönderir, kutu kapanır", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+    );
+    await skipCwdAndModel(stdin);
+    stdin.write("dosya yaz");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    fake.emit("agent.tool.requested", {
+      runId: RUN_ID,
+      requestId: "req-b",
+      tool: "write_file",
+      args: {},
+      riskClass: "mutating",
+    });
+    await tick();
+
+    stdin.write("b");
+    await tick();
+
+    const respond = fake.requests.find((r) => r.type === "permission.respond");
+    expect(respond?.payload).toEqual({ requestId: "req-b", decision: "allow_for_run" });
+    expect(lastFrame()).not.toContain("izin isteği");
   });
 
   it("'e' tuşu → permission.respond allow gönderir, kutu kapanır", async () => {
@@ -184,7 +213,7 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
     expect(lastFrame()).not.toContain("izin isteği");
   });
 
-  it("destructive risk sınıfında 'daima' seçeneği sunulmaz", async () => {
+  it("destructive risk sınıfında 'daima'/'bu koşu boyunca' seçenekleri sunulmaz", async () => {
     const fake = fakeClient();
     const { stdin, lastFrame } = render(
       <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
@@ -205,8 +234,11 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
     await tick();
 
     expect(lastFrame()).not.toContain("daima izin ver");
+    expect(lastFrame()).not.toContain("bu koşu boyunca");
 
     stdin.write("d"); // her ihtimale karşı: destructive'de 'd' hiçbir şey yapmamalı
+    await tick();
+    stdin.write("b"); // ve 'b' de hiçbir şey yapmamalı
     await tick();
     expect(fake.requests.some((r) => r.type === "permission.respond")).toBe(false);
 

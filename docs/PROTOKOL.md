@@ -57,7 +57,7 @@ Tüm WS mesajları tek zarf tipindedir:
 | `chat.cancel` | `{ sessionId }` | Akışı durdur |
 | `agent.start` | `{ agentId, task, cwd, model?, provider? }` | Agent görevi başlat (agentId = `~/.symphony/agents/` tanımı) |
 | `agent.cancel` | `{ runId }` | Koşan agent'ı iptal et |
-| `permission.respond` | `{ requestId, decision: "allow"\|"deny"\|"always_allow" }` | Bekleyen izin isteğine cevap |
+| `permission.respond` | `{ requestId, decision: "allow"\|"deny"\|"always_allow"\|"allow_for_run" }` | Bekleyen izin isteğine cevap — `allow_for_run`: bu koşu boyunca aynı araç için tekrar sormaz, diske YAZILMAZ (SPEC-AGENT §5) |
 | `models.list` | `{}` | Tüm sağlayıcıların kullanılabilir modelleri |
 | `agents.list` | `{}` | Kayıtlı agent tanımları (`~/.symphony/agents/*.md`). Cevap: `agents.list.ok { agents: AgentSummary[] }` |
 | `providers.status` | `{}` | Sağlayıcı sağlık durumları |

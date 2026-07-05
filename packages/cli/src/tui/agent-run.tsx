@@ -114,11 +114,13 @@ export function AgentRun(props: {
       const decision =
         answer === "e"
           ? "allow"
-          : canAlways && answer === "d"
-            ? "always_allow"
-            : answer === "h"
-              ? "deny"
-              : null;
+          : canAlways && answer === "b"
+            ? "allow_for_run"
+            : canAlways && answer === "d"
+              ? "always_allow"
+              : answer === "h"
+                ? "deny"
+                : null;
       if (decision === null) return;
       void props.client.request("permission.respond", {
         requestId: pending.requestId,
@@ -251,7 +253,11 @@ function PermissionBox(props: { permission: PendingPermission }): JSX.Element {
       </Text>
       <Text dimColor>{JSON.stringify(props.permission.args)}</Text>
       {props.permission.diff !== undefined && <DiffView diff={props.permission.diff} />}
-      <Text>{canAlways ? "[e]vet   [d]aima izin ver   [h]ayır" : "[e]vet   [h]ayır"}</Text>
+      <Text>
+        {canAlways
+          ? "[e]vet   [b]u koşu boyunca   [d]aima izin ver   [h]ayır"
+          : "[e]vet   [h]ayır"}
+      </Text>
     </Box>
   );
 }

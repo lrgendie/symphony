@@ -130,22 +130,25 @@ class CaptureBus extends EventBus {
 
 const openStores: DataStore[] = [];
 
-function makeEngine(script: GenerateResult[]): { engine: AgentEngine; bus: CaptureBus; store: DataStore } {
+function makeEngine(
+  script: GenerateResult[],
+): { engine: AgentEngine; bus: CaptureBus; store: DataStore; permissionsFile: string } {
   const bus = new CaptureBus();
   const store = new DataStore(join(home, "data", `test-${Date.now()}-${Math.random()}.db`));
   openStores.push(store);
   const adapter = new FakeAdapter(script);
+  const permissionsFile = join(home, `permissions-${Date.now()}-${Math.random()}.json`);
   const engine = new AgentEngine({
     providers: new Map([[adapter.name, adapter]]),
     bus,
     store,
     log: pino({ level: "silent" }),
     agentsDir: join(home, "agents"),
-    permissionsFile: join(home, `permissions-${Date.now()}-${Math.random()}.json`),
+    permissionsFile,
     mcpServersFile: join(home, `mcp-servers-${Date.now()}-${Math.random()}.json`),
     pickModel: () => Promise.resolve(null),
   });
-  return { engine, bus, store };
+  return { engine, bus, store, permissionsFile };
 }
 
 const START = { agentId: "testci", cwd: "", task: "test görevi" };
@@ -225,6 +228,56 @@ describe("AgentEngine (SPEC-AGENT §4-§6)", () => {
     expect(readFileSync(join(workspace, "izinli.txt"), "utf8")).toBe("ikinci");
     const requested = bus.emitted.filter((e) => e.type === "agent.tool.requested");
     expect(requested).toHaveLength(1); // ikinci yazma kuraldan otomatik geçti
+  });
+
+  it("allow_for_run: FARKLI hedeflerle aynı araca yapılan sonraki çağrılar bu koşuda sormaz, kalıcı kural YAZILMAZ", async () => {
+    const { engine, bus, permissionsFile } = makeEngine([
+      turn([toolCall("write_file", { path: "run-guven-1.txt", content: "birinci" })]),
+      turn([toolCall("write_file", { path: "run-guven-2.txt", content: "ikinci" })]), // farklı hedef
+      turn([text("bitti")]),
+    ]);
+    await engine.start(START);
+
+    const request = await bus.waitFor("agent.tool.requested");
+    engine.respond({ requestId: request.requestId, decision: "allow_for_run" }, "cli");
+    await bus.waitFor("agent.run.completed");
+
+    expect(readFileSync(join(workspace, "run-guven-1.txt"), "utf8")).toBe("birinci");
+    expect(readFileSync(join(workspace, "run-guven-2.txt"), "utf8")).toBe("ikinci");
+    const requested = bus.emitted.filter((e) => e.type === "agent.tool.requested");
+    expect(requested).toHaveLength(1); // farklı dosya olmasına rağmen ikinci çağrı sormadı
+    expect(existsSync(permissionsFile)).toBe(false); // kalıcı kural YAZILMADI (SPEC §5)
+  });
+
+  it("allow_for_run: destructive çağrı için sunulmaz/uygulanmaz — aynı araç bile olsa yine sorar", async () => {
+    const { engine, bus } = makeEngine([
+      turn([toolCall("run_command", { command: "echo merhaba" })]), // mutating
+      turn([toolCall("run_command", { command: "rm -rf x" })]), // destructive
+      turn([text("bitti")]),
+    ]);
+    await engine.start(START);
+
+    const first = await bus.waitFor("agent.tool.requested");
+    expect(first.riskClass).toBe("mutating");
+    engine.respond({ requestId: first.requestId, decision: "allow_for_run" }, "cli");
+
+    // İkinci run_command destructive: allow_for_run'a rağmen yine SORMALI (ikinci
+    // agent.tool.requested belirene kadar bekle — CaptureBus.waitFor yalnız İLKİ verir).
+    let second: (typeof bus.emitted)[number] | undefined;
+    for (let i = 0; i < 40; i++) {
+      const events = bus.emitted.filter((e) => e.type === "agent.tool.requested");
+      if (events.length >= 2) {
+        second = events[1];
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (second === undefined) throw new Error("ikinci izin isteği zamanında gelmedi");
+    const secondPayload = second.payload as { requestId: string; riskClass: string };
+    expect(secondPayload.riskClass).toBe("destructive");
+
+    engine.respond({ requestId: secondPayload.requestId, decision: "deny" }, "cli");
+    await bus.waitFor("agent.run.completed");
   });
 
   it("KABUL: workspace dışına çıkamaz (izin bile istenmez, hata modele döner)", async () => {

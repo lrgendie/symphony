@@ -145,7 +145,7 @@ export const AgentRunFailedPayloadSchema = z
 export const PermissionResolvedPayloadSchema = z
   .object({
     requestId: z.string().uuid(),
-    decision: z.enum(["allow", "deny", "always_allow"]),
+    decision: z.enum(["allow", "deny", "always_allow", "allow_for_run"]),
     resolvedBy: z.enum(["cli", "desktop", "web"]).optional(),
   })
   .strip();

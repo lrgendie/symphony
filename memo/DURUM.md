@@ -3,101 +3,94 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-05 (Oturum 11 — Faz 3 kapandı: 142/142 test yeşil)
+**Son güncelleme:** 2026-07-05 (Oturum 11 — Faz 3 kapandı + gerçek kullanıcı testiyle 2 hata
+bulunup düzeltildi + izin sistemine 3. kademe eklendi: 150/150 test yeşil)
 
 ## 🎉 Faz 3 kapandı — kullanıcının tek küçük adımı hariç
 
-ROADMAP'teki Faz 3 maddelerinin HEPSİ işaretli: araç seti, agent döngüsü, izin sistemi,
-diff önizleme, **MCP istemcisi** (ADR-007), **eklenti sistemi** (`symphony add`), **TUI agent
-modu**. Üçü de bu oturumda bitti ve testli (142/142); MCP + eklenti sistemi ayrıca gerçek
-dış sunucularla (`@modelcontextprotocol/server-filesystem`, `@playwright/mcp`) canlı kanıtlandı.
-Ayrıntı: `memo/oturumlar/2026-07-05.md`.
+ROADMAP'teki Faz 3 maddelerinin HEPSİ işaretli: araç seti, agent döngüsü, izin sistemi, diff
+önizleme (2026-07-04) → MCP istemcisi (ADR-007), eklenti sistemi (`symphony add`), TUI agent
+modu (2026-07-05, bu oturum). MCP + eklenti sistemi gerçek dış sunucularla
+(`@modelcontextprotocol/server-filesystem`, `@playwright/mcp`) canlı kanıtlandı. Tam teknik
+ayrıntı: `memo/oturumlar/2026-07-05.md`.
 
-**Tek eksik — kullanıcıdan isteniyor:** TUI agent modunun gerçek terminalde tek seferlik
-insan doğrulaması. Ink'in klavye yakalaması (`useInput`) raw-mode TTY ister; bu oturumun
-araçları (Bash + denenen winpty) gerçek konsol sağlayamadı — yapısal bir sınır, Faz 2'nin
-sohbet TUI'sinde de aynı adım kullanıcı tarafından yapılmıştı. **Yapılacak:** `symphony` yaz →
-"Agent" seç → `mcp-tester` agent'ını + "memo klasöründeki dosyaları listele" gibi bir görev
-seç → izin kutusunun çıkıp `e`/`h` tuşuna Enter'sız anında tepki verdiğini gözle.
+## Gerçek kullanıcı testinden çıkan 2 bulgu (bu oturumda düzeltildi)
 
-## Sıradaki adım: Faz 4 (masaüstü/Tauri) — büyük yeni faz, önce kullanıcıyla hizalanmalı
+Kullanıcının asıl hedefi ajanların GERÇEK dosya sistemini yönetmesi (masaüstü düzenleme,
+klasör taşıma) — bu zaten mümkündü (`--cwd`/jail neresi verilirse orayı sınırlar), sadece iki
+gerçek sorun çıkardı:
 
-Faz 4 önceki fazlardan farklı: Tauri 2 + React + Three.js ile sıfırdan bir masaüstü kabuğu,
-"Living Interface" parçacık küresi gibi tasarım ağırlıklı, ADR'siz yeni yüzeyler içeriyor
-(ROADMAP §Faz 4). Faz 3'ün aksine "zaten kararlaştırılmış spec'i uygula" değil — bu genuinely
-tasarım işi. **Model kararı burada değişir:** Faz 4'e girerken (özellikle Three.js sahne
-tasarımı, Tauri↔daemon WS entegrasyon mimarisi gibi ADR'siz kararlarda) Opus'a geçiş
-mantıklı olur; mekanik uygulama parçaları (örn. Tauri iskelet kurulumu, mevcut protokolü
-dashboard'a bağlama) yine mevcut modelle sürebilir.
-Başlamadan önce kullanıcıyla netleşecekler: Rust toolchain kurulu mu (GEREKSINIMLER.md'de
-"Faz 4'te kurulacak" işaretli), Windows'ta Tauri derlemesi denenmiş mi.
+1. **`Format-Table` yanlış pozitifi:** `isDestructiveCommand`'daki `\b(format|mkfs)\b` deseni,
+   PowerShell'in zararsız `Format-Table`/`Format-List` gibi listeleme cmdlet'lerini disk
+   biçimlendirmeyle karıştırıp `destructive` sınıflıyordu. Düzeltme: `(?!-)` negatif ileri
+   bakış eklendi (`tools.ts`); regresyon testi var.
+2. **TUI cwd/model'i sessizce varsayıyordu:** kullanıcı `symphony`'yi ev dizininden başlatınca
+   (Desktop'tan değil) agent `.gradle`/`.android`/`.cache` gibi onlarca alakasız klasörde
+   kayboldu; model de görünmeden ücretsiz yerel qwen3:8b'ye düşüyordu. Düzeltme: `agent-run.tsx`
+   artık görev girişinden önce çalışma dizini + model soruyor (`app.tsx`, `AgentModelPicker`).
 
-## Yeni: `duzenleyici` agent'ı + gerçek dünya bulgusu (2026-07-05, Faz 3 sonrası)
+Bu süreçte kullanıcının asıl hedefine uygun yeni bir agent de eklendi:
+**`~/.symphony/agents/duzenleyici.md`** (dosya/klasör organizasyonu; write_file/edit YOK,
+yalnız read_file/glob/grep/run_command — dosya içeriğini değil düzenini değiştiriyor).
+Gerçek masaüstünde (Claude Sonnet 5 ile) denendi, 10 klasör + 11 dosyayı inceleyip tutarlı
+bir gruplama önerisi üretti, hiçbir şeyi taşımadan önce onay istedi.
 
-Kullanıcının asıl hedefi ajanların GERÇEK dosya sistemini (masaüstü, klasör taşıma) yönetmesi —
-bu zaten mümkündü (`--cwd` jail'i neresi verilirse orayı sınırlar, proje klasörüne özel bir
-kısıtlama yok), yalnız kullanıcı bunu bilmiyordu. Çözüm: `~/.symphony/agents/duzenleyici.md`
-eklendi (tools: read_file/glob/grep/run_command — write_file/edit yok, dosya İÇERİĞİ değil
-düzenini değiştiriyor; sistem promptu: önce incele, riskli işlemden önce özetle, silme
-komutu çalıştırma).
+## Yeni: izin sisteminde 3. kademe — `allow_for_run` (2026-07-05)
 
-Gerçek masaüstünde (`--cwd "C:\Users\...\Desktop"`, Claude Sonnet 5) canlı denendi — ve bir
-**gerçek hata bulundu:** `Get-ChildItem | Format-Table` gibi zararsız, salt-okunur PowerShell
-komutları `isDestructiveCommand`'daki `\b(format|mkfs)\b` deseni yüzünden YANLIŞ POZİTİF
-olarak `destructive` sınıflanıyordu ("Format-Table" içindeki "Format" kelimesini disk
-biçimlendirmeyle karıştırıyordu). Düzeltme: `\b(format|mkfs)\b(?!-)` (PowerShell'in tire ile
-devam eden Format-* cmdlet'lerini hariç tutar, gerçek `format C:`/`mkfs.ext4` hâlâ yakalanır).
-Regresyon testi eklendi (`tools.test.ts`). 143/143 test yeşil. Düzeltmeden sonra agent gerçek
-masaüstünü inceleyip (10 klasör, 11 dosya) tutarlı bir gruplama önerisi üretti, hiçbir şeyi
-taşımadan önce onay istedi — SPEC §4 "önce özetle" kuralına birebir uydu.
+Kullanıcının gözlemi: tekrarlayan görevlerde (ör. birden çok `Move-Item`) her farklı dosya
+için ayrı ayrı onay istemek yorucu; `always_allow` da işe yaramıyor çünkü tam komut metnini
+(dosya adı dahil) kalıcı kural olarak yazıyor, farklı dosyaya genellemiyor.
 
-**Ayrı gözlem (düzeltilmedi, bilgi amaçlı):** `symphony agent` komutunu ben (Claude Code)
-piped/sabit stdin ile (`printf "e\n" | ...`) test ederken readline zamanlaması yüzünden
-`ERR_USE_AFTER_CLOSE` ile izin cevabı gönderilemedi — ama TOOL YİNE DE ÇALIŞMADI (izin
-kapısı beklemede kaldı, hiçbir şey yürütülmedi). `yes "e" | ...` deseni sorunsuz çalıştı.
-Gerçek bir terminalde (kullanıcı gerçekten yazarken) stdin hiç EOF'a düşmediği için bu
-senaryo oluşmaz — CLI'ye dokunmaya gerek yok.
+Eklenen: `permission.respond`'a **`allow_for_run`** — bu çağrıyı çalıştırır + o ARACIN adını
+**yalnız bu koşu için** (bellek-içi, diske YAZILMAZ) güvenilir sayar; aynı koşuda aynı araca
+yapılan sonraki çağrılar (riski `destructive` OLMADIĞI sürece) tekrar sormaz. Koşu bitince
+kaybolur, sonraki koşu sıfırdan sorar. `destructive` risk sınıfında (`always_allow` gibi) hiç
+sunulmaz/uygulanmaz — aynı araç önceden `allow_for_run` almış olsa bile.
+Protokol: `docs/PROTOKOL.md` + `docs/SPEC-AGENT.md` §5 önce güncellendi, sonra shared şeması
+(`requests.ts`/`events.ts`), sonra `engine.ts` (`ActiveRunRecord.trustedForRun: Set<string>`),
+sonra CLI (`agent.ts`, tuş: `b`) + TUI (`agent-run.tsx`). Testler: `engine.test.ts` (farklı
+hedeflerle aynı araç sormuyor + kalıcı kural yazılmıyor + destructive yine soruyor),
+`agent-run.test.tsx` ('b' tuşu). 150/150 test yeşil.
 
-## TUI agent modu düzeltmesi: cwd + model artık sessizce varsayılmıyor (2026-07-05)
+## Not düşüldü, henüz YAPILMADI: kullanıcı hafızası kapsam kararı (Faz 6)
 
-Kullanıcı gerçek terminalde TUI'yi denedi: ev dizininden (`C:\Users\brkn2`, Desktop'tan değil)
-başlattı, model router'a bırakıldı (qwen3:8b, ücretsiz yerel model) → agent ev dizinindeki
-`.gradle`/`.android`/`.cache` gibi onlarca alakasız geliştirme klasörünü gezip konudan koptu,
-alakasız bir "Android Gradle" cevabı üretti. İki kök neden: (1) TUI `cwd`'yi hep "neredeysen
-orası" alıyordu, sormuyordu; (2) TUI model seçtirmiyordu, sessizce router'a (küçük yerel
-modele) bırakıyordu — kullanıcı hangi modelin çalıştığını bilmiyordu.
+Kullanıcı sordu: "masaüstüm" dediğimde model bunun `C:\...\Desktop` olduğunu neden bilmiyor —
+ben (Claude Code) neden biliyorum? Cevap: benim kalıcı hafıza dosya sistemim var, Symphony'de
+henüz yok (ROADMAP Faz 6 "Kullanıcı hafızası" — `~/.symphony/memory/`). **Kapsam kararı
+kayda geçirildi (ROADMAP.md, Faz 6 satırı):** bu dosyayı yalnız kullanıcı/asistan yazacak,
+**agent'lar kendi başına YAZAMAYACAK** (yalnız okur) — kendi güvenini kendi genişletmesi
+riskli. Kullanıcının açık talebi: **şimdi yapma, Faz 6'da yap** — bu oturumda sadece not
+düşüldü, kod YOK.
 
-Düzeltme: `agent-run.tsx`'e görev girişinden ÖNCE iki adım eklendi — (1) çalışma dizini
-(metin girişi, varsayılan: bulunduğun dizin, değiştirilebilir), (2) model seçici (yeni
-`AgentModelPicker`, "Router seçsin (önerilen)" ilk seçenek + tüm modeller). `app.tsx` artık
-`models` prop'unu `AgentRun`'a da geçiyor. 4 yeni test (cwd varsayılanı, belirli model seçimi
-→ request'e provider/model eklenir, router seçimi → eklenmez) — toplam 147/147 yeşil.
+## Sıradaki adım
 
-**Yine dürüst not:** Bu düzeltmeyi de gerçek terminalde bizzat deneyemedim (aynı raw-mode TTY
-sınırı). 11 agent-run testi mantığı kanıtlıyor; kullanıcının bir kez daha denemesi gerekiyor —
-bu sefer masaüstü dizinini AÇIKÇA girip (varsayılanı değiştirerek) güçlü bir model seçerek.
+1. **Kullanıcıdan — TUI canlı doğrulama (3. deneme):** Bu oturumda TUI'ye üç şey eklendi
+   (cwd sorma, model sorma, `allow_for_run`/'b' tuşu) — hiçbirini ben gerçek terminalde
+   deneyemedim (Ink `useInput` raw-mode TTY ister, bu oturumun Bash+winpty araçları gerçek
+   konsol veremedi — DURUM.md'nin önceki sürümünde ayrıntılı not var, tekrarı gereksiz).
+   Testler (12 agent-run testi) mantığı kanıtlıyor. Kullanıcı isterse bir dahaki oturumda
+   dener.
+2. **Faz 4 (masaüstü/Tauri)** — ROADMAP'te bir sonraki büyük faz. Faz 3'ten farklı: burada
+   ADR'siz, tasarım ağırlıklı yeni yüzeyler var (Living Interface, Tauri↔daemon
+   entegrasyonu). Başlamadan önce kullanıcıyla hizalanmalı: Rust toolchain kurulu mu, hangi
+   modelle (bu noktada Opus'a geçiş mantıklı olabilir — tasarım işi, ADR yok).
 
 ## Bekleyenler / kullanıcıdan gerekenler
 
-- [ ] **TUI agent modu canlı doğrulaması** (yukarıda — Faz 3'ü tamamen kapatan son adım).
-      Bu sefer: çalışma dizini adımında Desktop yolunu YAZ, model adımında Claude seç.
+- [ ] TUI agent modu canlı doğrulaması (yukarıda — Faz 3'ü tamamen kapatan son adım).
 - [ ] OpenAI/Google API anahtarları (gelince: `pnpm --filter @symphony/core key:set openai`).
 - [ ] Faz 4 öncesi: Rust toolchain (rustup+MSVC) kurulumu.
-- [ ] `duzenleyici` agent'ının masaüstü önerisini kullanıcı onaylarsa: gerçek taşıma işlemi
-      (bir sonraki oturumda ya da bu oturumda kullanıcı isterse).
+- [ ] `duzenleyici` agent'ının masaüstü gruplama önerisini onaylarsa: gerçek taşıma işlemi.
 
 ## Geçmiş fazlar (özet — ayrıntı oturum günlüklerinde)
 
 - **Faz 0-1** ✅: monorepo, daemon (Fastify+ws, token auth), 4 provider adapter'ı,
   SecretStore (keychain), SQLite v1 (requests+telemetry), router v1, tek-kopya kilidi.
-  Canlı kanıt: Claude Opus 4.8 streaming ($0.0028) + Ollama qwen3:8b ($0).
 - **Faz 2** ✅ (2026-07-03): DaemonClient, otomatik daemon başlatma, Ink TUI, global
   kurulum (`link:`), `symphony watch`, sohbet geçmişi (SQLite v2 + REST + `history`).
-- **Faz 2.5** ✅: TUI karşılama ekranı + tesseract/sinaps logosu (cyan/magenta/red paleti —
-  Faz 4 masaüstü de bu paleti kullanacak).
+- **Faz 2.5** ✅: TUI karşılama ekranı + tesseract/sinaps logosu.
 - **Faz 3** ✅ 2026-07-05: araç seti + jail + izin motoru + koşu motoru (2026-07-04) →
-  canlı doğrulama + MCP istemcisi (ADR-007) + eklenti sistemi (`symphony add`) + TUI agent
-  modu (2026-07-05, bu oturum). Teknik özet aşağıda; tam ayrıntı oturum günlüklerinde.
+  MCP istemcisi + eklenti sistemi + TUI agent modu + `allow_for_run` (2026-07-05).
 
 ## Kalıcı teknik notlar
 
@@ -106,13 +99,16 @@ bu sefer masaüstü dizinini AÇIKÇA girip (varsayılanı değiştirerek) güç
 - AI SDK v7: system mesajı `messages`'ta yasak → `instructions`; geçersiz araç çağrısı
   `invalid: true` gelir (fırlatmaz). MCP araçları `jsonSchema()` sarmalı ile aynı `tool()`
   arayüzüne uyuyor (`AgentToolSpec.inputSchema: FlexibleSchema<unknown>`).
-  Ayrıntı ve diğer tuzaklar: `memo/DEVIR.md`.
 - MCP istemcisi (`core/src/agent/mcp.ts`): stdio-only v1; araçlar `mcp__<sunucu>__<araç>`
-  adıyla hep `mutating` risk sınıfında; koşu başında bağlan/koşu bitince kapat (engine.ts).
-  Kayıt defteri `~/.symphony/mcp-servers.json`; `symphony add <npm-paketi>` CANLI doğrulayıp
-  yazar (yanlış paket adı hemen görülür, dosyaya yazılmaz).
-  Test için gerçek stdio fixture: `core/src/agent/__fixtures__/echo-mcp-server.mjs`
-  (network'e bağımlı değil, CI-güvenli) — npx tabanlı canlı testler network ister.
-  Ink `useInput` raw-mode TTY ister; Bash aracından (ve winpty'den) otomatik sürülemez.
+  adıyla hep `mutating`; koşu başında bağlan/bitince kapat. Kayıt defteri
+  `~/.symphony/mcp-servers.json`; `symphony add <npm-paketi>` CANLI doğrulayıp yazar.
+  Test fixture: `core/src/agent/__fixtures__/echo-mcp-server.mjs` (network'süz, CI-güvenli).
+- İzin kararları artık 4 kademeli: `allow` (bir kez) / `allow_for_run` (bu koşu boyunca,
+  bellek-içi) / `always_allow` (kalıcı, `permissions.json`) / `deny`. Son ikisi
+  `destructive`'de hiç sunulmaz.
+- `run_command` yıkıcı-komut sezgiseli `\b(format|mkfs)\b(?!-)` — PowerShell'in Format-*
+  cmdlet'lerini artık yanlış pozitif işaretlemiyor.
+- Ink `useInput` raw-mode TTY ister; Bash aracından (ve winpty'den) otomatik sürülemez —
+  TUI'nin canlı doğrulaması hep kullanıcıdan istenir.
 - Kurulu: Node 24.14.1, pnpm 11.9.0, TS 6.0.3, ESLint 10, Vitest 4, zod 3, AI SDK 7,
   @modelcontextprotocol/sdk 1.29.0.
