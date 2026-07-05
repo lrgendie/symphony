@@ -151,7 +151,7 @@ symphony/
   `client:"desktop"` bağlantısını kabul edip snapshot döndü), store birim testleri ✅ (6).
   **Pencere görsel doğrulaması KULLANICI tarafından yapıldı ✅ 2026-07-05** — `desktop:dev`
   ile pencere açıldı, canlı akış çalıştı.
-- [ ] **"Living Interface" sahnesi:** Three.js parçacık küresi merkezde — boşta yavaşça nefes alır, agent düşünürken dalgalanır, araç çalıştırırken hızlanır, hatada renk değiştirir. Her agent'ın kendi küçük "yaşam formu" olur. **Görsel yön: `docs/TASARIM.md` (kullanıcının referans görselleri `Tasarım/`).** Tesseract'ın canlı mimari haritasına dönüşmesi de burada.
+- [~] **"Living Interface" sahnesi:** Three.js parçacık küresi merkezde — boşta yavaşça nefes alır, agent düşünürken dalgalanır, araç çalıştırırken hızlanır, hatada renk değiştirir. **Parçacık küresi YAPILDI ✅ 2026-07-05** (`@react-three/fiber`, `ui/src/scene/LivingScene.tsx`): fibonacci küre, durum→mood (`scene/mood.ts`, saf+testli: idle/thinking/executing/awaiting/error/offline), renk lerp + nefes + dönüş, HUD mood etiketi. Görsel doğrulama kullanıcıya. Kalan: her agent'ın kendi "yaşam formu", tesseract'ın canlı mimari haritasına dönüşmesi. Görsel yön: `docs/TASARIM.md`.
 - [~] **Şef Paneli:** aktif agent'lar (kim çalışıyor, hangi araç, hangi dosya), canlı log akışı —
   dilim 1: aktif koşular + canlı olay akışı; **dilim 2 (2026-07-05): izin istekleri masaüstünden
   CEVAPLANABİLİYOR** (kart + renkli diff + Evet/Bu koşu/Daima/Hayır → `permission.respond`,

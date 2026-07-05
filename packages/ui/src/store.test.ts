@@ -18,6 +18,7 @@ beforeEach(() => {
     providers: [],
     runs: [],
     pendingPermissions: [],
+    lastErrorAt: null,
     log: [],
   });
 });

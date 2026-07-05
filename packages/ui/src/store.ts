@@ -34,6 +34,8 @@ interface UiState {
   providers: ProviderHealth[];
   runs: ActiveRun[];
   pendingPermissions: PendingPermission[];
+  /** Son hata anı (ms) — yaşayan küre kısa bir "kırmızı flaş" için okur (scene/mood.ts). */
+  lastErrorAt: number | null;
   log: LogItem[];
   setStatus: (status: ConnStatus) => void;
   setError: (error: string | null) => void;
@@ -76,6 +78,7 @@ export const useStore = create<UiState>((set) => {
     providers: [],
     runs: [],
     pendingPermissions: [],
+    lastErrorAt: null,
     log: [],
 
     setStatus: (status) => set({ status, ...(status === "connected" ? { error: null } : {}) }),
@@ -122,6 +125,7 @@ export const useStore = create<UiState>((set) => {
         }
         case "agent.tool.completed": {
           const p = payload as { tool: string; ok: boolean; resultSummary: string; durationMs: number };
+          if (!p.ok) set({ lastErrorAt: Date.now() });
           pushLog(p.ok ? "good" : "bad", `${p.ok ? "✔" : "✘"} ${p.tool} (${p.durationMs}ms) ${short(p.resultSummary, 60)}`);
           return;
         }
@@ -154,6 +158,7 @@ export const useStore = create<UiState>((set) => {
         case "agent.run.failed": {
           const p = payload as { runId: string; error: { code: string } };
           removeRun(p.runId);
+          set({ lastErrorAt: Date.now() });
           pushLog("bad", `✘ koşu başarısız: ${p.error.code}`);
           return;
         }

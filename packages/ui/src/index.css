@@ -223,6 +223,45 @@ body {
   white-space: nowrap;
 }
 
+/* ---- Yaşayan Arayüz sahnesi (parçacık küresi + HUD) ---- */
+.scene {
+  position: relative;
+  height: 300px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at center, rgba(34, 211, 238, 0.05), transparent 70%), var(--panel);
+}
+.scene canvas {
+  display: block;
+}
+.scene-hud {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(10, 11, 16, 0.55);
+  backdrop-filter: blur(4px);
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+.hud-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+}
+.hud-label {
+  color: var(--text);
+}
+
 /* ---- İzin kartı ---- */
 .panel-perm {
   border-color: rgba(251, 191, 36, 0.45);

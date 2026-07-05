@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { PROTOCOL_VERSION, type PendingPermission } from "@symphony/shared";
 import { daemon, type PermissionDecision } from "./daemon/client";
+import { LivingScene } from "./scene/LivingScene";
 import { useStore, type ConnStatus, type LogTone } from "./store";
 
 /**
@@ -41,6 +42,8 @@ export function App(): React.JSX.Element {
       </header>
 
       {error !== null && <div className="banner banner-error">{error}</div>}
+
+      <LivingScene />
 
       {pending.length > 0 && (
         <section className="panel panel-perm">
