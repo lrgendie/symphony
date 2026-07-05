@@ -131,7 +131,15 @@ symphony/
   GitHub-repo kaynağı v1 dışında bırakıldı (build/sandbox belirsizliği ayrı bir dilim).
   İlk örnek eklenti canlı denendi: `symphony add @playwright/mcp` → 23 araç bulundu
   (browser_click, browser_navigate, browser_snapshot, ...).
-- [ ] TUI'de agent modu: izin isteği kutusu + diff görünümü (CLI `symphony agent` komutu var, sıra Ink arayüzünde)
+- [x] TUI'de agent modu: izin isteği kutusu + diff görünümü ✅ 2026-07-05 — `symphony` (argümansız)
+  artık karşılama sonrası Sohbet/Agent modu soruyor; Agent seçilince kayıtlı agent listesi
+  (`agents.list`), sonra görev girişi, sonra canlı koşu ekranı (araç günlüğü + tek tuşla
+  e/d/h izin kutusu + renkli diff + sonuç/hata). `cli/src/tui/{mode-picker,agent-picker,
+  agent-run}.tsx`. 12 bileşen testi (`ink-testing-library`, gerçek klavye tuşu simülasyonu)
+  yeşil. **Not:** raw-mode terminal TTY gerektirdiği için bu oturumda otomatik canlı
+  doğrulama yapılamadı (Bash aracı + winpty denendi, ikisi de gerçek konsol veremedi) —
+  kullanıcının kendi terminalinde bir kez denemesi gerekiyor (Faz 2'nin sohbet TUI'sinde
+  de aynı şekilde kullanıcı doğrulamıştı).
 - **Çıktı:** "şu dosyadaki bug'ı düzelt" diyebildiğin, onayınla kodu değiştiren agent.
 - **Kabul testi:** Agent diff gösterip onay almadan tek bayt yazamıyor (izinsiz yazma girişimi testle kanıtlanmış şekilde engelli) ✅; workspace dışına çıkamıyor ✅; deny cevabı koşuyu kırmıyor ✅ (üçü de `engine.test.ts` + `daemon-agent.test.ts`, 2026-07-04); bir harici MCP sunucusu bağlanıp araç olarak çağrılıyor ✅ (2026-07-05, canlı: `@modelcontextprotocol/server-filesystem`, izin akışı + araç hatası kurtarma gerçek sunucuyla kanıtlandı — `mcp.test.ts` + `engine.test.ts`). Davranışlar `docs/SPEC-AGENT.md`'ye uygun.
 

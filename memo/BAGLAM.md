@@ -66,7 +66,12 @@
 - `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`)
 - `commands/` — status/models/watch/history/agents/agent/add (her komut tek dosya)
   - `add.ts` — `symphony add <npm-paketi>`: eklenti sistemi, `mcp.addServer` isteği atar
-- `tui/` — Ink: app.tsx (akış), welcome.tsx (karşılama), model-picker, chat, logo.ts
+- `tui/` — Ink: app.tsx (akış: karşılama→mod seçici→sohbet|agent), welcome.tsx, logo.ts
+  - `model-picker.tsx` / `chat.tsx` — sohbet dalı
+  - `mode-picker.tsx` — Sohbet/Agent seçici (↑/↓+Enter)
+  - `agent-picker.tsx` — kayıtlı agent listesinden seçim
+  - `agent-run.tsx` — görev girişi + canlı koşu (izin kutusu tek tuş e/d/h, renkli diff,
+    araç günlüğü, Esc iptal) — `cli/commands/agent.ts` ile aynı olaylara abone, Ink sunumu
 
 ## Değişmez hatırlatmalar (tam listesi CLAUDE.md'de)
 
