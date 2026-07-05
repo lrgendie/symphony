@@ -15,6 +15,8 @@
 | Veri katmanı / yeni tablo | `core/src/db/store.ts` (göçler dosyanın başında) |
 | CLI komutu ekleme | `cli/src/index.ts` + `cli/src/commands/` içinde benzer bir komut |
 | TUI değişikliği | `cli/src/tui/app.tsx` + hedef bileşen |
+| Dashboard (masaüstü) değişikliği | `ui/src/App.tsx` + `ui/src/store.ts` (WS→durum) + `ui/src/daemon/client.ts` |
+| Tauri kabuk / token enjeksiyonu | `desktop/src-tauri/src/lib.rs` + `desktop/src-tauri/tauri.conf.json` |
 | Daemon davranışı | `core/src/server/daemon.ts` (tek dosya, ~600 satır) |
 | Mimari karar değişikliği | `docs/kararlar/KARARLAR.md` (önce ADR oku!) |
 | Model devri (Fable→Opus vb.) | `memo/DEVIR.md` — rol, disiplin, tuzak haritası |
@@ -22,7 +24,10 @@
 ## Paket grafiği
 
 `shared` → `core` → (`cli`, `ui`, `desktop`) — tek yönlü; `shared` hiçbir şeye bağımlı değil.
-`ui` ve `desktop` henüz boş iskelet (Faz 4).
+`ui` = React+Vite dashboard (Faz 4 dilim 1: canlı akış). `ui` yalnız `shared`'a bağımlı
+(tarayıcı-güvenli, core'a DEĞİL). `desktop` = Tauri 2 kabuğu; `ui/dist`'i sarar, `shared`'a
+bile bağımlı değil (yalnız Rust + webview). `core`'a hiçbir arayüz doğrudan bağımlı değildir —
+protokol WS/REST üzerinden konuşulur.
 
 ## Dosya haritası (tek satırlık sözleşmeler)
 
@@ -72,6 +77,23 @@
   - `agent-picker.tsx` — kayıtlı agent listesinden seçim
   - `agent-run.tsx` — görev girişi + canlı koşu (izin kutusu tek tuş e/d/h, renkli diff,
     araç günlüğü, Esc iptal) — `cli/commands/agent.ts` ile aynı olaylara abone, Ink sunumu
+
+### packages/ui/src — masaüstü dashboard (React+Vite, Faz 4) — hem tarayıcı hem Tauri
+- `config.ts` — `getBootstrap()`: token+port'u `window.__SYMPHONY__` (Tauri enjekte eder) ya
+  da `import.meta.env` (tarayıcı dev, `dev:token` script'i .env.local'e yazar) kaynağından alır
+- `daemon/client.ts` — `DaemonConnection`: native WebSocket + `shared` şemaları; hello
+  handshake → snapshot → yayın olaylarını store'a akıtır; üstel geri çekilmeli yeniden bağlanma
+- `store.ts` — zustand; `handleEvent` olay tiplerini UI durumuna (providers/runs/log/pending)
+  çevirir. **WS→UI eşlemesinin TEK yeri** (testli: `store.test.ts`)
+- `App.tsx` — Şef Paneli: bağlantı durumu + sağlayıcı sağlığı + aktif koşular + canlı akış
+- `index.css` — marka paleti (cyan/magenta/red, logo ile aynı); düz CSS
+
+### packages/desktop/src-tauri — Tauri 2 kabuğu (Rust) — `ui/dist`'i sarar
+- `src/lib.rs` — `run()`: token'ı `~/.symphony/daemon.token`'dan + portu config'ten okur,
+  webview'e `initialization_script` ile enjekte eder (sayfa JS'inden ÖNCE), pencereyi kurar
+- `tauri.conf.json` — `frontendDist: ../../ui/dist`, `devUrl` vite; `windows: []` (Rust kurar)
+- `Cargo.toml` / `Cargo.lock` — Rust bağımlılıkları (commit'lenir; `target/` gitignore)
+- çalıştırma: `pnpm --filter @symphony/desktop desktop:dev` (tauri dev — vite'i de başlatır)
 
 ## Değişmez hatırlatmalar (tam listesi CLAUDE.md'de)
 

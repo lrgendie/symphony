@@ -1,0 +1,259 @@
+/* Symphony dashboard — tesseract/sinaps paleti (cyan/magenta/red, Faz 2.5 logosuyla aynı). */
+:root {
+  --bg: #0a0b10;
+  --panel: #12141c;
+  --panel-2: #171a24;
+  --line: #232735;
+  --text: #e6e8ef;
+  --dim: #8b90a3;
+  --cyan: #22d3ee;
+  --magenta: #e879f9;
+  --red: #ef4444;
+  --green: #34d399;
+  --amber: #fbbf24;
+  font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+/* ---- Üst bar ---- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wordmark {
+  font-weight: 700;
+  letter-spacing: 3px;
+  background: linear-gradient(90deg, var(--cyan), var(--magenta));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.pulse {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--line);
+  box-shadow: 0 0 0 0 transparent;
+}
+.pulse-on {
+  background: var(--cyan);
+  animation: breathe 1.4s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(34, 211, 238, 0);
+  }
+}
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ---- Durum / rozetler ---- */
+.status,
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: 12px;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+.status-connected .dot {
+  background: var(--green);
+}
+.status-connecting .dot {
+  background: var(--amber);
+}
+.status-disconnected .dot {
+  background: var(--red);
+}
+.chip-up .dot {
+  background: var(--green);
+}
+.chip-degraded .dot {
+  background: var(--amber);
+}
+.chip-down .dot {
+  background: var(--red);
+}
+
+.dim {
+  color: var(--dim);
+}
+.empty {
+  margin: 4px 0 0;
+}
+
+.banner {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.banner-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fecaca;
+}
+
+/* ---- Paneller ---- */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.panel-grow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.count {
+  color: var(--cyan);
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.count-warn {
+  color: var(--amber);
+  border-color: rgba(251, 191, 36, 0.4);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---- Koşular ---- */
+.runs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.run {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: var(--panel-2);
+  border-radius: 8px;
+}
+.state {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: var(--line);
+  color: var(--text);
+}
+.state-thinking,
+.state-executing_tool {
+  background: rgba(34, 211, 238, 0.18);
+  color: var(--cyan);
+}
+.state-awaiting_permission {
+  background: rgba(251, 191, 36, 0.18);
+  color: var(--amber);
+}
+.run-agent {
+  color: var(--magenta);
+  font-weight: 600;
+}
+.run-task {
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- Log akışı ---- */
+.log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.log-row {
+  display: flex;
+  gap: 10px;
+  padding: 2px 0;
+  line-height: 1.5;
+}
+.log-time {
+  color: var(--dim);
+  flex-shrink: 0;
+}
+.tone-good .log-text {
+  color: var(--green);
+}
+.tone-bad .log-text {
+  color: var(--red);
+}
+.tone-tool .log-text {
+  color: var(--cyan);
+}
+.tone-chat .log-text {
+  color: var(--magenta);
+}
+.tone-warn .log-text {
+  color: var(--amber);
+}

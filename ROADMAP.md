@@ -143,11 +143,19 @@ symphony/
 - **Çıktı:** "şu dosyadaki bug'ı düzelt" diyebildiğin, onayınla kodu değiştiren agent.
 - **Kabul testi:** Agent diff gösterip onay almadan tek bayt yazamıyor (izinsiz yazma girişimi testle kanıtlanmış şekilde engelli) ✅; workspace dışına çıkamıyor ✅; deny cevabı koşuyu kırmıyor ✅ (üçü de `engine.test.ts` + `daemon-agent.test.ts`, 2026-07-04); bir harici MCP sunucusu bağlanıp araç olarak çağrılıyor ✅ (2026-07-05, canlı: `@modelcontextprotocol/server-filesystem`, izin akışı + araç hatası kurtarma gerçek sunucuyla kanıtlandı — `mcp.test.ts` + `engine.test.ts`). Davranışlar `docs/SPEC-AGENT.md`'ye uygun.
 
-### Faz 4 — Masaüstü: Orkestra Sahnesi (9–11. hafta)
-- [ ] Tauri 2 + React dashboard, daemon'un WS akışına bağlanır
+### Faz 4 — Masaüstü: Orkestra Sahnesi (9–11. hafta) — dilim 1 başladı (2026-07-05)
+- [x] Tauri 2 + React dashboard, daemon'un WS akışına bağlanır ✅ 2026-07-05 (dilim 1) —
+  `packages/ui` (React 19 + Vite 8, tarayıcı-güvenli WS istemcisi, yalnız `shared`'a bağımlı)
+  + `packages/desktop` (Tauri 2, `ui/dist`'i sarar, token'ı `~/.symphony/daemon.token`'dan
+  okuyup webview'e enjekte eder). cargo build ✅, wire-protokol smoke testi ✅ (daemon
+  `client:"desktop"` bağlantısını kabul edip snapshot döndü), store birim testleri ✅ (6).
+  **Not:** pencere görsel doğrulaması kullanıcıya kaldı (TUI'deki aynı Bash/TTY sınırı).
 - [ ] **"Living Interface" sahnesi:** Three.js parçacık küresi merkezde — boşta yavaşça nefes alır, agent düşünürken dalgalanır, araç çalıştırırken hızlanır, hatada renk değiştirir. Her agent'ın kendi küçük "yaşam formu" olur
-- [ ] **Şef Paneli:** aktif agent'lar (kim çalışıyor, hangi araç, hangi dosya), canlı log akışı
-- [ ] Model panosu: provider durumları, token kullanımı/maliyet sayaçları, yerel model VRAM durumu
+- [~] **Şef Paneli:** aktif agent'lar (kim çalışıyor, hangi araç, hangi dosya), canlı log akışı —
+  dilim 1'de MİNİMAL yapıldı (aktif koşular + tek satırlık canlı olay akışı + izin bekleyen
+  sayısı); "hangi dosya" ayrıntısı ve zengin görünüm sonraki dilim
+- [~] Model panosu: provider durumları ✅ (canlı up/down/degraded), token kullanımı/maliyet
+  sayaçları + yerel model VRAM durumu — sonraki dilim
 - [ ] **Yol haritası görselleştirme:** projelerin ROADMAP/plan dosyalarından otomatik üretilen interaktif faz-adım grafiği; hangi adım bitti, hangi adımda hangi agent çalışıyor canlı görünür
 - [ ] Proje görünümü: hangi projede hangi agent ne yapıyor
 - [ ] **CLI → masaüstü otomatik açılış:** terminalde `symphony` başlatılınca masaüstü

@@ -16,7 +16,7 @@
 | GitHub hesabı + özel repo | Faz 0 | Uzak yedek (`symphony` reposu) | ⬜ oluşturulacak |
 | GitHub CLI (`gh`) | Faz 0 (isteğe bağlı) | Repo oluşturma/PR işlemleri terminalden | ⬜ kurulu değil |
 | Ollama | Faz 1 | Yerel LLM çalıştırıcı (localhost:11434) | ⬜ kurulacak |
-| Rust toolchain (rustup + MSVC) | Faz 4 | Tauri masaüstü kabuğunun derlenmesi | ⬜ Faz 4'te |
+| Rust toolchain (rustup + MSVC) | Faz 4 | Tauri masaüstü kabuğunun derlenmesi | ✅ kuruldu 2026-07-05 — rustc 1.96.1 (stable-x86_64-pc-windows-msvc); MSVC (VS 18 Community) + Windows SDK 10.0.26100 + WebView2 149 zaten vardı |
 | VS Code (öneri) | — | Geliştirme editörü | — |
 
 ## 2. Kütüphaneler (paket bazında)
@@ -57,15 +57,16 @@
 ### `packages/ui` — dashboard (React)
 | Kütüphane | Amaç |
 |---|---|
-| `react` + `vite` | Arayüz çatısı ve derleyici |
-| `three` + `@react-three/fiber` + `@react-three/drei` | "Living Interface" parçacık küresi (WebGL) |
-| `zustand` | Durum yönetimi (WS olaylarından beslenen store) |
-| `tailwindcss` | Stil sistemi |
+| `react` + `vite` | Arayüz çatısı ve derleyici ✅ kuruldu 2026-07-05 (React 19, Vite 8) |
+| `zustand` | Durum yönetimi (WS olaylarından beslenen store) ✅ 2026-07-05 |
+| `@symphony/shared` | Protokol şemaları (saf zod, tarayıcı-güvenli) — UI'nin daemon'la konuştuğu tek sözleşme ✅ |
+| `three` + `@react-three/fiber` + `@react-three/drei` | "Living Interface" parçacık küresi (WebGL) — sonraki dilim |
+| `tailwindcss` | Stil sistemi — şimdilik düz CSS (index.css, marka paleti); gerekirse eklenir |
 
 ### `packages/desktop` — masaüstü kabuk
 | Kütüphane | Amaç |
 |---|---|
-| `@tauri-apps/cli` + `@tauri-apps/api` | Tauri 2: ui'yi native pencerede paketler (Win x64/ARM64, mac Intel/AS) |
+| `@tauri-apps/cli` + `@tauri-apps/api` | Tauri 2: ui'yi native pencerede paketler ✅ kuruldu 2026-07-05 (CLI 2.11.4). src-tauri Rust: token'ı `~/.symphony/daemon.token`'dan okuyup webview'e enjekte eder (initialization_script) |
 
 ### Geliştirme araçları (kök)
 | Kütüphane | Amaç |

@@ -1,0 +1,18 @@
+{
+  "name": "@symphony/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Symphony masaüstü kabuğu (Tauri 2) — packages/ui'yi native pencerede paketler, daemon token'ını dosyadan okuyup webview'e enjekte eder.",
+  "scripts": {
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
