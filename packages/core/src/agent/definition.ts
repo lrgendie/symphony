@@ -21,6 +21,9 @@ export const AgentFrontmatterSchema = z
     // ADR-008: varsayılan 0; yükseltmek agent tanımında bilinçli istisnadır.
     temperature: z.number().min(0).max(2).default(0),
     tools: z.array(z.enum(TOOL_NAMES)).min(1).default([...TOOL_NAMES]),
+    // MCP istemcisi (ADR-007, SPEC §2): ~/.symphony/mcp-servers.json'daki hangi
+    // sunucuların araçları bu agent'a bağlanacak; boşsa hiçbiri.
+    mcpServers: z.array(z.string().min(1)).default([]),
     // Döngü sigortası (SPEC §4).
     maxSteps: z.number().int().positive().max(500).default(50),
   })
@@ -117,6 +120,7 @@ export function toAgentSummary(definition: AgentDefinition): AgentSummary {
     ...(definition.provider !== undefined ? { provider: definition.provider } : {}),
     ...(definition.model !== undefined ? { model: definition.model } : {}),
     tools: [...definition.tools],
+    mcpServers: [...definition.mcpServers],
     maxSteps: definition.maxSteps,
   };
 }

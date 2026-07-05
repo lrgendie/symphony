@@ -86,6 +86,7 @@ export const AgentSummarySchema = z
     provider: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
     tools: z.array(z.string().min(1)),
+    mcpServers: z.array(z.string().min(1)),
     maxSteps: z.number().int().positive(),
   })
   .strip();

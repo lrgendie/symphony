@@ -5,6 +5,7 @@ import { execa } from "execa";
 import { glob as tinyGlob } from "tinyglobby";
 import { createTwoFilesPatch } from "diff";
 import { z } from "zod";
+import type { FlexibleSchema } from "ai";
 import type { RiskClass } from "@symphony/shared";
 import { AgentError } from "./errors.js";
 import type { WorkspaceJail } from "./jail.js";
@@ -47,9 +48,11 @@ export interface ToolPreview {
 }
 
 export interface AgentToolSpec {
-  name: ToolName;
+  /** Yerleşik araçlarda ToolName; MCP araçlarında `mcp__<sunucu>__<araç>` (SPEC-AGENT §2). */
+  name: string;
   description: string;
-  inputSchema: z.ZodTypeAny;
+  /** Yerleşik araçlarda zod; MCP araçlarında `jsonSchema()` sarmalı (agent/mcp.ts). */
+  inputSchema: FlexibleSchema<unknown>;
   timeoutMs: number;
   riskClass(args: unknown): RiskClass;
   /** İzin deseni hedefi: dosya araçlarında workspace-göreli posix yol, komutta komut metni. */

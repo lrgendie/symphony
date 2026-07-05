@@ -3,11 +3,48 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-04 (Oturum 10 — Faz 3 dilim 1 TAMAM)
+**Son güncelleme:** 2026-07-05 (Oturum 11 — canlı doğrulama + MCP istemcisi TAMAM: 126/126 test yeşil)
 
 ## Şu an neredeyiz?
 
-**Faz 3 (agent motoru) ilk dikey dilim BİTTİ ve testli: 115/115 test yeşil; build+lint temiz.**
+**MCP istemcisi bitti ve canlı kanıtlı (2026-07-05, ADR-007, SPEC-AGENT §2.1):**
+`core/src/agent/mcp.ts` — `@modelcontextprotocol/sdk` (stdio taşıma), `~/.symphony/mcp-servers.json`
+kayıt defteri, agent frontmatter'ında `mcpServers: [ad, ...]`, her sunucu aracı
+`mcp__<sunucu>__<araç>` adıyla `AgentToolSpec`'e sarılıp `mutating` risk sınıfında bağlanıyor
+(koşu başında bağlan, koşu bitince kapat — `engine.ts`). 10 yeni birim testi (`mcp.test.ts`,
+gerçek `Client`+`McpServer` çifti `InMemoryTransport` ile, alt süreç yok) + 1 engine entegrasyon
+testi. **Canlı doğrulama da yapıldı:** gerçek `@modelcontextprotocol/server-filesystem`
+sunucusuna bağlanıp `list_directory`/`read_text_file` araçları çağrıldı; MCP aracı `mutating`
+olduğu için terminaldeki e/d/h izin kutusu bu kez GERÇEKTEN tetiklendi (önceki oturumun safe-tool
+testinde tetiklenmemişti); sunucunun kendi path hatası (`AGENT_MCP_TOOL_ERROR`) koşuyu kırmadan
+modele döndü ve model yeniden denedi (SPEC §4 "araç hatası ≠ koşu hatası" gerçek bir MCP
+sunucusuyla kanıtlandı); koşu bitince alt süreç (npx/node) temiz kapandı (doğrulandı, artık
+süreç kalmadı). Kalıcı test artefaktları: `~/.symphony/mcp-servers.json` (filesystem sunucusu,
+`memo/` köküne bağlı) + `~/.symphony/agents/mcp-tester.md` — silinmedi, çalışan örnek olarak
+kalsın istendi.
+
+**Model kararı (2026-07-05):** Sonnet 5 bu oturumun tamamında kaldı, Opus'a geçiş
+gerekmedi (bkz. aşağıdaki "Model kararı" notu — gerekçe hâlâ geçerli: bu iş ADR-007/SPEC-AGENT'ın
+uygulaması, yeni mimari karar değil).
+
+**Faz 3 (agent motoru) ilk dikey dilim BİTTİ ve testli: 126/126 test yeşil; build+lint temiz.**
+**Canlı doğrulama da geçti (2026-07-05):** `symphony agent coder "memo/DURUM.md dosyasının ilk
+bölümünü oku ve tek cümleyle özetle" --provider ollama --model qwen3:8b` uçtan uca çalıştı —
+daemon otomatik açıldı, coder.md tanımı yüklendi, qwen3:8b `read_file` aracını doğru çağırdı,
+`safe` risk sınıfı izin sormadan otomatik onaylandı, model doğru özeti üretti, maliyet $0.0000
+göründü. (Not: DEVIR.md/DURUM.md'deki örnek komut kökten `DURUM.md` diyordu ama dosya
+`memo/DURUM.md`'de — önce bu yanlış yolla denendi, `AGENT_FILE_NOT_FOUND` doğru şekilde modele
+döndü, sonra doğru yolla tekrarlandı. İkisi de motorun sağlıklı çalıştığını kanıtladı.)
+Bu görev `safe` riskli olduğu için e/d/h izin kutusu tetiklenmedi; onun canlı kanıtı hâlâ
+`engine.test.ts`/`daemon-agent.test.ts` birim testlerinde — gerçek terminalde mutating bir
+görevle (örn. dosyaya yazma) ayrıca denenebilir, istenirse.
+
+**Model kararı (2026-07-05):** Fable → Opus devri bekleniyordu ama bu oturum zaten Sonnet 5
+ile açıldı. Opus'a geçişe GEREK YOK: kalan Faz 3 işleri (MCP istemcisi, eklenti sistemi, TUI
+entegrasyonu) BAGLAM.md'nin kendi kuralına göre "mimari karar" değil "uygulama" işi — mimari
+zaten ADR-007/SPEC-AGENT'ta karara bağlanmış. Pahalı model (Opus) için ayır: gerçek yeni bir
+mimari belirsizlik çıkarsa (örn. MCP sarmalama tasarımı beklenenden karmaşık çıkarsa) veya
+Faz 4 masaüstü "Living Interface" gibi tasarım ağırlıklı bir faza geçilince.
 
 Bugün kurulanlar (`packages/core/src/agent/`):
 - **Araç seti** (`tools.ts`): read_file / write_file / edit / glob / grep / run_command;
@@ -36,13 +73,13 @@ onaysız tek bayt yazamıyor ✅ · deny koşuyu kırmıyor ✅ · jail dışın
 
 ## Sıradaki adım (buradan devam — ayrıntılı yol DEVIR.md'de)
 
-1. **Canlı doğrulama:** terminalde
-   `symphony agent coder "DURUM.md'nin ilk bölümünü oku ve tek cümleyle özetle" --provider ollama --model qwen3:8b`
-   → izin akışını gerçek modelle bir kez yaşat (`pnpm build` sonrası global symlink güncel).
-2. **MCP istemcisi** (ADR-007, SPEC-AGENT §2): `@modelcontextprotocol/sdk`;
-   MCP araçları `AgentToolSpec`'e sarılır, riskClass `mutating` başlar.
-3. **Eklenti sistemi:** `symphony add <kaynak>`; ilk örnek Playwright scraping MCP'si.
-4. **TUI agent modu:** izin kutusu + diff görünümü (`cli/src/tui/`).
+1. **Eklenti sistemi:** `symphony add <kaynak>` — GitHub'daki bir aracı veya MCP sunucusunu
+   indirip `~/.symphony/mcp-servers.json`'a kaydetme. İlk örnek: Playwright scraping MCP'si
+   (ROADMAP'te adı geçiyor). mcp.ts + mcp-servers.json altyapısı hazır, `symphony add` yalnız
+   kayıt defterine yazan bir CLI komutu olacak.
+2. **TUI agent modu:** izin kutusu + diff görünümü (`cli/src/tui/`). MCP izin istekleri de
+   `agent.tool.requested` üzerinden aynı yoldan geliyor — CLI tarafı zaten hazır (`agent.ts`),
+   TUI'de eşdeğeri eksik.
 
 ## Bekleyenler / kullanıcıdan gerekenler
 

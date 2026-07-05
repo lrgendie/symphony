@@ -24,6 +24,7 @@ import {
 } from "./definition.js";
 import { AgentError } from "./errors.js";
 import { WorkspaceJail } from "./jail.js";
+import { closeMcpConnections, connectMcpServers, type McpConnection } from "./mcp.js";
 import { PermissionEngine } from "./permissions.js";
 import {
   AGENT_TOOLS,
@@ -50,6 +51,7 @@ export interface AgentEngineDeps {
   log: Logger;
   agentsDir: string;
   permissionsFile: string;
+  mcpServersFile: string;
   /** model/provider verilmediyse router'a sorulur ("boşsa router seçer", SPEC §1). */
   pickModel(task: string): Promise<{ provider: string; model: string } | null>;
 }
@@ -245,17 +247,7 @@ export class AgentEngine {
   ): Promise<void> {
     const permissions = new PermissionEngine(this.deps.permissionsFile);
     const ctx: ToolContext = { jail };
-    const specs = definition.tools.map((name) => AGENT_TOOLS[name]);
-    const sdkTools = Object.fromEntries(
-      specs.map((spec) => [
-        spec.name,
-        defineTool({ description: spec.description, inputSchema: spec.inputSchema }),
-      ]),
-    );
-    const languageModel = await adapter.languageModel(run.model);
-    // AI SDK v7: system mesajı messages içinde YASAK — instructions seçeneğiyle verilir.
-    const instructions = buildSystemPrompt(definition, jail);
-    const messages: ModelMessage[] = [{ role: "user", content: run.task }];
+    let mcpConnections: McpConnection[] = [];
 
     let failureKey = "";
     let failureCount = 0;
@@ -266,6 +258,24 @@ export class AgentEngine {
     };
 
     try {
+      // MCP istemcisi (ADR-007, SPEC-AGENT §2): koşu başında bağlan, finally'de kapat —
+      // hata olursa (AGENT_MCP_*) aşağıdaki catch tarafından normal akışla işlenir.
+      mcpConnections = await connectMcpServers(this.deps.mcpServersFile, definition.mcpServers);
+      const specs = [
+        ...definition.tools.map((name) => AGENT_TOOLS[name]),
+        ...mcpConnections.flatMap((connection) => connection.tools),
+      ];
+      const sdkTools = Object.fromEntries(
+        specs.map((spec) => [
+          spec.name,
+          defineTool({ description: spec.description, inputSchema: spec.inputSchema }),
+        ]),
+      );
+      const languageModel = await adapter.languageModel(run.model);
+      // AI SDK v7: system mesajı messages içinde YASAK — instructions seçeneğiyle verilir.
+      const instructions = buildSystemPrompt(definition, jail);
+      const messages: ModelMessage[] = [{ role: "user", content: run.task }];
+
       for (;;) {
         this.transition(run, "thinking");
         const turnStartedAt = Date.now();
@@ -363,6 +373,8 @@ export class AgentEngine {
         return;
       }
       this.finish(run, "failed", toErrorInfo(error));
+    } finally {
+      await closeMcpConnections(mcpConnections);
     }
   }
 

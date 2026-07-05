@@ -142,6 +142,7 @@ function makeEngine(script: GenerateResult[]): { engine: AgentEngine; bus: Captu
     log: pino({ level: "silent" }),
     agentsDir: join(home, "agents"),
     permissionsFile: join(home, `permissions-${Date.now()}-${Math.random()}.json`),
+    mcpServersFile: join(home, `mcp-servers-${Date.now()}-${Math.random()}.json`),
     pickModel: () => Promise.resolve(null),
   });
   return { engine, bus, store };
@@ -162,6 +163,20 @@ description: test agent
 provider: fake
 model: fake-1
 maxSteps: 3
+---
+Test agent'ısın.`,
+    "utf8",
+  );
+  writeFileSync(
+    join(home, "agents", "mcpli.md"),
+    `---
+name: mcpli
+description: mcpServers alanı olan test agent
+provider: fake
+model: fake-1
+maxSteps: 3
+tools: [read_file]
+mcpServers: [tanimsiz-sunucu]
 ---
 Test agent'ısın.`,
     "utf8",
@@ -295,5 +310,12 @@ describe("AgentEngine (SPEC-AGENT §4-§6)", () => {
     expect(runs[0]?.state).toBe("completed");
     expect(runs[0]?.steps).toBe(1);
     expect(runs[0]?.input_tokens).toBeGreaterThan(0);
+  });
+
+  it("MCP istemcisi (ADR-007): tanımsız mcpServers → failed(AGENT_MCP_SERVER_UNKNOWN)", async () => {
+    const { engine, bus } = makeEngine([turn([text("hiç buraya gelmemeli")])]);
+    await engine.start({ ...START, agentId: "mcpli" });
+    const failed = await bus.waitFor("agent.run.failed");
+    expect(failed.error.code).toBe("AGENT_MCP_SERVER_UNKNOWN");
   });
 });

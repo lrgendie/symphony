@@ -21,6 +21,7 @@ export interface SymphonyPaths {
   logsDir: string;
   daemonTokenFile: string;
   permissionsFile: string;
+  mcpServersFile: string;
 }
 
 export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPaths {
@@ -35,6 +36,7 @@ export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPath
     logsDir: join(home, "logs"),
     daemonTokenFile: join(home, "daemon.token"),
     permissionsFile: join(home, "permissions.json"),
+    mcpServersFile: join(home, "mcp-servers.json"),
   };
 }
 

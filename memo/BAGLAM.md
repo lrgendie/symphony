@@ -56,7 +56,10 @@
   - `permissions.ts` — `PermissionEngine`: deny > allow > risk varsayılanı; always_allow kalıcılaştırma
   - `definition.ts` — `~/.symphony/agents/*.md` frontmatter ayrıştırma + varsayılan coder
   - `tools.ts` — 6 araç (read_file/write_file/edit/glob/grep/run_command) + diff/hash + maskeleme
-  - `engine.ts` — koşu döngüsü (AI SDK tool-calling), izin kapısı, durum makinesi, iptal
+  - `mcp.ts` — MCP istemcisi (ADR-007): `~/.symphony/mcp-servers.json` kayıt defteri
+    (stdio), sunucu araçlarını `AgentToolSpec`'e sarar (`mcp__<sunucu>__<araç>`, hep `mutating`)
+  - `engine.ts` — koşu döngüsü (AI SDK tool-calling), izin kapısı, durum makinesi, iptal,
+    MCP bağlan/kapat (koşu ömrüyle eşleşir)
 
 ### packages/cli/src — symphony komutu
 - `index.ts` — commander kayıtları; argümansız → TUI

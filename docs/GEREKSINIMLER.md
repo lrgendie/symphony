@@ -37,7 +37,7 @@
 | `@ai-sdk/openai` | GPT adapter'ı |
 | `@ai-sdk/google` | Gemini adapter'ı |
 | `@ai-sdk/openai-compatible` | Yerel Ollama adapter'ı (OpenAI-uyumlu `/v1` ucu üzerinden). Not 2026-07-03: topluluk paketi `ollama-ai-provider(-v2)` AI SDK v7 + zod v3 ile uyumsuz çıktı → resmî paket seçildi |
-| `@modelcontextprotocol/sdk` | MCP istemcisi — harici araç sunucuları |
+| `@modelcontextprotocol/sdk` | MCP istemcisi — harici araç sunucuları ✅ kuruldu 2026-07-05 |
 | `better-sqlite3` | Yerel veri katmanı: geçmiş, telemetri, skorlar |
 | `keytar` | API anahtarlarını OS keychain'inde saklama |
 | `pino` | Yapılandırılmış loglama (hata telemetrisinin temeli) |
@@ -106,6 +106,7 @@ symphony/                        ← burası (git reposu)
 ~/.symphony/                     ← Windows'ta C:\Users\<ad>\.symphony\
 ├── config.json                  ← genel ayarlar (tema, varsayılan model...)
 ├── providers.json               ← sağlayıcı tanımları (anahtarlar DEĞİL → keychain'de)
+├── mcp-servers.json             ← MCP sunucu kayıt defteri (ADR-007, SPEC-AGENT §2.1)
 ├── agents/                      ← agent tanımları (*.md: rol + araçlar + model)
 ├── memory/                      ← kullanıcı hafızası (tercihler, stil, düzeltmeler)
 ├── data/

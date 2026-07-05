@@ -15,6 +15,7 @@ model: claude-sonnet-5        # boşsa router seçer
 provider: anthropic           # boşsa router seçer
 temperature: 0                # varsayılan zaten 0; yükseltmek bilinçli istisnadır
 tools: [read_file, write_file, edit, glob, grep, run_command]
+mcpServers: [filesystem]      # boşsa MCP aracı yok; bkz. §2.1
 maxSteps: 50                  # döngü sigortası
 ---
 Sen Symphony'nin kod agent'ısın. <sistem prompt'u buraya>
@@ -31,7 +32,35 @@ Sen Symphony'nin kod agent'ısın. <sistem prompt'u buraya>
 
 - Her aracın parametreleri zod ile doğrulanır; doğrulamadan geçmeyen çağrı modele
   `VALIDATION_TOOL_ARGS` hatası olarak geri döner (çalıştırılmaz).
-- MCP araçları (Faz 3 sonu) `mutating` sınıfında başlar; kullanıcı araca özel indirim yapabilir.
+- MCP araçları `mutating` sınıfında başlar; kullanıcı `permissions.json`'da araca özel
+  indirim yapabilir (bkz. §2.1).
+
+### 2.1 MCP istemcisi (ADR-007) — uygulandı 2026-07-05
+
+- Kayıt defteri `~/.symphony/mcp-servers.json` (yalnız `permission.respond` akışının
+  `permissions.json`'a yazması gibi, bu dosyayı da agent DEĞİL kullanıcı/`symphony add`
+  günceller):
+  ```jsonc
+  {
+    "servers": {
+      "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "."] }
+    }
+  }
+  ```
+- Taşıma: yalnız **stdio** (v1 kapsamı — SSE/HTTP taşıma sonraki bir dilimde ele alınır).
+- Agent frontmatter'ındaki `mcpServers: [ad, ...]` hangi sunuculara bağlanacağını seçer;
+  boşsa (varsayılan) hiç MCP bağlantısı açılmaz.
+- Yaşam döngüsü: koşu (`agent.start`) başında listelenen her sunucuya bağlanılır ve
+  `tools/list` çağrılır; koşu bitince (completed/failed/cancelled fark etmez) tümü kapatılır.
+  Sunucular arası paylaşım YOK — her koşu kendi bağlantısını açar (v1 basitliği; havuzlama
+  sonraki bir dilimde değerlendirilebilir).
+- Araç adlandırma: `mcp__<sunucu>__<araç>` (çakışma önleyici namespace). İzin denetimi,
+  diğer araçlarla birebir aynı tek kapıdan (`engine.ts` izin kontrolü) geçer; `permissionTarget`
+  çağrı argümanlarının kısaltılmış JSON'udur (dosya araçlarındaki gibi tek bir `path` alanı
+  varsayılamaz).
+- Hata kodları: `AGENT_MCP_SERVER_UNKNOWN` (frontmatter'daki ad kayıt defterinde yok),
+  `AGENT_MCP_CONNECT_FAILED` (süreç başlatılamadı/handshake başarısız), `AGENT_MCP_TOOL_ERROR`
+  (sunucu `isError: true` döndü — araç hatası, koşu hatası DEĞİL, SPEC §4 ilkesi burada da geçerli).
 
 ## 3. Çalışma alanı hapsi (workspace jail)
 

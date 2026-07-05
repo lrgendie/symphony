@@ -125,6 +125,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     log,
     agentsDir: paths.agentsDir,
     permissionsFile: paths.permissionsFile,
+    mcpServersFile: paths.mcpServersFile,
     // "boşsa router seçer" (SPEC-AGENT §1): ilk öneri kullanılır.
     pickModel: async (task) => {
       const [models, vramGb] = await Promise.all([availableModels(), getVramGb()]);

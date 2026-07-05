@@ -22,6 +22,9 @@ export async function agentsCommand(): Promise<void> {
           model +
           chalk.dim(` · araçlar: ${agent.tools.join(", ")} · maxSteps: ${agent.maxSteps}`),
       );
+      if (agent.mcpServers.length > 0) {
+        console.log(chalk.dim(`  ${" ".repeat(12)} mcp: ${agent.mcpServers.join(", ")}`));
+      }
     }
     console.log(chalk.dim("\nÇalıştır: symphony agent <ad> \"<görev>\""));
   } finally {
