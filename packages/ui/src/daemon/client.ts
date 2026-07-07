@@ -49,6 +49,16 @@ export class DaemonConnection {
     ws.send(JSON.stringify(createMessage("permission.respond", { requestId, decision })));
   }
 
+  /**
+   * Model panosu için tüm-zaman token/maliyet dökümünü ister (bağlanınca çağrılır).
+   * Cevabı (`usage.query.ok`) hello dışı bir replyTo taşır → store.handleEvent seed'ler.
+   */
+  private queryUsage(): void {
+    const ws = this.ws;
+    if (ws === null || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify(createMessage("usage.query", { groupBy: "model" })));
+  }
+
   private open(): void {
     // Aynı anda birden çok soket açılmasın (StrictMode çift-mount / yeniden bağlanma).
     if (this.ws !== null) {
@@ -116,6 +126,8 @@ export class DaemonConnection {
         const ok = payload as EventPayload<"hello.ok">;
         store.applySnapshot(ok.snapshot, ok.daemonVersion);
         store.setStatus("connected");
+        // Snapshot canlı durumu verir ama geçmiş kullanımı değil; ayrı sorguyla seed'liyoruz.
+        this.queryUsage();
       } else if (type === "error") {
         const err = payload as EventPayload<"error">;
         store.setError(`${err.code}: ${err.message}`);

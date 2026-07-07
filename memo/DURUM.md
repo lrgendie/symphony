@@ -3,7 +3,51 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-05 (Oturum 11, Opus — Faz 4 dilim 1-3: dashboard + izin cevaplama + Yaşayan Arayüz küresi)
+**Son güncelleme:** 2026-07-07 (Oturum 12, Opus — Faz 4 dilim 4-5: Model panosu + Donanım vitalleri/Yaşayan Küre)
+
+## Dilim 5 (2026-07-07): Donanım vitalleri → Yaşayan Küre (GPU/VRAM/ısı) — BİTTİ ve testli
+
+Kürenin "çok sade" olması geri bildirimi üzerine küreye **fiziksel donanım katmanı** eklendi.
+Bu, ertelenen VRAM protokol dilimiydi; kural 1 sırasıyla yapıldı:
+- **Protokol (yeni olay):** `PROTOKOL.md` → `hardware.updated {gpus:[{index,name,utilizationPct,
+  memUsedMb,memTotalMb,temperatureC|null}], sampledAt}` → `shared/events.ts` zod şeması
+  (`GpuSampleSchema`+`HardwareUpdatedPayloadSchema`, tipler dışa aktarıldı). Katkı ekleme,
+  PROTOCOL_VERSION değişmedi (eski istemci bilinmeyen olayı düşürür).
+- **Core:** `router/hardware.ts` `sampleGpus()` + saf `parseGpuCsv()` (nvidia-smi: index,name,
+  util,memTotal,memUsed,temp). `daemon.ts` 2sn periyodik poll → `hardware.updated` yayını +
+  yeni bağlanana son örnek anında + `close()`'ta interval temizliği. **Test kapısı:**
+  `DaemonOptions.sampleHardware` (varsayılan true, testlerde false — gerçek nvidia-smi + yayın
+  olay dizisini bozardı). GPU yoksa hiç yayınlanmaz.
+- **UI:** `store.gpus` + `hardware.updated` işleyici (applySnapshot bayatı temizler). Saf
+  `scene/hardware-vitals.ts` `deriveGpuVitals` (en yoğun GPU birincil; load=util/100,
+  heat=sıcaklıktan normalize ya da load'a düşer, memPct). `LivingScene`: kürede yük→zorlanma
+  nabzı + sağ-üste yaslanma, ısı→renk sıcaklığı (cyan→amber→kırmızı lerp), VRAM→şişme; sağ-üst
+  **GPU HUD** (`GPU %util · GB · °C`, ısıyla renklenir).
+- **Test:** hardware.test (parse: çok-GPU/[N/A]/clamp/boş) + hardware-vitals.test (5) + store
+  hardware testi. 168→**177 test**. Build/lint temiz.
+- **Canlı doğrulama:** `nvidia-smi` çıktısı parseGpuCsv formatıyla birebir uyuştu (RTX 4060
+  Laptop, 8GB). **Kürenin görsel tepkisi kullanıcıya** (`desktop:dev`; GPU yükü üretmek için
+  yerel modelle bir koşu başlat → util/ısı yükselince küre ısınıp hızlanmalı).
+
+## Dilim 4 (2026-07-07): Model panosu (token/maliyet) — BİTTİ ve testli
+
+Dashboard artık her modelin token/maliyetini gösteriyor. **Sıfır protokol değişikliği**: daemon
+`usage.updated`'ı (provider+model kümülatif `totals` + tur deltası) zaten yayıyordu ama store
+yok sayıyordu; `usage.query` de kalıcı toplamları döndürüyordu ama UI hiç sormuyordu.
+- `store.ts`: `usageTotals` (tüm-zaman) + `usageByModel` (maliyete göre azalan) + `sessionTokens/
+  sessionCostUsd` (bu bağlantı boyunca biriken delta) eklendi. `usage.updated` → `upsertModelUsage`
+  (girdiyi totals ile DEĞİŞTİRİR, çift saymaz) + genel toplamı yeniden hesaplar + oturum sayacını
+  artırır. `usage.query.ok` → tüm-zaman dökümünü seed'ler. `applySnapshot` oturum sayaçlarını
+  sıfırlar (tüm-zaman dökümüne dokunmaz — onu re-seed usage.query.ok getirir).
+- `daemon/client.ts`: `queryUsage()` — hello.ok'tan sonra `usage.query {groupBy:"model"}` gönderir;
+  cevabı hello-dışı replyTo taşıdığı için `store.handleEvent`'e düşer.
+- `App.tsx`: "Model panosu" bölümü — 4 özet metrik (giriş/çıkış/toplam maliyet/bu oturum) + model
+  başına satır (ad + provider + maliyet + orantılı cyan→magenta çubuk + token dökümü). `fmtTokens`
+  (K/M), `fmtCost` (<$1'de 4 hane).
+- 3 store testi (seed/güncelleme-çift-saymaz/snapshot-sıfırlar). Toplam 165→168 test.
+**VRAM bilerek ERTELENDİ** ayrı dilime: protokolde `hardware`/`vram` YOK → PROTOKOL.md + shared
+şeması + daemon yayını + UI gerektirir; token/maliyetle karıştırmak dikey dilim kuralını bozardı.
+**Görsel doğrulama kullanıcıya** (Bash'ten DOM/panel görülemez; `desktop:dev` ile pencerede izlenir).
 
 ## Dilim 3 (2026-07-05): Yaşayan Arayüz parçacık küresi — BİTTİ ve testli
 
@@ -68,13 +112,14 @@ daemon çalışıyor olmalı** (token dosyası ancak daemon dinlerken yazılır)
 
 ## Sıradaki adım (Faz 4 sonraki dilimler)
 
-1. **"Living Interface"** — Three.js parçacık küresi (`@react-three/fiber`); sistem durumuna
-   göre nefes alır/dalgalanır/renk değiştirir. Tasarım ağırlıklı, Opus için ideal. (Kullanıcı
-   ekranı izlerken yapılınca daha anlamlı.)
-2. **Model panosu** — token/maliyet sayaçları (`usage.updated` olayları zaten geliyor, store
-   henüz toplamıyor), yerel model VRAM.
-3. **Şef Paneli zenginleştirme** — koşu başına araç/dosya ayrıntısı, adım geçmişi.
-4. **CLI → masaüstü otomatik açılış** (config `desktop.autoLaunch`).
+> Küre (dilim 3), Model panosu (dilim 4), Donanım vitalleri/GPU (dilim 5) BİTTİ.
+
+1. **Şef Paneli zenginleştirme** — koşu başına araç/dosya ayrıntısı, adım geçmişi
+   (`agent.step.thinking` olayı geliyor ama store yok sayıyor).
+2. **GPU vitalleri v2 (opsiyonel)** — çok-GPU HUD (şu an yalnız en yoğun GPU); AMD/Apple Silicon
+   (şu an NVIDIA-only); sıcaklık normalizasyon aralığını (`TEMP_MIN/MAX_C`) kart GPU'ya göre ayarla.
+3. **CLI → masaüstü otomatik açılış** (config `desktop.autoLaunch`).
+4. **Tesseract'ı canlı mimari haritasına bağlama** (TASARIM.md §2 — düğümler = sistem bileşenleri).
 
 ## Bekleyenler / kullanıcıdan gerekenler
 

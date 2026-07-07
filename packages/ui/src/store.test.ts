@@ -20,6 +20,11 @@ beforeEach(() => {
     pendingPermissions: [],
     lastErrorAt: null,
     log: [],
+    usageTotals: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+    usageByModel: [],
+    sessionTokens: 0,
+    sessionCostUsd: 0,
+    gpus: [],
   });
 });
 
@@ -100,6 +105,84 @@ describe("ui store", () => {
     expect(useStore.getState().log[0]?.tone).toBe("good");
     store.handleEvent("agent.tool.completed", { runId: RUN, tool: "write_file", ok: false, resultSummary: "PERMISSION_JAIL", durationMs: 0 });
     expect(useStore.getState().log[0]?.tone).toBe("bad");
+  });
+
+  it("usage.query.ok tüm-zaman model dökümünü + toplamı seed'ler (maliyete göre azalan)", () => {
+    useStore.getState().handleEvent("usage.query.ok", {
+      rows: [
+        { key: "claude-sonnet-5", inputTokens: 100, outputTokens: 50, costUsd: 0.02 },
+        { key: "llama3", inputTokens: 300, outputTokens: 200, costUsd: 0 },
+        { key: "gpt-5", inputTokens: 80, outputTokens: 40, costUsd: 0.09 },
+      ],
+      totals: { inputTokens: 480, outputTokens: 290, costUsd: 0.11 },
+    });
+    const s = useStore.getState();
+    expect(s.usageTotals.costUsd).toBeCloseTo(0.11);
+    // En pahalı model başta olmalı.
+    expect(s.usageByModel[0]?.model).toBe("gpt-5");
+    expect(s.usageByModel).toHaveLength(3);
+  });
+
+  it("usage.updated modelin toplamını değiştirir (çift saymaz), genel toplamı yeniden hesaplar, oturum sayacını artırır", () => {
+    const store = useStore.getState();
+    store.handleEvent("usage.query.ok", {
+      rows: [{ key: "claude-sonnet-5", inputTokens: 100, outputTokens: 50, costUsd: 0.02 }],
+      totals: { inputTokens: 100, outputTokens: 50, costUsd: 0.02 },
+    });
+    // totals = kümülatif (delta içinde), delta = bu tur.
+    store.handleEvent("usage.updated", {
+      provider: "anthropic",
+      model: "claude-sonnet-5",
+      deltaTokens: 30,
+      deltaCostUsd: 0.01,
+      totals: { inputTokens: 120, outputTokens: 60, costUsd: 0.03 },
+    });
+    const s = useStore.getState();
+    // Girdi DEĞİŞTİRİLDİ (100+50/0.02 değil, 120+60/0.03) — çift sayım yok.
+    expect(s.usageByModel).toHaveLength(1);
+    expect(s.usageByModel[0]).toMatchObject({ model: "claude-sonnet-5", provider: "anthropic", costUsd: 0.03 });
+    expect(s.usageTotals.costUsd).toBeCloseTo(0.03);
+    // Oturum sayacı deltayı biriktirir.
+    expect(s.sessionTokens).toBe(30);
+    expect(s.sessionCostUsd).toBeCloseTo(0.01);
+  });
+
+  it("applySnapshot oturum sayaçlarını sıfırlar ama tüm-zaman dökümüne dokunmaz", () => {
+    const store = useStore.getState();
+    store.handleEvent("usage.query.ok", {
+      rows: [{ key: "gpt-5", inputTokens: 10, outputTokens: 5, costUsd: 0.05 }],
+      totals: { inputTokens: 10, outputTokens: 5, costUsd: 0.05 },
+    });
+    store.handleEvent("usage.updated", {
+      provider: "openai",
+      model: "gpt-5",
+      deltaTokens: 15,
+      deltaCostUsd: 0.05,
+      totals: { inputTokens: 20, outputTokens: 10, costUsd: 0.1 },
+    });
+    expect(useStore.getState().sessionTokens).toBe(15);
+
+    useStore.getState().applySnapshot({ providers: [], runs: [], pendingPermissions: [] }, "0.1.0");
+    const s = useStore.getState();
+    expect(s.sessionTokens).toBe(0);
+    expect(s.sessionCostUsd).toBe(0);
+    // Tüm-zaman dökümü korunur (yeniden seed usage.query.ok ile gelir).
+    expect(s.usageByModel).toHaveLength(1);
+    expect(s.usageTotals.costUsd).toBeCloseTo(0.1);
+  });
+
+  it("hardware.updated GPU örneğini saklar; applySnapshot bayat örneği temizler", () => {
+    const store = useStore.getState();
+    store.handleEvent("hardware.updated", {
+      gpus: [{ index: 0, name: "RTX 4070", utilizationPct: 90, memUsedMb: 8100, memTotalMb: 12282, temperatureC: 72 }],
+      sampledAt: 1,
+    });
+    expect(useStore.getState().gpus).toHaveLength(1);
+    expect(useStore.getState().gpus[0]?.utilizationPct).toBe(90);
+
+    // Yeni bağlantı bayat GPU'yu temizler (daemon hello sonrası son örneği yeniden yollar).
+    useStore.getState().applySnapshot({ providers: [], runs: [], pendingPermissions: [] }, "0.1.0");
+    expect(useStore.getState().gpus).toHaveLength(0);
   });
 
   it("log en fazla 200 satır tutar (en yeni başta)", () => {

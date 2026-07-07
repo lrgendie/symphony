@@ -90,6 +90,7 @@ eş zamanlılığının kaynağı budur).
 | `agent.run.failed` | `{ runId, error }` | |
 | `provider.health` | `{ provider, status: "up"\|"down"\|"degraded", latencyMs? }` | Periyodik + değişimde |
 | `usage.updated` | `{ provider, model, deltaTokens, deltaCostUsd, totals }` | Sayaç artışı |
+| `hardware.updated` | `{ gpus: [{ index, name, utilizationPct, memUsedMb, memTotalMb, temperatureC\|null }], sampledAt }` | Yerel GPU vitalleri; periyodik (~2sn) + yeni bağlanınca son örnek. GPU yoksa yayınlanmaz. NVIDIA v1 (nvidia-smi). |
 | `log.entry` | `{ level, source, message, runId? }` | Canlı log akışı (UI log paneli) |
 
 ## 5. Agent durum makinesi

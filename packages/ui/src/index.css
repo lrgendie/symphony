@@ -223,6 +223,89 @@ body {
   white-space: nowrap;
 }
 
+/* ---- Model panosu (token/maliyet) ---- */
+.usage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.usage-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.metric-value {
+  font-size: 16px;
+  font-weight: 600;
+}
+.metric-cyan {
+  color: var(--cyan);
+}
+.metric-magenta {
+  color: var(--magenta);
+}
+.metric-green {
+  color: var(--green);
+}
+.metric-amber {
+  color: var(--amber);
+}
+.metric-label {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.models {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.model-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.model-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.model-name {
+  color: var(--text);
+  font-weight: 600;
+}
+.model-cost {
+  margin-left: auto;
+  color: var(--green);
+}
+.model-bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.model-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--cyan), var(--magenta));
+  transition: width 0.4s ease;
+}
+.model-tokens {
+  font-size: 11px;
+}
+
 /* ---- Yaşayan Arayüz sahnesi (parçacık küresi + HUD) ---- */
 .scene {
   position: relative;
@@ -260,6 +343,51 @@ body {
 }
 .hud-label {
   color: var(--text);
+}
+
+/* GPU vital göstergesi (sağ-üst) — kürenin fiziksel yükü (util/VRAM/sıcaklık) */
+.scene-gpu {
+  position: absolute;
+  right: 14px;
+  top: 12px;
+  width: 172px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(10, 11, 16, 0.55);
+  backdrop-filter: blur(4px);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.gpu-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.gpu-tag {
+  color: var(--dim);
+  letter-spacing: 2px;
+}
+.gpu-util {
+  font-size: 15px;
+  font-weight: 600;
+}
+.gpu-bar-track {
+  height: 5px;
+  margin: 5px 0;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.gpu-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition:
+    width 0.5s ease,
+    background 0.5s ease;
+}
+.gpu-sub {
+  color: var(--dim);
 }
 
 /* ---- İzin kartı ---- */

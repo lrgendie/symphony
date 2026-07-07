@@ -86,7 +86,7 @@ beforeAll(async () => {
     `---\nname: testci\ndescription: ws test\nprovider: fake\nmodel: fake-1\n---\nTest.`,
     "utf8",
   );
-  daemon = await startDaemon({ port: 0, home, testProviders: [new FakeAdapter()] });
+  daemon = await startDaemon({ port: 0, home, testProviders: [new FakeAdapter()], sampleHardware: false });
 });
 
 afterAll(async () => {

@@ -46,6 +46,7 @@ beforeAll(async () => {
     port: 0,
     home: testHome,
     ollamaBaseUrl: `http://127.0.0.1:${ollamaPort}`,
+    sampleHardware: false, // gerçek nvidia-smi + periyodik yayın testleri bozar
   });
 });
 

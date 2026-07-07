@@ -2,9 +2,11 @@ import { create } from "zustand";
 import type {
   ActiveRun,
   EventType,
+  GpuSample,
   PendingPermission,
   ProviderHealth,
   Snapshot,
+  Usage,
 } from "@symphony/shared";
 
 /**
@@ -24,6 +26,16 @@ export interface LogItem {
   text: string;
 }
 
+/** Model panosu satırı: bir modelin tüm-zaman token/maliyet kümülatifi (usage.updated.totals). */
+export interface ModelUsage {
+  model: string;
+  /** İlk seed'de (usage.query groupBy:model) bilinmez; canlı usage.updated ile dolar. */
+  provider?: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
 const MAX_LOG = 200;
 let logSeq = 0;
 
@@ -37,6 +49,15 @@ interface UiState {
   /** Son hata anı (ms) — yaşayan küre kısa bir "kırmızı flaş" için okur (scene/mood.ts). */
   lastErrorAt: number | null;
   log: LogItem[];
+  /** Tüm-zaman token/maliyet toplamı (bağlanınca usage.query ile seed, usage.updated ile büyür). */
+  usageTotals: Usage;
+  /** Model başına tüm-zaman kullanım, maliyete göre azalan sırada. */
+  usageByModel: ModelUsage[];
+  /** Bu bağlantı boyunca biriken token/maliyet (her applySnapshot'ta sıfırlanır). */
+  sessionTokens: number;
+  sessionCostUsd: number;
+  /** Yerel GPU vitalleri (hardware.updated). Yaşayan Küre'yi fiziksel yükle sürer. */
+  gpus: GpuSample[];
   setStatus: (status: ConnStatus) => void;
   setError: (error: string | null) => void;
   applySnapshot: (snapshot: Snapshot, daemonVersion: string) => void;
@@ -49,6 +70,43 @@ interface UiState {
 function short(text: string, max = 96): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine;
+}
+
+const EMPTY_USAGE: Usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+
+function sumUsage(items: ReadonlyArray<ModelUsage>): Usage {
+  return items.reduce<Usage>(
+    (acc, m) => ({
+      inputTokens: acc.inputTokens + m.inputTokens,
+      outputTokens: acc.outputTokens + m.outputTokens,
+      costUsd: acc.costUsd + m.costUsd,
+    }),
+    { ...EMPTY_USAGE },
+  );
+}
+
+/**
+ * Bir modelin girdisini yeni kümülatif toplamla (usage.updated.totals) DEĞİŞTİRİR — eklemez.
+ * totals zaten deltayı içerir (daemon isteği kaydettikten sonra hesaplar), o yüzden çift sayım yok.
+ * Maliyete göre azalan sıralar (en pahalı model başta).
+ */
+function upsertModelUsage(
+  list: ReadonlyArray<ModelUsage>,
+  model: string,
+  provider: string | undefined,
+  totals: Usage,
+): ModelUsage[] {
+  const rest = list.filter((m) => m.model !== model);
+  return [
+    ...rest,
+    {
+      model,
+      provider,
+      inputTokens: totals.inputTokens,
+      outputTokens: totals.outputTokens,
+      costUsd: totals.costUsd,
+    },
+  ].sort((a, b) => b.costUsd - a.costUsd);
 }
 
 export const useStore = create<UiState>((set) => {
@@ -80,6 +138,11 @@ export const useStore = create<UiState>((set) => {
     pendingPermissions: [],
     lastErrorAt: null,
     log: [],
+    usageTotals: { ...EMPTY_USAGE },
+    usageByModel: [],
+    sessionTokens: 0,
+    sessionCostUsd: 0,
+    gpus: [],
 
     setStatus: (status) => set({ status, ...(status === "connected" ? { error: null } : {}) }),
     setError: (error) => set({ error }),
@@ -89,11 +152,17 @@ export const useStore = create<UiState>((set) => {
       })),
 
     applySnapshot: (snapshot, daemonVersion) =>
+      // Yeni bağlantı = yeni oturum görünümü: canlı deltalar sıfırdan sayılır.
+      // usageTotals/usageByModel'e DOKUNMAZ — bağlanınca gelen usage.query.ok onları seed'ler.
       set({
         daemonVersion,
         providers: snapshot.providers,
         runs: snapshot.runs,
         pendingPermissions: snapshot.pendingPermissions,
+        sessionTokens: 0,
+        sessionCostUsd: 0,
+        // Bayat GPU örneğini temizle; daemon hello sonrası son örneği hemen yeniden yollar.
+        gpus: [],
       }),
 
     handleEvent: (type, payload) => {
@@ -165,6 +234,50 @@ export const useStore = create<UiState>((set) => {
         case "chat.completed": {
           const p = payload as { usage: { inputTokens: number; outputTokens: number; costUsd: number } };
           pushLog("chat", `💬 sohbet turu — ${p.usage.inputTokens}+${p.usage.outputTokens} token · $${p.usage.costUsd.toFixed(4)}`);
+          return;
+        }
+        case "usage.updated": {
+          // totals = o provider+model'in tüm-zaman kümülatifi; delta = bu turun artışı (SPEC).
+          const p = payload as {
+            provider: string;
+            model: string;
+            deltaTokens: number;
+            deltaCostUsd: number;
+            totals: Usage;
+          };
+          set((state) => {
+            const usageByModel = upsertModelUsage(state.usageByModel, p.model, p.provider, p.totals);
+            return {
+              usageByModel,
+              usageTotals: sumUsage(usageByModel),
+              sessionTokens: state.sessionTokens + p.deltaTokens,
+              sessionCostUsd: state.sessionCostUsd + p.deltaCostUsd,
+            };
+          });
+          return;
+        }
+        case "usage.query.ok": {
+          // Bağlanınca gönderilen usage.query {groupBy:"model"} cevabı — tüm-zaman dökümünü seed'ler.
+          const p = payload as {
+            rows: Array<{ key: string; inputTokens: number; outputTokens: number; costUsd: number }>;
+            totals: Usage;
+          };
+          set({
+            usageByModel: p.rows
+              .map((r) => ({
+                model: r.key,
+                inputTokens: r.inputTokens,
+                outputTokens: r.outputTokens,
+                costUsd: r.costUsd,
+              }))
+              .sort((a, b) => b.costUsd - a.costUsd),
+            usageTotals: p.totals,
+          });
+          return;
+        }
+        case "hardware.updated": {
+          const p = payload as { gpus: GpuSample[] };
+          set({ gpus: p.gpus });
           return;
         }
         default:

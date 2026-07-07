@@ -160,6 +160,28 @@ export const UsageUpdatedPayloadSchema = z
   })
   .strip();
 
+/** Tek bir GPU'nun anlık vitalleri (nvidia-smi'den örneklenir). `temperatureC` null olabilir (bazı GPU'lar bildirmez). */
+export const GpuSampleSchema = z
+  .object({
+    index: z.number().int().nonnegative(),
+    name: z.string().min(1),
+    utilizationPct: z.number().min(0).max(100),
+    memUsedMb: z.number().nonnegative(),
+    memTotalMb: z.number().nonnegative(),
+    temperatureC: z.number().nullable(),
+  })
+  .strip();
+export type GpuSample = z.infer<typeof GpuSampleSchema>;
+
+/** Yerel donanım vitalleri — Yaşayan Küre'yi fiziksel yükle sürer (TASARIM.md §2). */
+export const HardwareUpdatedPayloadSchema = z
+  .object({
+    gpus: z.array(GpuSampleSchema),
+    sampledAt: z.number().int().nonnegative(),
+  })
+  .strip();
+export type HardwareUpdatedPayload = z.infer<typeof HardwareUpdatedPayloadSchema>;
+
 export const LogEntryPayloadSchema = z
   .object({
     level: z.enum(["debug", "info", "warn", "error"]),
@@ -196,6 +218,7 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   "permission.resolved": PermissionResolvedPayloadSchema,
   "provider.health": ProviderHealthSchema,
   "usage.updated": UsageUpdatedPayloadSchema,
+  "hardware.updated": HardwareUpdatedPayloadSchema,
   "log.entry": LogEntryPayloadSchema,
   error: ErrorPayloadSchema,
 } as const;

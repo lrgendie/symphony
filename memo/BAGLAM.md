@@ -50,7 +50,9 @@ protokol WS/REST üzerinden konuşulur.
   adapter'a özgü (Claude 4.7+/GPT-5 KABUL ETMEZ → iletilmez; Gemini/Ollama iletilir)
 - `providers/pricing.ts` — USD/1M token tablosu; bilinmeyen model = 0 (yerel)
 - `router/router.ts` — kural tabanlı model önerisi v1 (`router.suggest`)
-- `router/hardware.ts` — nvidia-smi'den VRAM tespiti
+- `router/hardware.ts` — nvidia-smi: `detectVramGb` (router) + `sampleGpus`/`parseGpuCsv` (saf,
+  testli) → GPU vitalleri (util/VRAM/ısı). Daemon 2sn poll → `hardware.updated` yayını
+  (`DaemonOptions.sampleHardware`, testte kapalı)
 - `db/store.ts` — SQLite (better-sqlite3, WAL); göçler `MIGRATIONS` dizisinde
   (v1 requests+telemetry, v2 sessions+messages, v3 agent_runs+agent_steps)
 - `secrets/secret-store.ts` — OS keychain + env yedek; anahtar DİSKE YAZILMAZ
@@ -83,10 +85,18 @@ protokol WS/REST üzerinden konuşulur.
 - `config.ts` — `getBootstrap()`: token+port'u `window.__SYMPHONY__` (Tauri enjekte eder) ya
   da `import.meta.env` (tarayıcı dev, `dev:token` script'i .env.local'e yazar) kaynağından alır
 - `daemon/client.ts` — `DaemonConnection`: native WebSocket + `shared` şemaları; hello
-  handshake → snapshot → yayın olaylarını store'a akıtır; üstel geri çekilmeli yeniden bağlanma
-- `store.ts` — zustand; `handleEvent` olay tiplerini UI durumuna (providers/runs/log/pending)
-  çevirir. **WS→UI eşlemesinin TEK yeri** (testli: `store.test.ts`)
-- `App.tsx` — Şef Paneli: bağlantı durumu + sağlayıcı sağlığı + aktif koşular + canlı akış
+  handshake → snapshot → yayın olaylarını store'a akıtır; bağlanınca `queryUsage()`
+  (`usage.query {groupBy:"model"}`); üstel geri çekilmeli yeniden bağlanma
+- `store.ts` — zustand; `handleEvent` olay tiplerini UI durumuna (providers/runs/log/pending +
+  usage: `usageTotals`/`usageByModel`/oturum deltası) çevirir. **WS→UI eşlemesinin TEK yeri**
+  (testli: `store.test.ts`). Usage: `usage.query.ok` seed'ler, `usage.updated` girdiyi totals'la
+  DEĞİŞTİRİR (çift saymaz)
+- `App.tsx` — Şef Paneli: bağlantı + sağlayıcı sağlığı + **Model panosu** (token/maliyet, model
+  başına çubuk) + aktif koşular + izin kartları + canlı akış
+- `scene/LivingScene.tsx` — Three.js parçacık küresi (@react-three/fiber): mood katmanı (ne
+  yapıyor) + **donanım vitalleri katmanı** (GPU yük→nabız, ısı→renk, VRAM→şişme) + sağ-üst GPU HUD
+- `scene/mood.ts` — SAF: sistem durumu → mood (offline>error>awaiting>executing>thinking>idle) + stil
+- `scene/hardware-vitals.ts` — SAF: `deriveGpuVitals` (en yoğun GPU → load/heat/memPct). Testli
 - `index.css` — marka paleti (cyan/magenta/red, logo ile aynı); düz CSS
 
 ### packages/desktop/src-tauri — Tauri 2 kabuğu (Rust) — `ui/dist`'i sarar

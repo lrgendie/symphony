@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
-import { PROTOCOL_VERSION, type PendingPermission } from "@symphony/shared";
+import { PROTOCOL_VERSION, type PendingPermission, type Usage } from "@symphony/shared";
 import { daemon, type PermissionDecision } from "./daemon/client";
 import { LivingScene } from "./scene/LivingScene";
-import { useStore, type ConnStatus, type LogTone } from "./store";
+import { useStore, type ConnStatus, type LogTone, type ModelUsage } from "./store";
 
 /**
  * Faz 4 dilim 1-2 — "Şef Paneli": bağlantı durumu, sağlayıcı sağlığı, aktif agent
@@ -23,6 +23,10 @@ export function App(): React.JSX.Element {
   const runs = useStore((s) => s.runs);
   const pending = useStore((s) => s.pendingPermissions);
   const log = useStore((s) => s.log);
+  const usageTotals = useStore((s) => s.usageTotals);
+  const usageByModel = useStore((s) => s.usageByModel);
+  const sessionTokens = useStore((s) => s.sessionTokens);
+  const sessionCostUsd = useStore((s) => s.sessionCostUsd);
 
   const active = runs.length > 0 || pending.length > 0;
 
@@ -66,6 +70,18 @@ export function App(): React.JSX.Element {
             </span>
           ))}
         </div>
+      </section>
+
+      <section className="panel">
+        <h2>
+          Model panosu <span className="count">${fmtCost(usageTotals.costUsd)}</span>
+        </h2>
+        <ModelBoard
+          totals={usageTotals}
+          byModel={usageByModel}
+          sessionTokens={sessionTokens}
+          sessionCostUsd={sessionCostUsd}
+        />
       </section>
 
       <section className="panel">
@@ -148,6 +164,88 @@ function Diff({ diff }: { diff: string }): React.JSX.Element {
       })}
     </pre>
   );
+}
+
+function ModelBoard({
+  totals,
+  byModel,
+  sessionTokens,
+  sessionCostUsd,
+}: {
+  totals: Usage;
+  byModel: ModelUsage[];
+  sessionTokens: number;
+  sessionCostUsd: number;
+}): React.JSX.Element {
+  // Çubuk genişliği en pahalı modele göre orantılı (göreli maliyet payı okunur olsun).
+  const maxCost = byModel.reduce((m, r) => Math.max(m, r.costUsd), 0);
+  return (
+    <div className="usage">
+      <div className="usage-summary">
+        <Metric label="giriş" value={fmtTokens(totals.inputTokens)} accent="cyan" />
+        <Metric label="çıkış" value={fmtTokens(totals.outputTokens)} accent="magenta" />
+        <Metric label="toplam maliyet" value={`$${fmtCost(totals.costUsd)}`} accent="green" />
+        <Metric
+          label="bu oturum"
+          value={`${fmtTokens(sessionTokens)} · $${fmtCost(sessionCostUsd)}`}
+          accent="amber"
+        />
+      </div>
+      {byModel.length === 0 ? (
+        <p className="dim empty">Henüz kullanım yok — terminalde bir sohbet ya da agent koşusu başlat.</p>
+      ) : (
+        <ul className="models">
+          {byModel.map((m) => (
+            <li key={m.model} className="model-row">
+              <div className="model-head">
+                <span className="model-name">{m.model}</span>
+                {m.provider !== undefined && <span className="dim">{m.provider}</span>}
+                <span className="model-cost">${fmtCost(m.costUsd)}</span>
+              </div>
+              <div className="model-bar-track">
+                <div
+                  className="model-bar"
+                  style={{ width: `${maxCost > 0 ? (m.costUsd / maxCost) * 100 : 0}%` }}
+                />
+              </div>
+              <div className="model-tokens dim">
+                {fmtTokens(m.inputTokens)} giriş · {fmtTokens(m.outputTokens)} çıkış
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: "cyan" | "magenta" | "green" | "amber";
+}): React.JSX.Element {
+  return (
+    <div className="metric">
+      <span className={`metric-value metric-${accent}`}>{value}</span>
+      <span className="metric-label dim">{label}</span>
+    </div>
+  );
+}
+
+/** Token sayısını okunur kısaltır: 1234 → 1.2K, 2_500_000 → 2.5M. */
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+/** Maliyet: dev'de çok küçük olabildiği için <$1'de 4 hane, üstünde 2 hane. */
+function fmtCost(n: number): string {
+  return n >= 1 ? n.toFixed(2) : n.toFixed(4);
 }
 
 function StatusPill({ status }: { status: ConnStatus }): React.JSX.Element {

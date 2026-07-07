@@ -44,6 +44,19 @@ Durum → görsel eşlemesi (her hareketin anlamı):
 - **izin bekliyor (awaiting):** amber nabız — kullanıcı eylemi bekleniyor.
 - **hata (failed):** kısa kırmızı flaş + dağılma, sonra toparlanma.
 
+**Fiziksel vitaller (donanım katmanı — 2026-07-07 eklendi):** Küre iki katman sürer.
+Mood (yukarıdaki) sistemin NE YAPTIĞINI; donanım vitalleri fiziksel olarak NE HİSSETTİĞİNİ
+gösterir. Kaynak: `hardware.updated` olayı (yerel GPU; NVIDIA v1, nvidia-smi ~2sn). Yalnız
+gerçekten ölçülen telemetri kullanılır — uydurma metrik yok (ilke: her hareketin GERÇEK anlamı).
+- **GPU kullanımı %** → "zorlanma nabzı": yük arttıkça küre hızlanır ve daha güçlü/sık atar;
+  ayrıca sağ-üstteki GPU göstergesine doğru hafif "yaslanma" (yük yükseldiğinde o köşeye throb).
+- **GPU sıcaklığı °C** → renk sıcaklığı: soğukken taban (cyan/mood) renginde, ısındıkça
+  amber→kırmızıya karışır ("renk sıcaklığının artması"). Sıcaklık okunamazsa yük'ten türetilir.
+- **VRAM doluluğu %** ("ön bellek şişmesi") → kürenin şişmesi (parçacık yarıçapı doluluğa göre büyür).
+- **GPU HUD (sağ-üst):** `GPU %util · kullanılan/toplam GB · °C`; çubuk ve sayı ısıyla renklenir.
+- GPU yoksa (nvidia-smi başarısız/AMD/Apple) katman sessizce kapanır; küre yalnız mood ile sürülür.
+  Bulut/Claude tarafı zaten mood + Model panosuyla yansır. Saf mantık: `ui/scene/hardware-vitals.ts`.
+
 **"Mimari durum" okuması (tesseract'ın ikinci işlevi):** tesseract yalnız logo değil, sistemin
 CANLI mimari haritası olabilir — düğümler = daemon / sağlayıcılar / aktif ajanlar; kenar atımı =
 o an akan veri; kırmızı düğüm = hata/odak. Sağlayıcı bağlanınca düğüm yanar, ajan koşarken

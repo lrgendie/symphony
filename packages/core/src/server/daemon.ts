@@ -9,6 +9,7 @@ import {
   createMessage,
   parseMessage,
   type ErrorPayload,
+  type GpuSample,
   type ModelInfo,
   type ProviderHealth,
   type RequestPayload,
@@ -24,7 +25,7 @@ import { OllamaAdapter } from "../providers/ollama.js";
 import { OpenAIAdapter } from "../providers/openai.js";
 import type { ProviderAdapter } from "../providers/types.js";
 import { DataStore } from "../db/store.js";
-import { detectVramGb } from "../router/hardware.js";
+import { detectVramGb, sampleGpus } from "../router/hardware.js";
 import { suggestModels } from "../router/router.js";
 import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent } from "../agent/definition.js";
@@ -43,6 +44,11 @@ export interface DaemonOptions {
   ollamaBaseUrl?: string;
   /** YALNIZ test: gerçek adapter'ların yerine geçer (agent motoru senaryoları için). */
   testProviders?: ProviderAdapter[];
+  /**
+   * GPU vital örneklemesi (`hardware.updated`). Testlerde kapatılır: gerçek nvidia-smi
+   * çağrısı + periyodik yayın, olay dizisi bekleyen testleri bozar. Varsayılan: true.
+   */
+  sampleHardware?: boolean;
 }
 
 export interface RunningDaemon {
@@ -93,6 +99,24 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   const bus = new EventBus();
   const activeChats = new Map<string, AbortController>();
+
+  // Yerel GPU vitalleri (TASARIM §2): periyodik örneklenir, hardware.updated ile TÜM istemcilere
+  // yayınlanır; yeni bağlanan istemciye son örnek anında gönderilir. Snapshot GPU taşımaz —
+  // bu canlı telemetri, geçmiş değil. GPU yoksa (nvidia-smi başarısız) hiç yayınlanmaz.
+  const HARDWARE_POLL_MS = 2000;
+  let latestHardware: { gpus: GpuSample[]; sampledAt: number } | null = null;
+  let hardwareTimer: NodeJS.Timeout | null = null;
+  if (options.sampleHardware ?? true) {
+    const pollHardware = async (): Promise<void> => {
+      const gpus = await sampleGpus();
+      latestHardware = { gpus, sampledAt: Date.now() };
+      if (gpus.length > 0) bus.broadcast("hardware.updated", latestHardware);
+    };
+    void pollHardware();
+    // unref: yalnız GPU örneklemek için süreç ayakta tutulmaz (kapanışı geciktirmez).
+    hardwareTimer = setInterval(() => void pollHardware(), HARDWARE_POLL_MS);
+    hardwareTimer.unref();
+  }
 
   // VRAM bir kez tespit edilir (alt süreç maliyeti); ilk router.suggest'te tembel başlar.
   let vramProbe: Promise<number | null> | null = null;
@@ -401,6 +425,10 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             },
             message.id,
           );
+          // Son GPU örneğini anında ver (bir sonraki periyodik tik'i beklemesin).
+          if (latestHardware !== null && latestHardware.gpus.length > 0) {
+            bus.sendTo(ws, "hardware.updated", latestHardware);
+          }
           return;
         }
 
@@ -550,6 +578,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     port: boundPort,
     token,
     close: async () => {
+      if (hardwareTimer !== null) clearInterval(hardwareTimer);
       engine.cancelAll();
       for (const abort of activeChats.values()) abort.abort();
       // Açık istemci soketleri koparılmazsa app.close() sonsuza dek bekleyebilir.
