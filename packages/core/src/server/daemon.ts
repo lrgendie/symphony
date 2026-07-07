@@ -31,7 +31,7 @@ import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent } from "../agent/definition.js";
 import { registerMcpServer } from "../agent/mcp.js";
 import { EventBus } from "./bus.js";
-import { generateDaemonToken, persistDaemonToken } from "./token.js";
+import { generateDaemonToken, loadExistingToken, persistDaemonToken } from "./token.js";
 
 export const DAEMON_VERSION = "0.1.0";
 
@@ -77,7 +77,8 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     }
   }
 
-  const token = generateDaemonToken();
+  // Diskteki geçerli token'ı yeniden kullan (daemon restart'ında istemciler kopmasın); yoksa üret.
+  const token = loadExistingToken(paths.daemonTokenFile) ?? generateDaemonToken();
   const log = pino({ name: "symphonyd" });
 
   const secrets = await createSecretStore();
