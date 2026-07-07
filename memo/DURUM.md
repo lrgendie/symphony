@@ -3,7 +3,25 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-07 (Oturum 12, Opus — Faz 4 dilim 4-6: Model panosu + Donanım vitalleri + API kapasitesi/cache)
+**Son güncelleme:** 2026-07-07 (Oturum 12, Opus — Faz 4 dilim 4-7: Model panosu + Donanım vitalleri + API kapasitesi/cache + Yaşayan Küre revizyonu/vektörel dalga)
+
+## Dilim 7 (2026-07-07): Yaşayan Küre revizyonu → vektörel dalga — BİTTİ ve testli
+
+Kullanıcının ⭐ öncelikli isteği: küre yüke ANİDEN biniyordu ve ölçek "zorlanma nabzı" yüksek-frekans
+kalp atışı gibiydi. Yeni model: yük ifadesi ölçek→YÜZEY DALGASI (ses-dalgası estetiği).
+- **Yeni saf modül:** `ui/scene/wave-field.ts` (SAF, testli) — `rotateDir`+`focusWeight`+`computeWaveField`.
+  Dönüş pozisyona pişirilir (Option B) → odak/dalga yönü world-uzayında sabit (sağ-üst EKRANDA sabit).
+  Yön birleştirildi: odak = dalga = `normalize(1,1,0.4)`. ShaderMaterial yerine CPU BufferAttribute
+  (1700 parçacık ucuz; test disiplinine uyar). **Protokol DEĞİŞMEDİ** (mevcut `gpus` + mood).
+- **mood.ts:** `MoodStyle.activity` (GPU'dan bağımsız LLM canlılık sürücüsü; bulut LLM'de dalgayı sürer).
+- **LivingScene.tsx:** strain-nabzı + lean-throb KALDIRILDI. Yumuşatma ref'leri (`drive`/`heatSmooth`,
+  kare-hızından bağımsız exp lerp; RISE_TAU .55 / FALL_TAU 1.4). `drive = max(gpuLoad, activity)`.
+  pointsMaterial `vertexColors` (per-parçacık renk). Ölçek = yumuşak nefes + VRAM swell (korundu).
+- **Test:** wave-field.test (11). 185→**196**. **Yan düzeltme:** `router.ts:134` tanımsız `localFitsatı`
+  → `localFits` (son "otomatik yedek" commit'inin yarım bıraktığı, 7 testi kıran hata). build/lint temiz.
+- **TASARIM.md §2** güncellendi ("yük ifadesi = vektörel dalga").
+- **Görsel doğrulama kullanıcıya:** `desktop:dev` (UI-only → daemon restart gerekmez, Vite HMR).
+  Yerel qwen3:8b koşusu → dalga sağ-üste atmalı/ısınmalı; Claude/Gemini sohbeti → mood-activity dalgayı sürer.
 
 ## Dilim 6 (2026-07-07): API kapasitesi (rate-limit) + prompt-cache göstergesi — BİTTİ ve testli
 
@@ -135,38 +153,13 @@ daemon çalışıyor olmalı** (token dosyası ancak daemon dinlerken yazılır)
 
 ## Sıradaki adım (Faz 4 sonraki dilimler)
 
-> Küre (dilim 3), Model panosu (dilim 4), GPU vitalleri (dilim 5), API kapasitesi+cache (dilim 6) BİTTİ.
+> Küre (dilim 3), Model panosu (4), GPU vitalleri (5), API kapasitesi+cache (6), Küre revizyonu/
+> vektörel dalga (7) BİTTİ. Sırada, kullanıcının görsel ince ayarından sonra aşağıdakiler:
 
-### ⭐ ÖNCELİK — Yaşayan Küre revizyonu (kullanıcı isteği 2026-07-07, tasarım ağırlıklı → Opus)
-
-**Kullanıcının tam isteği (aynen):** "Daha smooth/yumuşak olsun; yüke ANİDEN biniyor, bindiği
-sürece yüksek nabızda atıyor gibi. Kürenin 'atımından' kastım nabız/kalp atışı DEĞİL — küreyi
-oluşturan noktaların, GPU parametresinin yazılı olduğu tarafa (SAĞ-ÜST) fiziksel VEKTÖREL atım/
-yükselme yapması. LLM çalışınca (Gemini/Claude ile SESLİ SOHBET gibi) ses dalgasına göre DALGASAL
-atılım yapması. GPU hemen %100 oluyor, ani dalgalanma olacak ama daha ESTETİK olsun. Dalgalanma
-vektörel atış; renk sıcaklığı dalga yönüne gelecek, kürenin rengi değişecek, atılım dalga yönüne
-doğru KESKİNLEŞECEK." (Bağlam: qwen3:8b'yi CLI'dan çalıştırınca GPU %98/69°C, mevcut scale-nabzı
-rahatsız etti.)
-
-**Teknik yorum / yapılacaklar (`ui/src/scene/LivingScene.tsx` + `hardware-vitals.ts`):**
-1. **Girişi yumuşat.** GPU util 0→%100 anında sıçrıyor → `smoothedLoad`/`smoothedHeat` ref'leri,
-   her karede hedefe küçük katsayıyla lerp (~0.02–0.04). Ham veri sert, görsel yumuşak ramp.
-2. **Scale "strain" nabzını KALDIR** (`sin(t*(4+load*10))*load*0.06`) — kullanıcının sevmediği
-   yüksek-frekans kalp atışı bu. Yük ifadesi artık ölçek değil, YÜZEY deformasyonu olacak.
-3. **Vektörel dalga deformasyonu (ses-dalgası estetiği).** Parçacıkları radyal normal boyunca ötele:
-   `r = R + amp*dalga`; dalga = yüzeyde ilerleyen sinüs `sin(dot(dirWorld,waveDir)*k - t*speed)`
-   (+harmonikler), genlik `smoothedLoad` ile. 1700 parçacık: ShaderMaterial/vertex shader tercih
-   (60fps; CPU BufferAttribute güncelleme de olur).
-4. **Yönlü (sağ-üst) yoğunlaşma + keskinleşme.** Ekran-uzayı sabit yön `normalize(1,1,~0.4)` ile
-   parçacığın WORLD (dönmüş) yönünün dot'u → `max(0,dot)^p` düşüşüyle o bölgede genlik artsın; p
-   üsteli ile "dalga yönüne doğru sivrilt". Küre dönerken bölge EKRANDA sabit kalsın → world-uzayı
-   kullan (local değil).
-5. **Yönlü renk.** Tüm küreye tek-tip lerp yerine, dalga/sağ-üst bölgesinde ısıya göre sıcaklaştır:
-   per-parçacık renk (BufferGeometry color attribute + `vertexColors`) VEYA shader'da bölgesel karışım.
-6. **LLM aktivitesi de sürsün.** "Sesli sohbet dalgası" benzetmesi: mood `thinking`/`executing_tool`
-   (LLM çalışıyor) da dalga genliğini artırsın — GPU yükü + LLM aktivitesi ortak "canlılık" sürücüsü
-   (yerelde ikisi birlikte; bulut LLM'de GPU yükselmez, mood dalgayı sürer).
-7. Yumuşak mood "breathe" korunur; yalnız yük ifadesi scale→dalga olur. `docs/TASARIM.md` §2 güncelle.
+> **NOT (dilim 7 sonrası):** Küre revizyonu kodu+testi BİTTİ; kullanıcının canlı görsel onayı ve
+> olası ince ayarı bekleniyor (wave-field.ts ayar sabitleri: MAX_DISP/WAVE_K/WAVE_SPEED/FOCUS_EXP/
+> FOCUS_BULGE/RISE_TAU/FALL_TAU). "Çok zayıf/çok abartılı/yön yanlış" gibi bir geri bildirim gelirse
+> yalnız bu sabitler oynanır (matematik/mimari sağlam). Yön ekseni `FOCUS_DIR = normalize(1,1,0.4)`.
 
 **Sonraki dilimler:**
 
@@ -179,6 +172,32 @@ rahatsız etti.)
    (şu an NVIDIA-only); sıcaklık normalizasyon aralığını (`TEMP_MIN/MAX_C`) kart GPU'ya göre ayarla.
 3. **CLI → masaüstü otomatik açılış** (config `desktop.autoLaunch`).
 4. **Tesseract'ı canlı mimari haritasına bağlama** (TASARIM.md §2 — düğümler = sistem bileşenleri).
+
+## ⚠️ OTURUM 12 SONU — bilgisayar yeniden başlatılıyor (2026-07-07 ~15:15)
+
+**Bağlam:** Kullanıcı küre revizyonunu denemek için terminalde `symphony` çalıştırdı; ekranda bir
+"exe" penceresi çok hızlı açılıp kapanıp tekrar açıldı (yetişip okuyamadı). Teşhis edildi, kod+test
+BİTTİ, kullanıcı makineyi yeniden başlatacak. Yeniden başlattıktan sonra buradan devam:
+
+**1. Flaşlayan pencerenin sebebi (TEŞHİS):** `packages/cli/src/client/daemon-client.ts:350`
+`spawn(..., { detached: true, stdio: "ignore" })` — **`windowsHide: true` YOK**. Windows'ta detached
+node.exe görünür konsol penceresi açar → daemon başlatılırken flaş. **Düzeltme uygulandı** (windowsHide
+eklendi); etki için `pnpm build` (cli+core) + global CLI yeniden link/kurulum gerekebilir. Daemon'ın
+KENDİSİ sağlıklıydı (tek süreç, /api/health ok, port 7770) — crash loop değildi, yalnız pencere flaşı.
+
+**2. Küreyi CLI ile DENEYEMEZSİN — yanlış araç.** `symphony` = terminal TUI (Ink); küreyi (Three.js)
+render ETMEZ. Küre yalnız MASAÜSTÜ uygulamasında. Doğru test yolu (proje kökünden, daemon çalışırken):
+```
+cd C:\Users\brkn2\Desktop\OPTIMUS\symphony
+node packages\core\dist\main.js        # daemon (ayrı terminalde; ya da symphony bir kez çağırınca kalkar)
+pnpm --filter @symphony/desktop desktop:dev   # Tauri penceresi (ilk derleme ~1.5dk)
+```
+Tarayıcı alternatifi (Rust derlemeden): `pnpm --filter @symphony/ui dev:token` → `pnpm --filter @symphony/ui dev` → tarayıcıda aç.
+UI-only değişiklik → Vite HMR yeni sahneyi alır; daemon restart gerekmez (daemon yalnız GPU verisi verir).
+
+**3. Küreyi görünce ne bekle:** yerel model koşusu (qwen3:8b) → dalga sağ-üste doğru atmalı/ısınmalı;
+Claude/Gemini sohbeti → GPU yükselmese de mood-activity dalgayı sürmeli. İnce ayar gerekirse yalnız
+`ui/src/scene/wave-field.ts` ayar sabitleri (MAX_DISP/WAVE_K/WAVE_SPEED/FOCUS_EXP/FOCUS_BULGE/RISE_TAU/FALL_TAU).
 
 ## Bekleyenler / kullanıcıdan gerekenler
 

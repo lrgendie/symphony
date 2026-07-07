@@ -350,6 +350,9 @@ export async function ensureDaemonRunning(home?: string): Promise<EnsureDaemonRe
   const child = spawn(process.execPath, [resolveDaemonEntry()], {
     detached: true,
     stdio: "ignore",
+    // Windows: detached node.exe aksi hâlde görünür bir konsol penceresi açar (kullanıcıya "flaşlayan
+    // exe" gibi görünür). Daemon zaten arka plan sürecidir → pencereyi gizle. POSIX'te etkisizdir.
+    windowsHide: true,
     env: { ...process.env, ...(home !== undefined ? { SYMPHONY_HOME: home } : {}) },
   });
   child.unref();

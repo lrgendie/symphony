@@ -3,35 +3,47 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { deriveMood, MOOD_STYLE, type SphereMood } from "./mood";
 import { deriveGpuVitals, type GpuVitals } from "./hardware-vitals";
+import { computeWaveField } from "./wave-field";
 import { useStore } from "../store";
 
 /**
  * Yaşayan Arayüz (TASARIM.md §2): merkezde nefes alan parçacık küresi. İki katman sürer:
  *  1) MOOD (scene/mood.ts) — sistem NE YAPIYOR: boşta nefes, düşünürken hız, çalışırken
  *     magenta, izin beklerken amber, hatada kırmızı flaş. Taban renk + nefes + dönüş.
- *  2) FİZİKSEL vitaller (scene/hardware-vitals.ts) — donanım NE HİSSEDİYOR: GPU yükü
- *     "zorlanma nabzı" + sağ-üst göstergeye yaslanma, VRAM doluluğu şişme, sıcaklık renk ısısı.
+ *  2) FİZİKSEL vitaller (scene/hardware-vitals.ts) — donanım NE HİSSEDİYOR: GPU yükü.
+ * Yük/LLM aktivitesi ARTIK ölçek-nabzı değil, yüzeyde ilerleyen VEKTÖREL DALGA ile ifade edilir
+ * (scene/wave-field.ts): dalga ekran sağ-üste (GPU göstergesine) doğru rulo yapar, orada keskinleşir
+ * ve ısınır. Ham GPU verisi sert sıçrar; yumuşatma ref'leriyle görsel yumuşak ramp'e çevrilir.
  * Her hareketin gerçek bir anlamı var (TASARIM ilkesi).
  */
 
 const PARTICLE_COUNT = 1700;
 const RADIUS = 1.5;
-/** Isının çektiği "sıcak" uç renk (turuncu-kırmızı); heat=1'de taban renge bu kadar karışır. */
+/** Isının çektiği "sıcak" uç renk (turuncu-kırmızı); odak/ısı arttıkça taban renge bu kadar karışır. */
 const WARM_COLOR = "#ff5a36";
+/** Yumuşatma zaman sabitleri: yüke hızlı ama YUMUŞAK biner, yavaş söner (afterglow). */
+const RISE_TAU = 0.55;
+const FALL_TAU = 1.4;
 
-/** Fibonacci küresi: parçacıkları yüzeye düzgün (kümelenmeden) dağıtır. */
-function fibonacciSphere(count: number, radius: number): Float32Array {
-  const pts = new Float32Array(count * 3);
+/** Fibonacci küresi: birim yönleri yüzeye düzgün (kümelenmeden) dağıtır. */
+function fibonacciSphere(count: number): Float32Array {
+  const dirs = new Float32Array(count * 3);
   const golden = Math.PI * (3 - Math.sqrt(5));
   for (let i = 0; i < count; i++) {
     const y = 1 - (i / (count - 1)) * 2;
     const r = Math.sqrt(Math.max(0, 1 - y * y));
     const theta = golden * i;
-    pts[i * 3] = Math.cos(theta) * r * radius;
-    pts[i * 3 + 1] = y * radius;
-    pts[i * 3 + 2] = Math.sin(theta) * r * radius;
+    dirs[i * 3] = Math.cos(theta) * r;
+    dirs[i * 3 + 1] = y;
+    dirs[i * 3 + 2] = Math.sin(theta) * r;
   }
-  return pts;
+  return dirs;
+}
+
+/** Yumuşatma: hedefe doğru kare-hızından bağımsız (exp) lerp; iniş/çıkış farklı zaman sabiti. */
+function smoothToward(current: number, target: number, delta: number): number {
+  const tau = target > current ? RISE_TAU : FALL_TAU;
+  return current + (target - current) * (1 - Math.exp(-delta / tau));
 }
 
 function Particles({
@@ -42,45 +54,79 @@ function Particles({
   vitals: GpuVitals | null;
 }): React.JSX.Element {
   const ref = useRef<THREE.Points>(null);
-  const target = useRef(new THREE.Color(MOOD_STYLE.idle.color));
-  const base = useRef(new THREE.Color());
-  const warm = useRef(new THREE.Color(WARM_COLOR));
-  const geometry = useMemo(() => {
+  const baseCol = useRef(new THREE.Color());
+  const warm = useMemo(() => {
+    const c = new THREE.Color(WARM_COLOR);
+    return [c.r, c.g, c.b] as [number, number, number];
+  }, []);
+  // Yumuşatılmış sürücüler (ham GPU verisi sert sıçrar; görseli yumuşat).
+  const drive = useRef(0);
+  const heatSmooth = useRef(0);
+  // Biriken dönüş açıları — dönüş wave-field'da pozisyona pişirilir (odak world-uzayında sabit).
+  const angleX = useRef(0);
+  const angleY = useRef(0);
+
+  const { geometry, baseDirs, outPos, outCol, posAttr, colAttr } = useMemo(() => {
+    const dirs = fibonacciSphere(PARTICLE_COUNT);
+    const pos = new Float32Array(PARTICLE_COUNT * 3);
+    const col = new Float32Array(PARTICLE_COUNT * 3);
+    const idle = new THREE.Color(MOOD_STYLE.idle.color);
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const o = i * 3;
+      pos[o] = (dirs[o] ?? 0) * RADIUS;
+      pos[o + 1] = (dirs[o + 1] ?? 0) * RADIUS;
+      pos[o + 2] = (dirs[o + 2] ?? 0) * RADIUS;
+      col[o] = idle.r;
+      col[o + 1] = idle.g;
+      col[o + 2] = idle.b;
+    }
+    const pAttr = new THREE.BufferAttribute(pos, 3);
+    const cAttr = new THREE.BufferAttribute(col, 3);
     const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(fibonacciSphere(PARTICLE_COUNT, RADIUS), 3));
-    return g;
+    g.setAttribute("position", pAttr);
+    g.setAttribute("color", cAttr);
+    return { geometry: g, baseDirs: dirs, outPos: pos, outCol: col, posAttr: pAttr, colAttr: cAttr };
   }, []);
 
-  useFrame((_, delta) => {
+  useFrame((_, rawDelta) => {
     const points = ref.current;
     if (points === null) return;
+    const delta = Math.min(rawDelta, 0.05); // ilk kare / sekme dönüşü sıçramasını sınırla
     const style = MOOD_STYLE[mood];
     const load = vitals?.load ?? 0;
     const heat = vitals?.heat ?? 0;
     const memPct = vitals?.memPct ?? 0;
     const t = performance.now() / 1000;
 
-    // Dönüş: mood hızı + GPU yükü hızlandırır.
-    const spin = style.spin + load * 0.3;
-    points.rotation.y += delta * spin;
-    points.rotation.x += delta * spin * 0.35;
+    // Canlılık sürücüsü = GPU yükü VEYA LLM aktivitesi (bulutta GPU yükselmez, mood sürer).
+    drive.current = smoothToward(drive.current, Math.max(load, style.activity), delta);
+    heatSmooth.current = smoothToward(heatSmooth.current, heat, delta);
 
-    // Ölçek = nefes (mood) + zorlanma nabzı (yük arttıkça hızlı/güçlü) + VRAM şişmesi (kalıcı).
+    // Dönüş açılarını biriktir (mood hızı + sürücü hızlandırır) → wave-field pozisyona pişirir.
+    const spin = style.spin + drive.current * 0.25;
+    angleY.current += delta * spin;
+    angleX.current += delta * spin * 0.35;
+
+    // Yüzey deformasyonu + per-parçacık renk (saf, testli).
+    baseCol.current.set(style.color);
+    computeWaveField(
+      baseDirs,
+      outPos,
+      outCol,
+      { radius: RADIUS, time: t, angleX: angleX.current, angleY: angleY.current, drive: drive.current, heat: heatSmooth.current },
+      [baseCol.current.r, baseCol.current.g, baseCol.current.b],
+      warm,
+    );
+    posAttr.needsUpdate = true;
+    colAttr.needsUpdate = true;
+
+    // Ölçek = yalnız YUMUŞAK nefes (mood) + VRAM şişmesi. Zorlanma-nabzı ve lean-throb KALDIRILDI
+    // (yük ifadesi artık dalga); bunlar kullanıcının sevmediği yüksek-frekans jitter'dı.
     const breathe = Math.sin(t * style.breathe) * style.amp;
-    const strain = Math.sin(t * (4 + load * 10)) * (load * 0.06);
     const swell = (memPct / 100) * 0.08;
-    points.scale.setScalar(1 + breathe + strain + swell);
+    points.scale.setScalar(1 + breathe + swell);
 
-    // Sağ-üst GPU göstergesine "yaslanma": yük arttıkça o köşeye doğru throb (yoksa merkeze döner).
-    const lean = load * 0.18 * (0.6 + 0.4 * Math.sin(t * (3 + load * 6)));
-    points.position.x += (lean - points.position.x) * 0.1;
-    points.position.y += (lean - points.position.y) * 0.1;
-
-    // Renk: mood taban rengi + ısı ile SICAĞA kayma (soğuk cyan → turuncu-kırmızı).
     const material = points.material as THREE.PointsMaterial;
-    base.current.set(style.color);
-    target.current.copy(base.current).lerp(warm.current, heat * 0.7);
-    material.color.lerp(target.current, 0.06);
     material.opacity += (style.opacity - material.opacity) * 0.06;
   });
 
@@ -92,7 +138,7 @@ function Particles({
         transparent
         depthWrite={false}
         blending={THREE.AdditiveBlending}
-        color={MOOD_STYLE.idle.color}
+        vertexColors
         opacity={MOOD_STYLE.idle.opacity}
       />
     </points>

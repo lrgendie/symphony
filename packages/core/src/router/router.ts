@@ -131,7 +131,7 @@ export function suggestModels(
   const vramNote =
     vram === null
       ? "VRAM tespit edilemedi"
-      : localFitsatı
+      : localFits
         ? `VRAM ${vram} GB → 7-8B yerel model rahat`
         : `VRAM ${vram} GB → 7-8B yerel model sığmayabilir`;
 

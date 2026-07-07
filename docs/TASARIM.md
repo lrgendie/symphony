@@ -48,16 +48,33 @@ Durum → görsel eşlemesi (her hareketin anlamı):
 Mood (yukarıdaki) sistemin NE YAPTIĞINI; donanım vitalleri fiziksel olarak NE HİSSETTİĞİNİ
 gösterir. Kaynak: `hardware.updated` olayı (yerel GPU; NVIDIA v1, nvidia-smi ~2sn). Yalnız
 gerçekten ölçülen telemetri kullanılır — uydurma metrik yok (ilke: her hareketin GERÇEK anlamı).
-- **GPU kullanımı %** → "zorlanma nabzı": yük arttıkça küre hızlanır ve daha güçlü/sık atar;
-  ayrıca sağ-üstteki GPU göstergesine doğru hafif "yaslanma" (yük yükseldiğinde o köşeye throb).
+
+**Yük ifadesi = vektörel dalga (2026-07-07 revizyonu).** Erken sürüm yükü bir "zorlanma nabzı"yla
+(ölçek titreşimi) gösteriyordu; kullanıcı bunu yüksek-frekans kalp atışı gibi buldu ve GPU %0→%100
+sıçrayınca ANİ oluyordu. Yeni model: yük artık ölçeği titretmez; kürenin YÜZEYİNDE ilerleyen bir
+**ses-dalgası** olur. İlke: ham veri sert, görsel yumuşak.
+- **Yumuşatma:** ham GPU yükü/ısısı sert sıçrar → yumuşatma ile hedefe hızlı-ama-yumuşak biner,
+  yavaş söner (afterglow). Kare-hızından bağımsız (exp) lerp; iniş/çıkış farklı zaman sabiti.
+- **Vektörel dalga:** parçacıklar radyal normal boyunca ötelenir (`r = R + genlik·dalga`); dalga,
+  yüzeyde ilerleyen sinüs + harmonik. Dalga sabit bir yöne — ekran **SAĞ-ÜST**, GPU göstergesinin
+  yazılı olduğu taraf — doğru rulo yapar. Küre dönerken bu bölge ekranda SABİT kalsın diye dönüş
+  world-uzayında pozisyona pişirilir (parçacıklar sabit "atılım bölgesi"nin içinden akar).
+- **Yönlü keskinleşme:** odak yönüne (`normalize(1,1,0.4)`) hizanın pozitif lobu üsle keskinleştirilir
+  (`max(0,dot)^p`) → genlik o dar bölgede büyür, "dalga yönüne doğru sivrilir" + sabit dışa atılım.
+- **Yönlü renk:** tüm küreye tek-tip değil; ısı × odak bölgesi (+ dalga tepesi) ile per-parçacık
+  taban→sıcak (turuncu-kırmızı) lerp → renk sıcaklığı dalga yönüne gelir, o bölge ısınır.
+- **Ortak sürücü:** dalga genliği `max(GPU yükü, LLM aktivitesi)`. Yerelde GPU yükü sürer; bulut
+  LLM'de (Claude/Gemini sesli sohbet gibi) GPU yükselmez, mood aktivitesi (thinking/executing/…)
+  dalgayı sürer. Kaynak: `mood.ts` `activity` alanı + `hardware-vitals.ts` `load`.
 - **Renk sıcaklığı** → ÖNCELİKLE GPU kullanımına bağlı: kullanım artınca taban (cyan/mood)
   renginden amber→kırmızıya kayar, kullanım düşünce soğur. GPU sıcaklığı yalnız GERÇEKTEN
   kızışınca (termal uyarı eşiği ~72°C üstü) ek sıcaklık katar — böylece boşta ~50°C idle'da
   laptop GPU'su rengi turuncuya kaydırmaz.
-- **VRAM doluluğu %** ("ön bellek şişmesi") → kürenin şişmesi (parçacık yarıçapı doluluğa göre büyür).
+- **VRAM doluluğu %** ("ön bellek şişmesi") → kürenin şişmesi (yumuşak ölçek büyümesi, kalıcı).
+- **Yumuşak nefes** (mood breathe) korunur — küre daima nefes alır; yalnız yük ifadesi ölçek→dalga oldu.
 - **GPU HUD (sağ-üst):** `GPU %util · kullanılan/toplam GB · °C`; çubuk ve sayı ısıyla renklenir.
-- GPU yoksa (nvidia-smi başarısız/AMD/Apple) katman sessizce kapanır; küre yalnız mood ile sürülür.
-  Bulut/Claude tarafı zaten mood + Model panosuyla yansır. Saf mantık: `ui/scene/hardware-vitals.ts`.
+- GPU yoksa (nvidia-smi başarısız/AMD/Apple) katman sessizce kapanır; küre yalnız mood ile sürülür
+  (LLM aktivitesi dalgayı yine de sürer). Saf mantık: `ui/scene/hardware-vitals.ts` + `ui/scene/wave-field.ts`.
 
 **"Mimari durum" okuması (tesseract'ın ikinci işlevi):** tesseract yalnız logo değil, sistemin
 CANLI mimari haritası olabilir — düğümler = daemon / sağlayıcılar / aktif ajanlar; kenar atımı =

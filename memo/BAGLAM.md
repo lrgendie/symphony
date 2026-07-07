@@ -97,9 +97,13 @@ protokol WS/REST üzerinden konuşulur.
 - `App.tsx` — Şef Paneli: bağlantı + sağlayıcı sağlığı + **Model panosu** (token/maliyet/önbellek)
   + **API kapasitesi** (rate-limit çubukları) + aktif koşular + izin kartları + canlı akış
 - `scene/LivingScene.tsx` — Three.js parçacık küresi (@react-three/fiber): mood katmanı (ne
-  yapıyor) + **donanım vitalleri katmanı** (GPU yük→nabız, ısı→renk, VRAM→şişme) + sağ-üst GPU HUD
-- `scene/mood.ts` — SAF: sistem durumu → mood (offline>error>awaiting>executing>thinking>idle) + stil
+  yapıyor) + **vektörel dalga katmanı** (GPU yükü/LLM aktivitesi→yüzey dalgası sağ-üste, ısı→renk,
+  VRAM→şişme). Yumuşatma ref'leri (drive/heatSmooth); ölçek = nefes + swell; sağ-üst GPU HUD
+- `scene/mood.ts` — SAF: sistem durumu → mood (offline>error>awaiting>executing>thinking>idle) +
+  stil. `MoodStyle.activity` = GPU'dan bağımsız LLM dalga sürücüsü (bulut LLM'de dalgayı sürer)
 - `scene/hardware-vitals.ts` — SAF: `deriveGpuVitals` (en yoğun GPU → load/heat/memPct). Testli
+- `scene/wave-field.ts` — SAF, testli: `computeWaveField` (radyal deformasyon + per-parçacık renk),
+  `rotateDir`/`focusWeight`. Yön `FOCUS_DIR=normalize(1,1,0.4)` (sağ-üst); dönüş pozisyona pişirilir
 - `index.css` — marka paleti (cyan/magenta/red, logo ile aynı); düz CSS
 
 ### packages/desktop/src-tauri — Tauri 2 kabuğu (Rust) — `ui/dist`'i sarar
