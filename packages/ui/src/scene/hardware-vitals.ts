@@ -17,13 +17,18 @@ export interface GpuVitals {
   temperatureC: number | null;
   /** 0..1 hesap yükü (util/100) — nabzın hızını/gücünü sürer. */
   load: number;
-  /** 0..1 ısı: sıcaklıktan normalize; sıcaklık okunamıyorsa yük'e düşer. Rengi ısıtır. */
+  /**
+   * 0..1 renk ısısı: ÖNCELİKLE yüke bağlı ("kullanım artınca ısın, düşünce soğu").
+   * Sıcaklık yalnız GERÇEKTEN kızışınca (termal uyarı eşiği üstü) ek sıcaklık katar —
+   * böylece boşta ~50°C idle'da bir laptop GPU'su küreyi turuncuya kaydırmaz.
+   */
   heat: number;
 }
 
-/** Isı normalizasyon aralığı: boştaki tipik GPU ~35°C, yük altında ~84°C'ye yaklaşır. */
-export const TEMP_MIN_C = 35;
-export const TEMP_MAX_C = 84;
+/** Termal uyarı: bu sıcaklığın ALTINDA renk sıcaklığı yalnız yükten gelir (boşta ısı normaldir). */
+export const TEMP_ALERT_C = 72;
+/** Termal tavan: bu sıcaklıkta termal katkı 1'e ulaşır. */
+export const TEMP_MAX_C = 90;
 
 function clamp01(n: number): number {
   if (Number.isNaN(n)) return 0;
@@ -40,10 +45,13 @@ export function deriveGpuVitals(gpus: readonly GpuSample[]): GpuVitals | null {
   const load = clamp01(primary.utilizationPct / 100);
   const memPct =
     primary.memTotalMb > 0 ? clamp01(primary.memUsedMb / primary.memTotalMb) * 100 : 0;
-  const heat =
+  // Renk ısısı = yük (ana) ile termal uyarının EN BÜYÜĞÜ. Termal katkı yalnız TEMP_ALERT_C üstünde
+  // pozitif olur; boşta ılık GPU (ör. 50°C) rengi ısıtmaz.
+  const tempAlert =
     primary.temperatureC === null
-      ? load
-      : clamp01((primary.temperatureC - TEMP_MIN_C) / (TEMP_MAX_C - TEMP_MIN_C));
+      ? 0
+      : clamp01((primary.temperatureC - TEMP_ALERT_C) / (TEMP_MAX_C - TEMP_ALERT_C));
+  const heat = Math.max(load, tempAlert);
   return {
     name: primary.name,
     utilizationPct: primary.utilizationPct,

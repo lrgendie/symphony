@@ -50,8 +50,10 @@ gösterir. Kaynak: `hardware.updated` olayı (yerel GPU; NVIDIA v1, nvidia-smi ~
 gerçekten ölçülen telemetri kullanılır — uydurma metrik yok (ilke: her hareketin GERÇEK anlamı).
 - **GPU kullanımı %** → "zorlanma nabzı": yük arttıkça küre hızlanır ve daha güçlü/sık atar;
   ayrıca sağ-üstteki GPU göstergesine doğru hafif "yaslanma" (yük yükseldiğinde o köşeye throb).
-- **GPU sıcaklığı °C** → renk sıcaklığı: soğukken taban (cyan/mood) renginde, ısındıkça
-  amber→kırmızıya karışır ("renk sıcaklığının artması"). Sıcaklık okunamazsa yük'ten türetilir.
+- **Renk sıcaklığı** → ÖNCELİKLE GPU kullanımına bağlı: kullanım artınca taban (cyan/mood)
+  renginden amber→kırmızıya kayar, kullanım düşünce soğur. GPU sıcaklığı yalnız GERÇEKTEN
+  kızışınca (termal uyarı eşiği ~72°C üstü) ek sıcaklık katar — böylece boşta ~50°C idle'da
+  laptop GPU'su rengi turuncuya kaydırmaz.
 - **VRAM doluluğu %** ("ön bellek şişmesi") → kürenin şişmesi (parçacık yarıçapı doluluğa göre büyür).
 - **GPU HUD (sağ-üst):** `GPU %util · kullanılan/toplam GB · °C`; çubuk ve sayı ısıyla renklenir.
 - GPU yoksa (nvidia-smi başarısız/AMD/Apple) katman sessizce kapanır; küre yalnız mood ile sürülür.
