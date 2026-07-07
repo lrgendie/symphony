@@ -137,6 +137,39 @@ daemon çalışıyor olmalı** (token dosyası ancak daemon dinlerken yazılır)
 
 > Küre (dilim 3), Model panosu (dilim 4), GPU vitalleri (dilim 5), API kapasitesi+cache (dilim 6) BİTTİ.
 
+### ⭐ ÖNCELİK — Yaşayan Küre revizyonu (kullanıcı isteği 2026-07-07, tasarım ağırlıklı → Opus)
+
+**Kullanıcının tam isteği (aynen):** "Daha smooth/yumuşak olsun; yüke ANİDEN biniyor, bindiği
+sürece yüksek nabızda atıyor gibi. Kürenin 'atımından' kastım nabız/kalp atışı DEĞİL — küreyi
+oluşturan noktaların, GPU parametresinin yazılı olduğu tarafa (SAĞ-ÜST) fiziksel VEKTÖREL atım/
+yükselme yapması. LLM çalışınca (Gemini/Claude ile SESLİ SOHBET gibi) ses dalgasına göre DALGASAL
+atılım yapması. GPU hemen %100 oluyor, ani dalgalanma olacak ama daha ESTETİK olsun. Dalgalanma
+vektörel atış; renk sıcaklığı dalga yönüne gelecek, kürenin rengi değişecek, atılım dalga yönüne
+doğru KESKİNLEŞECEK." (Bağlam: qwen3:8b'yi CLI'dan çalıştırınca GPU %98/69°C, mevcut scale-nabzı
+rahatsız etti.)
+
+**Teknik yorum / yapılacaklar (`ui/src/scene/LivingScene.tsx` + `hardware-vitals.ts`):**
+1. **Girişi yumuşat.** GPU util 0→%100 anında sıçrıyor → `smoothedLoad`/`smoothedHeat` ref'leri,
+   her karede hedefe küçük katsayıyla lerp (~0.02–0.04). Ham veri sert, görsel yumuşak ramp.
+2. **Scale "strain" nabzını KALDIR** (`sin(t*(4+load*10))*load*0.06`) — kullanıcının sevmediği
+   yüksek-frekans kalp atışı bu. Yük ifadesi artık ölçek değil, YÜZEY deformasyonu olacak.
+3. **Vektörel dalga deformasyonu (ses-dalgası estetiği).** Parçacıkları radyal normal boyunca ötele:
+   `r = R + amp*dalga`; dalga = yüzeyde ilerleyen sinüs `sin(dot(dirWorld,waveDir)*k - t*speed)`
+   (+harmonikler), genlik `smoothedLoad` ile. 1700 parçacık: ShaderMaterial/vertex shader tercih
+   (60fps; CPU BufferAttribute güncelleme de olur).
+4. **Yönlü (sağ-üst) yoğunlaşma + keskinleşme.** Ekran-uzayı sabit yön `normalize(1,1,~0.4)` ile
+   parçacığın WORLD (dönmüş) yönünün dot'u → `max(0,dot)^p` düşüşüyle o bölgede genlik artsın; p
+   üsteli ile "dalga yönüne doğru sivrilt". Küre dönerken bölge EKRANDA sabit kalsın → world-uzayı
+   kullan (local değil).
+5. **Yönlü renk.** Tüm küreye tek-tip lerp yerine, dalga/sağ-üst bölgesinde ısıya göre sıcaklaştır:
+   per-parçacık renk (BufferGeometry color attribute + `vertexColors`) VEYA shader'da bölgesel karışım.
+6. **LLM aktivitesi de sürsün.** "Sesli sohbet dalgası" benzetmesi: mood `thinking`/`executing_tool`
+   (LLM çalışıyor) da dalga genliğini artırsın — GPU yükü + LLM aktivitesi ortak "canlılık" sürücüsü
+   (yerelde ikisi birlikte; bulut LLM'de GPU yükselmez, mood dalgayı sürer).
+7. Yumuşak mood "breathe" korunur; yalnız yük ifadesi scale→dalga olur. `docs/TASARIM.md` §2 güncelle.
+
+**Sonraki dilimler:**
+
 1. **API kapasitesi v2 (opsiyonel)** — OpenAI/Gemini rate-limit header'ları (kendi adları var);
    küre "limite yaklaşınca amber uyarı nabzı" (mood'a `throttle` katmanı, hardware gibi); cache
    isabet oranını girdi-token'a göre kesin hesap (şu an okundu/yazıldı sayacı).
