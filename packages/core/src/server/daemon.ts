@@ -237,7 +237,20 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         deltaTokens: usage.inputTokens + usage.outputTokens,
         deltaCostUsd: usage.costUsd,
         totals: store.usageTotals(payload.provider, payload.model),
+        ...(usageResult.cacheReadTokens !== undefined
+          ? { cacheReadTokens: usageResult.cacheReadTokens }
+          : {}),
+        ...(usageResult.cacheCreationTokens !== undefined
+          ? { cacheCreationTokens: usageResult.cacheCreationTokens }
+          : {}),
       });
+      if (usageResult.limits !== undefined) {
+        bus.broadcast("provider.limits", {
+          provider: payload.provider,
+          ...usageResult.limits,
+          at: Date.now(),
+        });
+      }
       log.info({ sessionId, model: payload.model, ...usage }, "sohbet tamamlandı");
       return usage;
     } catch (error) {

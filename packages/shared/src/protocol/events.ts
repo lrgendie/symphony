@@ -157,8 +157,31 @@ export const UsageUpdatedPayloadSchema = z
     deltaTokens: z.number().int().nonnegative(),
     deltaCostUsd: z.number().nonnegative(),
     totals: UsageSchema,
+    // Prompt caching token'ları — yalnız destekleyen sağlayıcıda (Anthropic) gelir.
+    cacheReadTokens: z.number().int().nonnegative().optional(),
+    cacheCreationTokens: z.number().int().nonnegative().optional(),
   })
   .strip();
+
+/**
+ * API rate-limit anlık görüntüsü (sağlayıcı cevap header'larından türetilir).
+ * Alanların hepsi opsiyonel: header taşımayan sağlayıcı/uç yalnız `provider`+`at` gönderir.
+ * `*ResetAt` epoch ms; `retryAfterSec` yalnız 429 sonrası dolar.
+ */
+export const ProviderLimitsPayloadSchema = z
+  .object({
+    provider: z.string().min(1),
+    requestsRemaining: z.number().int().nonnegative().optional(),
+    requestsLimit: z.number().int().nonnegative().optional(),
+    requestsResetAt: z.number().int().nonnegative().optional(),
+    tokensRemaining: z.number().int().nonnegative().optional(),
+    tokensLimit: z.number().int().nonnegative().optional(),
+    tokensResetAt: z.number().int().nonnegative().optional(),
+    retryAfterSec: z.number().nonnegative().optional(),
+    at: z.number().int().nonnegative(),
+  })
+  .strip();
+export type ProviderLimitsPayload = z.infer<typeof ProviderLimitsPayloadSchema>;
 
 /** Tek bir GPU'nun anlık vitalleri (nvidia-smi'den örneklenir). `temperatureC` null olabilir (bazı GPU'lar bildirmez). */
 export const GpuSampleSchema = z
@@ -218,6 +241,7 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   "permission.resolved": PermissionResolvedPayloadSchema,
   "provider.health": ProviderHealthSchema,
   "usage.updated": UsageUpdatedPayloadSchema,
+  "provider.limits": ProviderLimitsPayloadSchema,
   "hardware.updated": HardwareUpdatedPayloadSchema,
   "log.entry": LogEntryPayloadSchema,
   error: ErrorPayloadSchema,

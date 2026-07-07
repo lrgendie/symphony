@@ -1,5 +1,10 @@
 import { useEffect, useRef } from "react";
-import { PROTOCOL_VERSION, type PendingPermission, type Usage } from "@symphony/shared";
+import {
+  PROTOCOL_VERSION,
+  type PendingPermission,
+  type ProviderLimitsPayload,
+  type Usage,
+} from "@symphony/shared";
 import { daemon, type PermissionDecision } from "./daemon/client";
 import { LivingScene } from "./scene/LivingScene";
 import { useStore, type ConnStatus, type LogTone, type ModelUsage } from "./store";
@@ -27,6 +32,9 @@ export function App(): React.JSX.Element {
   const usageByModel = useStore((s) => s.usageByModel);
   const sessionTokens = useStore((s) => s.sessionTokens);
   const sessionCostUsd = useStore((s) => s.sessionCostUsd);
+  const sessionCacheReadTokens = useStore((s) => s.sessionCacheReadTokens);
+  const sessionCacheCreationTokens = useStore((s) => s.sessionCacheCreationTokens);
+  const limits = useStore((s) => s.limits);
 
   const active = runs.length > 0 || pending.length > 0;
 
@@ -81,8 +89,23 @@ export function App(): React.JSX.Element {
           byModel={usageByModel}
           sessionTokens={sessionTokens}
           sessionCostUsd={sessionCostUsd}
+          cacheReadTokens={sessionCacheReadTokens}
+          cacheCreationTokens={sessionCacheCreationTokens}
         />
       </section>
+
+      {Object.keys(limits).length > 0 && (
+        <section className="panel">
+          <h2>API kapasitesi</h2>
+          <div className="limits">
+            {Object.values(limits)
+              .sort((a, b) => a.provider.localeCompare(b.provider))
+              .map((l) => (
+                <LimitGauge key={l.provider} limits={l} />
+              ))}
+          </div>
+        </section>
+      )}
 
       <section className="panel">
         <h2>
@@ -171,11 +194,15 @@ function ModelBoard({
   byModel,
   sessionTokens,
   sessionCostUsd,
+  cacheReadTokens,
+  cacheCreationTokens,
 }: {
   totals: Usage;
   byModel: ModelUsage[];
   sessionTokens: number;
   sessionCostUsd: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
 }): React.JSX.Element {
   // Çubuk genişliği en pahalı modele göre orantılı (göreli maliyet payı okunur olsun).
   const maxCost = byModel.reduce((m, r) => Math.max(m, r.costUsd), 0);
@@ -190,6 +217,13 @@ function ModelBoard({
           value={`${fmtTokens(sessionTokens)} · $${fmtCost(sessionCostUsd)}`}
           accent="amber"
         />
+        {(cacheReadTokens > 0 || cacheCreationTokens > 0) && (
+          <Metric
+            label="önbellek ↓okundu ↑yazıldı"
+            value={`${fmtTokens(cacheReadTokens)} · ${fmtTokens(cacheCreationTokens)}`}
+            accent="cyan"
+          />
+        )}
       </div>
       {byModel.length === 0 ? (
         <p className="dim empty">Henüz kullanım yok — terminalde bir sohbet ya da agent koşusu başlat.</p>
@@ -246,6 +280,73 @@ function fmtTokens(n: number): string {
 /** Maliyet: dev'de çok küçük olabildiği için <$1'de 4 hane, üstünde 2 hane. */
 function fmtCost(n: number): string {
   return n >= 1 ? n.toFixed(2) : n.toFixed(4);
+}
+
+/** Reset anına kalan süre (render anında hesaplanır; yeni limit gelince tazelenir). */
+function fmtReset(epochMs: number): string {
+  const s = Math.max(0, Math.round((epochMs - Date.now()) / 1000));
+  return s >= 60 ? `${Math.round(s / 60)}dk` : `${s}s`;
+}
+
+/** Bir sağlayıcının rate-limit göstergesi: istek + token kovaları, 429 uyarısı. */
+function LimitGauge({ limits: l }: { limits: ProviderLimitsPayload }): React.JSX.Element {
+  return (
+    <div className="limit">
+      <div className="limit-head">
+        <span className="limit-provider">{l.provider}</span>
+        {l.retryAfterSec !== undefined && (
+          <span className="limit-retry">429 · {l.retryAfterSec}s bekle</span>
+        )}
+      </div>
+      {l.requestsLimit !== undefined && (
+        <LimitBar
+          label="istek/dk"
+          remaining={l.requestsRemaining}
+          limit={l.requestsLimit}
+          resetAt={l.requestsResetAt}
+        />
+      )}
+      {l.tokensLimit !== undefined && (
+        <LimitBar
+          label="token/dk"
+          remaining={l.tokensRemaining}
+          limit={l.tokensLimit}
+          resetAt={l.tokensResetAt}
+        />
+      )}
+    </div>
+  );
+}
+
+function LimitBar({
+  label,
+  remaining,
+  limit,
+  resetAt,
+}: {
+  label: string;
+  remaining?: number;
+  limit: number;
+  resetAt?: number;
+}): React.JSX.Element {
+  const rem = remaining ?? limit;
+  const pct = limit > 0 ? (rem / limit) * 100 : 0;
+  // Kalan kapasiteye göre ton: >%50 yeşil, %20–50 amber, <%20 kırmızı (throttle'a yaklaşıyor).
+  const tone = pct > 50 ? "good" : pct > 20 ? "warn" : "bad";
+  return (
+    <div className="limit-row">
+      <div className="limit-row-head">
+        <span className="dim">{label}</span>
+        <span className={`limit-val limit-${tone}`}>
+          {fmtTokens(rem)} / {fmtTokens(limit)}
+        </span>
+        {resetAt !== undefined && <span className="dim limit-reset">yeniler {fmtReset(resetAt)}</span>}
+      </div>
+      <div className="limit-bar-track">
+        <div className={`limit-bar limit-bar-${tone}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
 }
 
 function StatusPill({ status }: { status: ConnStatus }): React.JSX.Element {

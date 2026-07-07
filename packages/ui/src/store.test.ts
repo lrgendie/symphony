@@ -24,6 +24,9 @@ beforeEach(() => {
     usageByModel: [],
     sessionTokens: 0,
     sessionCostUsd: 0,
+    sessionCacheReadTokens: 0,
+    sessionCacheCreationTokens: 0,
+    limits: {},
     gpus: [],
   });
 });
@@ -169,6 +172,51 @@ describe("ui store", () => {
     // Tüm-zaman dökümü korunur (yeniden seed usage.query.ok ile gelir).
     expect(s.usageByModel).toHaveLength(1);
     expect(s.usageTotals.costUsd).toBeCloseTo(0.1);
+  });
+
+  it("usage.updated cache token'larını oturum sayacına biriktirir (opsiyonel alan)", () => {
+    const store = useStore.getState();
+    store.handleEvent("usage.updated", {
+      provider: "anthropic",
+      model: "claude-opus-4-8",
+      deltaTokens: 100,
+      deltaCostUsd: 0.01,
+      totals: { inputTokens: 80, outputTokens: 20, costUsd: 0.01 },
+      cacheReadTokens: 6656,
+      cacheCreationTokens: 128,
+    });
+    const s = useStore.getState();
+    expect(s.sessionCacheReadTokens).toBe(6656);
+    expect(s.sessionCacheCreationTokens).toBe(128);
+    // Cache alanı olmayan olay sayaçları bozmaz.
+    store.handleEvent("usage.updated", {
+      provider: "ollama",
+      model: "qwen3:8b",
+      deltaTokens: 10,
+      deltaCostUsd: 0,
+      totals: { inputTokens: 7, outputTokens: 3, costUsd: 0 },
+    });
+    expect(useStore.getState().sessionCacheReadTokens).toBe(6656);
+  });
+
+  it("provider.limits sağlayıcı başına son görüntüyü saklar; applySnapshot temizler", () => {
+    const store = useStore.getState();
+    store.handleEvent("provider.limits", {
+      provider: "anthropic",
+      requestsRemaining: 48,
+      requestsLimit: 50,
+      tokensRemaining: 18000,
+      tokensLimit: 20000,
+      at: 1,
+    });
+    expect(useStore.getState().limits.anthropic?.requestsRemaining).toBe(48);
+    // Aynı sağlayıcının yeni görüntüsü eskisini değiştirir.
+    store.handleEvent("provider.limits", { provider: "anthropic", requestsRemaining: 40, requestsLimit: 50, at: 2 });
+    expect(useStore.getState().limits.anthropic?.requestsRemaining).toBe(40);
+
+    useStore.getState().applySnapshot({ providers: [], runs: [], pendingPermissions: [] }, "0.1.0");
+    expect(Object.keys(useStore.getState().limits)).toHaveLength(0);
+    expect(useStore.getState().sessionCacheReadTokens).toBe(0);
   });
 
   it("hardware.updated GPU örneğini saklar; applySnapshot bayat örneği temizler", () => {

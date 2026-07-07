@@ -14,6 +14,7 @@ import {
 } from "@symphony/shared";
 import type { DataStore } from "../db/store.js";
 import { computeCostUsd } from "../providers/pricing.js";
+import { extractCacheTokens, parseRateLimits } from "../providers/telemetry.js";
 import type { ProviderAdapter } from "../providers/types.js";
 import type { EventBus } from "../server/bus.js";
 import {
@@ -71,6 +72,9 @@ interface ActiveRunRecord {
   state: AgentRunState;
   steps: number;
   usage: Usage;
+  /** Koşu boyunca biriken prompt-cache token'ları (usage.updated'a eklenir). */
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
   abort: AbortController;
   pending: PendingPermissionInternal | null;
   startedAt: number;
@@ -172,6 +176,8 @@ export class AgentEngine {
       state: "queued",
       steps: 0,
       usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
       abort: new AbortController(),
       pending: null,
       startedAt: Date.now(),
@@ -292,6 +298,18 @@ export class AgentEngine {
           ...(adapter.forwardsTemperature ? { temperature: definition.temperature } : {}),
         });
         this.recordTurnUsage(run, result.usage, turnStartedAt);
+        // Telemetri: rate-limit her turda en taze; cache token'ları koşu boyunca birikir.
+        const cache = extractCacheTokens(result.providerMetadata);
+        run.cacheReadTokens += cache.read;
+        run.cacheCreationTokens += cache.creation;
+        const limits = parseRateLimits(result.response.headers);
+        if (limits !== null) {
+          this.deps.bus.broadcast("provider.limits", {
+            provider: run.provider,
+            ...limits,
+            at: Date.now(),
+          });
+        }
         messages.push(...result.response.messages);
 
         const calls = result.toolCalls as unknown as RawToolCall[];
@@ -663,6 +681,8 @@ export class AgentEngine {
         deltaTokens: run.usage.inputTokens + run.usage.outputTokens,
         deltaCostUsd: run.usage.costUsd,
         totals: this.deps.store.usageTotals(run.provider, run.model),
+        ...(run.cacheReadTokens > 0 ? { cacheReadTokens: run.cacheReadTokens } : {}),
+        ...(run.cacheCreationTokens > 0 ? { cacheCreationTokens: run.cacheCreationTokens } : {}),
       });
     }
   }

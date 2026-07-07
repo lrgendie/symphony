@@ -1,5 +1,6 @@
 import type { LanguageModel } from "ai";
 import type { ChatMessage, ModelInfo } from "@symphony/shared";
+import type { RateLimitSnapshot } from "./telemetry.js";
 
 export interface ChatStreamRequest {
   model: string;
@@ -18,6 +19,11 @@ export interface ChatUsageResult {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  /** Prompt-cache token'ları (yalnız destekleyen sağlayıcı, ör. Anthropic). */
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  /** Bu cevabın header'larından okunan rate-limit görüntüsü (yoksa undefined). */
+  limits?: RateLimitSnapshot;
 }
 
 /**

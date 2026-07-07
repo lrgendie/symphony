@@ -3,6 +3,7 @@ import { streamText, type LanguageModel } from "ai";
 import type { ModelInfo } from "@symphony/shared";
 import type { SecretStore } from "../secrets/secret-store.js";
 import { computeCostUsd } from "./pricing.js";
+import { extractCacheTokens, parseRateLimits } from "./telemetry.js";
 import type { ChatStreamRequest, ChatUsageResult, ProviderAdapter } from "./types.js";
 
 const MODELS: ModelInfo[] = [
@@ -69,13 +70,22 @@ export class AnthropicAdapter implements ProviderAdapter {
       yield delta;
     }
 
-    const usage = await result.usage;
+    const [usage, response, providerMetadata] = await Promise.all([
+      result.usage,
+      result.response,
+      result.providerMetadata,
+    ]);
     const inputTokens = usage.inputTokens ?? 0;
     const outputTokens = usage.outputTokens ?? 0;
+    const cache = extractCacheTokens(providerMetadata);
+    const limits = parseRateLimits(response.headers);
     return {
       inputTokens,
       outputTokens,
       costUsd: computeCostUsd(request.model, inputTokens, outputTokens),
+      cacheReadTokens: cache.read,
+      cacheCreationTokens: cache.creation,
+      ...(limits !== null ? { limits } : {}),
     };
   }
 }

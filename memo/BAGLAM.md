@@ -49,6 +49,9 @@ protokol WS/REST üzerinden konuşulur.
 - `providers/{anthropic,openai,google,ollama}.ts` — 4 adapter; temperature iletimi
   adapter'a özgü (Claude 4.7+/GPT-5 KABUL ETMEZ → iletilmez; Gemini/Ollama iletilir)
 - `providers/pricing.ts` — USD/1M token tablosu; bilinmeyen model = 0 (yerel)
+- `providers/telemetry.ts` — SAF, testli: `parseRateLimits` (cevap header'larından rate-limit,
+  ek-toleranslı) + `extractCacheTokens` (Anthropic providerMetadata). adapter+engine kullanır →
+  `provider.limits` yayını + `usage.updated` cache alanları
 - `router/router.ts` — kural tabanlı model önerisi v1 (`router.suggest`)
 - `router/hardware.ts` — nvidia-smi: `detectVramGb` (router) + `sampleGpus`/`parseGpuCsv` (saf,
   testli) → GPU vitalleri (util/VRAM/ısı). Daemon 2sn poll → `hardware.updated` yayını
@@ -88,11 +91,11 @@ protokol WS/REST üzerinden konuşulur.
   handshake → snapshot → yayın olaylarını store'a akıtır; bağlanınca `queryUsage()`
   (`usage.query {groupBy:"model"}`); üstel geri çekilmeli yeniden bağlanma
 - `store.ts` — zustand; `handleEvent` olay tiplerini UI durumuna (providers/runs/log/pending +
-  usage: `usageTotals`/`usageByModel`/oturum deltası) çevirir. **WS→UI eşlemesinin TEK yeri**
+  usage + `limits` + oturum cache sayaçları) çevirir. **WS→UI eşlemesinin TEK yeri**
   (testli: `store.test.ts`). Usage: `usage.query.ok` seed'ler, `usage.updated` girdiyi totals'la
-  DEĞİŞTİRİR (çift saymaz)
-- `App.tsx` — Şef Paneli: bağlantı + sağlayıcı sağlığı + **Model panosu** (token/maliyet, model
-  başına çubuk) + aktif koşular + izin kartları + canlı akış
+  DEĞİŞTİRİR (çift saymaz) + cache biriktirir; `provider.limits` sağlayıcı başına son görüntü
+- `App.tsx` — Şef Paneli: bağlantı + sağlayıcı sağlığı + **Model panosu** (token/maliyet/önbellek)
+  + **API kapasitesi** (rate-limit çubukları) + aktif koşular + izin kartları + canlı akış
 - `scene/LivingScene.tsx` — Three.js parçacık küresi (@react-three/fiber): mood katmanı (ne
   yapıyor) + **donanım vitalleri katmanı** (GPU yük→nabız, ısı→renk, VRAM→şişme) + sağ-üst GPU HUD
 - `scene/mood.ts` — SAF: sistem durumu → mood (offline>error>awaiting>executing>thinking>idle) + stil

@@ -5,6 +5,7 @@ import type {
   GpuSample,
   PendingPermission,
   ProviderHealth,
+  ProviderLimitsPayload,
   Snapshot,
   Usage,
 } from "@symphony/shared";
@@ -56,6 +57,11 @@ interface UiState {
   /** Bu bağlantı boyunca biriken token/maliyet (her applySnapshot'ta sıfırlanır). */
   sessionTokens: number;
   sessionCostUsd: number;
+  /** Bu bağlantıda okunan/yazılan prompt-cache token'ları (cache isabet göstergesi). */
+  sessionCacheReadTokens: number;
+  sessionCacheCreationTokens: number;
+  /** Sağlayıcı başına son API rate-limit görüntüsü (provider.limits). */
+  limits: Record<string, ProviderLimitsPayload>;
   /** Yerel GPU vitalleri (hardware.updated). Yaşayan Küre'yi fiziksel yükle sürer. */
   gpus: GpuSample[];
   setStatus: (status: ConnStatus) => void;
@@ -142,6 +148,9 @@ export const useStore = create<UiState>((set) => {
     usageByModel: [],
     sessionTokens: 0,
     sessionCostUsd: 0,
+    sessionCacheReadTokens: 0,
+    sessionCacheCreationTokens: 0,
+    limits: {},
     gpus: [],
 
     setStatus: (status) => set({ status, ...(status === "connected" ? { error: null } : {}) }),
@@ -161,6 +170,10 @@ export const useStore = create<UiState>((set) => {
         pendingPermissions: snapshot.pendingPermissions,
         sessionTokens: 0,
         sessionCostUsd: 0,
+        sessionCacheReadTokens: 0,
+        sessionCacheCreationTokens: 0,
+        // Bayat rate-limit görüntüsünü de sıfırla (bir sonraki çağrıda tazelenir).
+        limits: {},
         // Bayat GPU örneğini temizle; daemon hello sonrası son örneği hemen yeniden yollar.
         gpus: [],
       }),
@@ -244,6 +257,8 @@ export const useStore = create<UiState>((set) => {
             deltaTokens: number;
             deltaCostUsd: number;
             totals: Usage;
+            cacheReadTokens?: number;
+            cacheCreationTokens?: number;
           };
           set((state) => {
             const usageByModel = upsertModelUsage(state.usageByModel, p.model, p.provider, p.totals);
@@ -252,8 +267,16 @@ export const useStore = create<UiState>((set) => {
               usageTotals: sumUsage(usageByModel),
               sessionTokens: state.sessionTokens + p.deltaTokens,
               sessionCostUsd: state.sessionCostUsd + p.deltaCostUsd,
+              sessionCacheReadTokens: state.sessionCacheReadTokens + (p.cacheReadTokens ?? 0),
+              sessionCacheCreationTokens:
+                state.sessionCacheCreationTokens + (p.cacheCreationTokens ?? 0),
             };
           });
+          return;
+        }
+        case "provider.limits": {
+          const p = payload as ProviderLimitsPayload;
+          set((state) => ({ limits: { ...state.limits, [p.provider]: p } }));
           return;
         }
         case "usage.query.ok": {

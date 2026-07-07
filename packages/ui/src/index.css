@@ -306,6 +306,82 @@ body {
   font-size: 11px;
 }
 
+/* ---- API kapasitesi (rate-limit göstergesi) ---- */
+.limits {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.limit {
+  padding: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.limit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.limit-provider {
+  color: var(--magenta);
+  font-weight: 600;
+}
+.limit-retry {
+  font-size: 11px;
+  color: var(--red);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 6px;
+  padding: 1px 8px;
+}
+.limit-row {
+  margin-top: 8px;
+}
+.limit-row-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.limit-val {
+  margin-left: auto;
+  font-weight: 600;
+}
+.limit-good {
+  color: var(--green);
+}
+.limit-warn {
+  color: var(--amber);
+}
+.limit-bad {
+  color: var(--red);
+}
+.limit-reset {
+  flex-shrink: 0;
+}
+.limit-bar-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.limit-bar {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s ease;
+}
+.limit-bar-good {
+  background: var(--green);
+}
+.limit-bar-warn {
+  background: var(--amber);
+}
+.limit-bar-bad {
+  background: var(--red);
+}
+
 /* ---- Yaşayan Arayüz sahnesi (parçacık küresi + HUD) ---- */
 .scene {
   position: relative;

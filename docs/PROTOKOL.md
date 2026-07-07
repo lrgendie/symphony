@@ -89,7 +89,8 @@ eş zamanlılığının kaynağı budur).
 | `agent.run.completed` | `{ runId, result, usage }` | |
 | `agent.run.failed` | `{ runId, error }` | |
 | `provider.health` | `{ provider, status: "up"\|"down"\|"degraded", latencyMs? }` | Periyodik + değişimde |
-| `usage.updated` | `{ provider, model, deltaTokens, deltaCostUsd, totals }` | Sayaç artışı |
+| `usage.updated` | `{ provider, model, deltaTokens, deltaCostUsd, totals, cacheReadTokens?, cacheCreationTokens? }` | Sayaç artışı; cache token'ları sağlayıcı desteklerse (Anthropic) eklenir |
+| `provider.limits` | `{ provider, requestsRemaining?, requestsLimit?, requestsResetAt?, tokensRemaining?, tokensLimit?, tokensResetAt?, retryAfterSec?, at }` | API rate-limit anlık görüntüsü (sağlayıcı cevap header'larından; her model cevabında). Header taşımayan sağlayıcıda yayınlanmaz. |
 | `hardware.updated` | `{ gpus: [{ index, name, utilizationPct, memUsedMb, memTotalMb, temperatureC\|null }], sampledAt }` | Yerel GPU vitalleri; periyodik (~2sn) + yeni bağlanınca son örnek. GPU yoksa yayınlanmaz. NVIDIA v1 (nvidia-smi). |
 | `log.entry` | `{ level, source, message, runId? }` | Canlı log akışı (UI log paneli) |
 
