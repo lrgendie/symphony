@@ -63,7 +63,7 @@ describe("AgentRun — çalışma dizini ve model adımları", () => {
   it("önce cwd, sonra model, sonra görev sorar (bu sıra)", async () => {
     const fake = fakeClient();
     const { lastFrame } = render(
-      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
     );
     await tick();
     expect(lastFrame()).toContain("Çalışma dizini");
@@ -72,7 +72,7 @@ describe("AgentRun — çalışma dizini ve model adımları", () => {
   it("cwd ekranında Enter, verilen varsayılan cwd'yi kullanır", async () => {
     const fake = fakeClient();
     const { stdin } = render(
-      <AgentRun client={fake.client} agentId="coder" cwd="/ws/varsayilan" models={models} />,
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws/varsayilan" models={models} onExit={() => {}} />,
     );
     await skipCwdAndModel(stdin);
     stdin.write("görev");
@@ -84,7 +84,7 @@ describe("AgentRun — çalışma dizini ve model adımları", () => {
 
   it("model ekranında ↓+Enter belirli bir modeli seçer, request'e provider/model eklenir", async () => {
     const fake = fakeClient();
-    const { stdin } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />);
+    const { stdin } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />);
     await tick();
     stdin.write("\r"); // cwd varsayılan
     await tick();
@@ -101,7 +101,7 @@ describe("AgentRun — çalışma dizini ve model adımları", () => {
 
   it("Router seçilirse request'te provider/model alanı OLMAZ", async () => {
     const fake = fakeClient();
-    const { stdin } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />);
+    const { stdin } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />);
     await skipCwdAndModel(stdin);
     stdin.write("görev");
     await tick();
@@ -115,7 +115,7 @@ describe("AgentRun — çalışma dizini ve model adımları", () => {
 describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
   it("görev girilip Enter'a basılınca agent.start gönderir", async () => {
     const fake = fakeClient();
-    const { stdin } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />);
+    const { stdin } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />);
     await skipCwdAndModel(stdin);
     stdin.write("bug'ı düzelt");
     await tick();
@@ -131,7 +131,7 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
   it("agent.tool.requested → izin kutusu render eder (risk sınıfı + diff renkli)", async () => {
     const fake = fakeClient();
     const { stdin, lastFrame } = render(
-      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
     );
     await skipCwdAndModel(stdin);
     stdin.write("dosya yaz");
@@ -160,7 +160,7 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
   it("'b' tuşu → permission.respond allow_for_run gönderir, kutu kapanır", async () => {
     const fake = fakeClient();
     const { stdin, lastFrame } = render(
-      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
     );
     await skipCwdAndModel(stdin);
     stdin.write("dosya yaz");
@@ -188,7 +188,7 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
   it("'e' tuşu → permission.respond allow gönderir, kutu kapanır", async () => {
     const fake = fakeClient();
     const { stdin, lastFrame } = render(
-      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
     );
     await skipCwdAndModel(stdin);
     stdin.write("dosya yaz");
@@ -216,7 +216,7 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
   it("destructive risk sınıfında 'daima'/'bu koşu boyunca' seçenekleri sunulmaz", async () => {
     const fake = fakeClient();
     const { stdin, lastFrame } = render(
-      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
     );
     await skipCwdAndModel(stdin);
     stdin.write("sil");
@@ -251,7 +251,7 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
   it("agent.run.completed → sonuç ve token/maliyet satırını gösterir", async () => {
     const fake = fakeClient();
     const { stdin, lastFrame } = render(
-      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
     );
     await skipCwdAndModel(stdin);
     stdin.write("özet çıkar");
@@ -275,7 +275,7 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
   it("agent.run.failed → hata kodunu gösterir", async () => {
     const fake = fakeClient();
     const { stdin, lastFrame } = render(
-      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} />,
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
     );
     await skipCwdAndModel(stdin);
     stdin.write("imkansız görev");
@@ -297,7 +297,7 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
   it("agent.start reddedilirse (örn. AGENT_UNKNOWN) hata satırı gösterir", async () => {
     const fake = fakeClient(false);
     const { stdin, lastFrame } = render(
-      <AgentRun client={fake.client} agentId="yok-boyle" cwd="/ws" models={models} />,
+      <AgentRun client={fake.client} agentId="yok-boyle" cwd="/ws" models={models} onExit={() => {}} />,
     );
     await skipCwdAndModel(stdin);
     stdin.write("görev");
@@ -306,5 +306,71 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
     await tick();
 
     expect(lastFrame()).toContain("AGENT_UNKNOWN");
+  });
+
+  it("koşu bitince Enter → yeni göreve döner (TUI kapanmaz, tek-seferlik değil)", async () => {
+    const fake = fakeClient();
+    let exited = false;
+    const { stdin, lastFrame } = render(
+      <AgentRun
+        client={fake.client}
+        agentId="coder"
+        cwd="/ws"
+        models={models}
+        onExit={() => {
+          exited = true;
+        }}
+      />,
+    );
+    await skipCwdAndModel(stdin);
+    stdin.write("ilk görev");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    fake.emit("agent.run.completed", {
+      runId: RUN_ID,
+      result: "bitti",
+      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+    });
+    await tick();
+    expect(lastFrame()).toContain("Enter: yeni görev");
+
+    stdin.write("\r"); // Enter → yeni görev
+    await tick();
+    expect(lastFrame()).toContain("Görev nedir?");
+    expect(exited).toBe(false);
+  });
+
+  it("koşu bitince Esc → onExit çağrılır (ana menüye dönüş)", async () => {
+    const fake = fakeClient();
+    let exited = false;
+    const { stdin } = render(
+      <AgentRun
+        client={fake.client}
+        agentId="coder"
+        cwd="/ws"
+        models={models}
+        onExit={() => {
+          exited = true;
+        }}
+      />,
+    );
+    await skipCwdAndModel(stdin);
+    stdin.write("görev");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    fake.emit("agent.run.completed", {
+      runId: RUN_ID,
+      result: "ok",
+      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+    });
+    await tick();
+
+    stdin.write(""); // Esc → ana menü (lone ESC)
+    await new Promise((resolve) => setTimeout(resolve, 20)); // ink lone-ESC debounce'unu bekle
+    expect(exited).toBe(true);
   });
 });

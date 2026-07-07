@@ -171,6 +171,37 @@ symphony/
   (model panosu — bekliyor); izin istekleri masaüstünden de cevaplanabiliyor ✅ (dilim 2, kod +
   store testleri; buton tıklama görsel doğrulaması kullanıcıya kaldı).
 
+### Sıradaki dilimler — kullanıcı önceliği (2026-07-07, ANLAŞILAN SIRA: 1→2→3→4)
+
+> Kullanıcı geri bildiriminden doğdu (sohbet/agent ayrımı sürtünmesi + hafıza yokluğu). Her biri
+> ayrı dikey dilim; bittiğinde `memo/DURUM.md` güncellenir. Fazlara dağılır ama sıra bu.
+
+1. **Oturum sürekliliği** — Sohbet geçmişi zaten SQLite'ta (`sessions`+`messages`, Faz 2) ama TUI
+   her açılışta yeni `sessionId` üretiyor (`cli/src/tui/chat.tsx`) → önceki bağlam taşınmıyor.
+   TUI'ye "önceki sohbete devam et" (son/seçilen oturumu yükle, mesajları bağlama koy). Veri hazır,
+   küçük dilim. Protokol: history REST uçları mevcut; gerekirse `chat.start`'a `resumeSessionId?`
+   (önce PROTOKOL.md → shared şeması → kullanım).
+2. **Birleşik sohbet-agent modu** — Sohbet ederken araç kullanımına geçebilme (Claude Code gibi):
+   tek modda konuş + gerektiğinde izin kapısı arkasında araç çağır. `chat.start` (araçsız) ile
+   `agent.start` (agentId/cwd/izin) ayrımını köprüler → **ADR gerektirir** (güvenlik: araç gelince
+   izin kapısı + jail/cwd sohbete de uygulanmalı). Protokol dokunuşu olası. En büyük kazanım.
+3. **Uzun-dönem hafıza (= aşağıdaki Faz 6 "Kullanıcı hafızası")** — `~/.symphony/memory/` kalıcı
+   profil, her oturumda bağlama enjekte. Kapsam kararı Faz 6'da (agent kendi yazamaz).
+   **+ Konuşma arşivinden kişiselleşme (kullanıcı isteği 2026-07-07):** kullanıcı tüm geçmiş Claude
+   sohbetlerini arşivledi; yerel LLM'in kullanıcıyı tanıyıp *tarzını benimsemesi* isteniyor. FİZİBIL,
+   3 katman (artan maliyet, önerilen sıra a→b→c):
+   - **(a) Stil/tercih profili** — arşivden damıtılmış kompakt profil → system prompt'a enjekte.
+     En ucuz, kontrollü, hemen; "tarz benimseme" için ilk hamle. (Faz 6 memory ile aynı boru.)
+   - **(b) RAG** — arşiv embedding'lenir; sorguda ilgili geçmiş bağlama çekilir (Faz 6 "Bağlam
+     Haritası" ile örtüşür). "Beni hatırla / geçmişe atıfla" için.
+   - **(c) LoRA ince-ayar** — arşivle qwen'e LoRA eğitimi → tarz ağırlıklara işlenir; Ollama'ya
+     Modelfile/GGUF ile içe aktarılır. En güçlü ama en ağır (veri hazırlığı + eğitim); RTX 4060
+     8GB'da küçük modelde mümkün. Profil+RAG yetmezse.
+4. **Token güvenilirlik hatası** — daemon her açılışta YENİ token üretiyor (`core/src/server/token.ts`)
+   → yeniden başlayınca bağlı istemciler (masaüstü/CLI) AUTH_TOKEN_INVALID ile kopuyor. Düzeltme:
+   dinleme başarılıysa diskteki geçerli token'ı yeniden kullan, ya da istemci reconnect'te token
+   dosyasını yeniden okusun. 2026-07-07'deki masaüstü kopmasının kök nedeni buydu.
+
 ### Faz 5 — Orkestrasyon: Çoklu Agent (12–14. hafta)
 - [ ] Görev kuyruğu: birden çok agent'ı paralel çalıştırma, birbirine iş devretme
 - [ ] Agent tanımları dosya olarak: `~/.symphony/agents/*.md` (rol + araçlar + model) → taşınabilir

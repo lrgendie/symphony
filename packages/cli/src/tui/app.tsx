@@ -36,7 +36,16 @@ export function App(props: {
         (agent === null ? (
           <AgentPicker agents={props.agents} onPick={setAgent} />
         ) : (
-          <AgentRun client={props.client} agentId={agent.id} cwd={props.cwd} models={props.models} />
+          <AgentRun
+            client={props.client}
+            agentId={agent.id}
+            cwd={props.cwd}
+            models={props.models}
+            onExit={() => {
+              setAgent(null);
+              setMode(null);
+            }}
+          />
         ))}
     </Box>
   );

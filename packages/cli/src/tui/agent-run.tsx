@@ -37,6 +37,8 @@ export function AgentRun(props: {
   agentId: string;
   cwd: string;
   models: ModelInfo[];
+  /** Koşu bitince Esc → ana menü (App mode/agent'ı sıfırlar). TUI kapanmaz. */
+  onExit: () => void;
 }): JSX.Element {
   const [cwd, setCwd] = useState<string | null>(null);
   const [cwdDraft, setCwdDraft] = useState(props.cwd);
@@ -107,6 +109,19 @@ export function AgentRun(props: {
     };
   }, [task, cwd]);
 
+  /** Aynı agent/dizin/model ile yeni görev: koşu durumunu sıfırla, görev girişine dön. */
+  const resetForNewTask = (): void => {
+    runIdRef.current = null;
+    setRunId(null);
+    setTask(null);
+    setTaskDraft("");
+    setLog([]);
+    setPending(null);
+    setThinking(false);
+    setOutcome(null);
+    setStartError(null);
+  };
+
   useInput((input, key) => {
     if (pending !== null) {
       const canAlways = pending.riskClass !== "destructive";
@@ -122,14 +137,22 @@ export function AgentRun(props: {
                 ? "deny"
                 : null;
       if (decision === null) return;
-      void props.client.request("permission.respond", {
-        requestId: pending.requestId,
-        decision,
-      });
+      // .catch ŞART: yakalanmamış promise reddi Node 24'te tüm süreci çökertir.
+      void props.client
+        .request("permission.respond", { requestId: pending.requestId, decision })
+        .catch((error: unknown) => {
+          setStartError(error instanceof Error ? error.message : String(error));
+        });
       setPending(null);
       return;
     }
-    if (key.escape && runId !== null && outcome === null) {
+    // Koşu bitti: Enter → yeni görev, Esc → ana menü. Süreç KAPANMAZ (tek-seferlik değil).
+    if (outcome !== null) {
+      if (key.return) resetForNewTask();
+      else if (key.escape) props.onExit();
+      return;
+    }
+    if (key.escape && runId !== null) {
       void props.client.request("agent.cancel", { runId }).catch(() => undefined);
     }
   });
@@ -195,7 +218,12 @@ export function AgentRun(props: {
       ))}
       {thinking && pending === null && outcome === null && <Text dimColor>· düşünüyor…</Text>}
       {pending !== null && <PermissionBox permission={pending} />}
-      {outcome !== null && <Outcome outcome={outcome} />}
+      {outcome !== null && (
+        <>
+          <Outcome outcome={outcome} />
+          <Text dimColor>↵ Enter: yeni görev · Esc: ana menü</Text>
+        </>
+      )}
     </Box>
   );
 }

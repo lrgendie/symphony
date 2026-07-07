@@ -12,10 +12,13 @@ const execFileAsync = promisify(execFile);
  */
 export async function detectVramGb(): Promise<number | null> {
   try {
-    const { stdout } = await execFileAsync("nvidia-smi", [
-      "--query-gpu=memory.total",
-      "--format=csv,noheader,nounits",
-    ]);
+    const { stdout } = await execFileAsync(
+      "nvidia-smi",
+      ["--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+      // Windows: aksi hâlde nvidia-smi.exe (konsol uygulaması) görünür bir konsol penceresi
+      // flaşlatır. POSIX'te etkisizdir. sampleGpus 2sn'de bir çağrıldığından bu ŞART.
+      { windowsHide: true },
+    );
     const firstLine = stdout.trim().split(/\r?\n/)[0];
     if (firstLine === undefined) return null;
     const totalMb = Number.parseInt(firstLine.trim(), 10);
@@ -76,10 +79,12 @@ export function parseGpuCsv(stdout: string): GpuSample[] {
  */
 export async function sampleGpus(): Promise<GpuSample[]> {
   try {
-    const { stdout } = await execFileAsync("nvidia-smi", [
-      `--query-gpu=${GPU_QUERY_FIELDS}`,
-      "--format=csv,noheader,nounits",
-    ]);
+    const { stdout } = await execFileAsync(
+      "nvidia-smi",
+      [`--query-gpu=${GPU_QUERY_FIELDS}`, "--format=csv,noheader,nounits"],
+      // Windows: her 2sn'de bir çalışır → windowsHide olmadan periyodik konsol penceresi flaşı.
+      { windowsHide: true },
+    );
     return parseGpuCsv(stdout);
   } catch {
     return [];
