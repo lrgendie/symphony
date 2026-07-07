@@ -213,6 +213,36 @@ Kullanıcı onayladı, SIRAYLA yapılacak (ayrıntı: `ROADMAP.md` → "Sıradak
    daemon eski kodda; etki bir sonraki daemon başlatmasında geçerli (restart'ta token 2decedef… korunur).
 
 Kalan sıra: 1 (oturum sürekliliği) → 2 (birleşik sohbet-agent) → 3 (hafıza/arşiv).
+
+### 📋 Dilim 1 — Oturum sürekliliği: SONRAKİ OTURUM BURADAN BAŞLASIN (adım adım)
+
+**Hedef:** TUI'de "önceki sohbete devam et" → qwen önceki konuşmanın bağlamını görsün.
+**Kapsam v1:** yalnız SON sohbeti sürdür (tam oturum tarayıcısı v2'ye). Dikey dilim, küçük.
+
+**Önce oku (yalnız bunlar):** `cli/src/tui/app.tsx` (akış) · `cli/src/tui/chat.tsx` (sessionId +
+history state) · `shared/src/protocol/rest.ts` (history uç şemaları) · `core/src/db/store.ts`
+(sessions/messages sorguları) · `core/src/server/daemon.ts` (REST /api/history/* handler'ları).
+
+**Adımlar:**
+1. **Protokol kontrolü (ADR/PROTOKOL gerekmez muhtemelen):** history ZATEN REST'te (`/api/history/*`,
+   sessions+messages — Faz 2). Daemon sessionId'ye REPLACE semantiğiyle yazıyor → eski sessionId'yi
+   yeniden kullanıp tüm mesaj dizisini göndermek yeterli. `chat.start`'a alan EKLEME (gerekmiyor).
+   YALNIZCA yeni bir REST ucu yoksa (son sohbeti + mesajlarını çekmek) küçük bir ekleme gerekebilir —
+   önce mevcut history uçlarının ne döndürdüğüne bak; varsa dokunma.
+2. **CLI istemci:** `daemon-client.ts`'e REST'ten geçmiş çeken küçük yardımcı (token + daemon base
+   URL zaten var; `fetch`). Son session + o session'ın mesajları.
+3. **app.tsx akışı:** karşılama sonrası, Sohbet dalında model seçiminden önce/sonra bir adım:
+   "Yeni sohbet / Önceki sohbete devam et" (yalnız kayıtlı sohbet varsa göster). Devam seçilirse
+   eski `sessionId` + önceden yüklenmiş mesajları `Chat`'e prop olarak geçir.
+4. **chat.tsx:** opsiyonel `initialSessionId?` + `initialHistory?` prop'ları; `useState`/`useRef`
+   bunlarla tohumlanır (yoksa bugünkü davranış: yeni UUID + boş history).
+5. **Test:** ink-testing-library — "devam et seçilince eski mesajlar render + yeni mesaj eski
+   sessionId ile gönderilir". Gerekirse store/client birim testi. Test geçmeden dilim kapanmaz.
+6. **Doğrulama:** build+test+lint; TUI raw-mode TTY istediği için canlı doğrulama KULLANICIYA
+   (terminalde `symphony` → Sohbet → "önceki sohbete devam" → qwen önceki bağlamı hatırlıyor mu?).
+
+**Tuzak:** TUI istemcisi WS; history REST'ten gelir (aynı token). `sessionId` REPLACE semantiği
+nedeniyle eski oturuma yazınca mesajlar çiftlemesin — daemon zaten replace yapıyor, yeni ekleme yapma.
 Aşağıdaki eski Faz 4 dilimleri hâlâ geçerli ama kullanıcı önceliği yukarıdaki maddeler.
 
 ## Sıradaki adım (Faz 4 sonraki dilimler)
