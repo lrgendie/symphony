@@ -74,11 +74,16 @@ protokol WS/REST üzerinden konuşulur.
 
 ### packages/cli/src — symphony komutu
 - `index.ts` — commander kayıtları; argümansız → TUI
-- `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`)
+- `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`) +
+  REST geçmiş sorguları (`listSessions`/`sessionDetail` — Bearer token, shared şema, 404→null)
 - `commands/` — status/models/watch/history/agents/agent/add (her komut tek dosya)
   - `add.ts` — `symphony add <npm-paketi>`: eklenti sistemi, `mcp.addServer` isteği atar
 - `tui/` — Ink: app.tsx (akış: karşılama→mod seçici→sohbet|agent), welcome.tsx, logo.ts
-  - `model-picker.tsx` / `chat.tsx` — sohbet dalı
+  - `app.tsx` içinde `ChatFlow` — sohbet dalı orkestrasyonu: (kayıtlı sohbet varsa) yeni/devam
+    seçimi → model seç → Chat. Devam: `sessionDetail` REST'ten tohum + model sabitlenir (v1: son sohbet)
+  - `model-picker.tsx` / `chat.tsx` — sohbet dalı (`chat.tsx`: opsiyonel `initialSessionId`/`initialHistory`
+    tohumu → önceki oturuma devam; `HistoryEntry` dışa aktarılır)
+  - `resume-picker.tsx` — "Yeni sohbet / Önceki sohbete devam et" seçici (↑/↓+Enter; picker deseni)
   - `mode-picker.tsx` — Sohbet/Agent seçici (↑/↓+Enter)
   - `agent-picker.tsx` — kayıtlı agent listesinden seçim
   - `agent-run.tsx` — görev girişi + canlı koşu (izin kutusu tek tuş e/d/h, renkli diff,

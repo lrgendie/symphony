@@ -3,7 +3,34 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-07 (Oturum 13, Opus — flaşlayan pencere KÖK NEDEN düzeltildi: daemon'ın 2sn nvidia-smi çağrısı windowsHide'sızdı; + masaüstü AUTH_TOKEN_INVALID teşhisi)
+**Son güncelleme:** 2026-07-08 (Oturum 14, Opus — Dilim 1 "oturum sürekliliği" BİTTİ ve testli: TUI'de "önceki sohbete devam et")
+
+## Dilim 1 (2026-07-08): Oturum sürekliliği — TUI "önceki sohbete devam et" — BİTTİ ve testli
+
+Kullanıcı önceliği #1'di (DURUM.md eski "SIRADAKİ İŞ"). TUI her açılışta yeni sessionId üretip
+geçmişi görmezden geliyordu; artık son sohbet sürdürülebilir. **Sıfır protokol/daemon değişikliği**:
+geçmiş ZATEN REST'te (`/api/history/*`, Faz 2) ve daemon sessionId'ye REPLACE semantiğiyle yazıyor →
+eski sessionId'yi yeniden kullanıp tüm mesaj dizisini yeniden göndermek yeterli (çiftleme yok).
+- **CLI istemci** (`client/daemon-client.ts`): `DaemonClient`'a `listSessions(limit)` + `sessionDetail(id)`
+  eklendi — Bearer token'lı REST (`/api/health` dışı uçlar auth ister), shared şemalarıyla doğrulanır,
+  404→null. Port+token zaten elde (WS açık), ayrı el sıkışması yok.
+- **TUI akışı** (`tui/app.tsx`): yeni `ChatFlow` bileşeni — kayıtlı sohbet VE modeli hâlâ mevcutsa
+  (v1 kapsamı) açılışta "Yeni sohbet / Önceki sohbete devam et" seçtirir. Devam → `sessionDetail`
+  REST'ten mesajları yükler, model önceki oturumunkiyle SABİTLENİR (model picker atlanır), Chat'e tohum.
+  Yeni → bugünkü akış (model picker → temiz Chat). `runTui` açılışta `listSessions(1)` çeker (hata→sessiz).
+- **Yeni bileşen** `tui/resume-picker.tsx` (mode/model picker deseni: ↑/↓+Enter; devam satırında
+  provider/model · mesaj sayısı · başlık özeti).
+- **chat.tsx**: opsiyonel `initialSessionId?` + `initialHistory?` prop'ları; `HistoryEntry` dışa aktarıldı.
+  Verilirse state bunlarla tohumlanır (aynı sessionId'ye yazılır), yoksa bugünkü davranış (yeni UUID + boş).
+- **Test:** `resume-picker.test.tsx` (3) + `chat-flow.test.tsx` (3, entegrasyon: devam→eski mesajlar
+  render + yeni mesaj ESKİ sessionId ile + bağlam yeniden gönderilir; yeni→YENİ uuid; geçmiş yoksa
+  doğrudan model picker). 203→**209 test** (208 geçer; `welcome.test` bu bg-ortamının TTY'siz stdout
+  genişliğinde ink logoyu sararak ÖNCEDEN başarısız — kod değişikliğiyle ilgisiz, gerçek terminalde geçer).
+- **Kapsam v1 notu:** yalnız SON sohbet + modeli hâlâ mevcutsa. Tam oturum tarayıcısı (liste, arama,
+  model değişmişse devam) v2'ye ertelendi.
+- **Canlı doğrulama KULLANICIYA:** TUI raw-mode TTY ister (Bash'ten sürülemez). Terminalde `symphony`
+  → Sohbet → "önceki sohbete devam et" → qwen önceki bağlamı hatırlıyor mu? (Not: global CLI junction →
+  `pnpm build` sonrası `symphony` yeni akışı anında alır; daemon restart GEREKMEZ — history REST'ten gelir.)
 
 ## Oturum 13 (2026-07-07): "Flaşlayan/glitch pencere" KÖK NEDEN bulundu ve düzeltildi
 
@@ -201,9 +228,9 @@ daemon çalışıyor olmalı** (token dosyası ancak daemon dinlerken yazılır)
 ## ⭐ SIRADAKİ İŞ — kullanıcıyla anlaşılan öncelik sırası (2026-07-07, Oturum 13 sonu)
 
 Kullanıcı onayladı, SIRAYLA yapılacak (ayrıntı: `ROADMAP.md` → "Sıradaki dilimler — kullanıcı önceliği"):
-1. **Oturum sürekliliği** ← BURADAN BAŞLA. TUI "önceki sohbete devam et"; veri zaten SQLite'ta,
-   TUI her açılışta yeni sessionId üretiyor (`cli/src/tui/chat.tsx`). Küçük dilim.
-2. **Birleşik sohbet-agent modu** (ADR gerektirir — chat↔agent köprüsü + izin kapısı sohbete de).
+1. ✅ **Oturum sürekliliği BİTTİ** (Oturum 14, 2026-07-08) — ayrıntı yukarıda "Dilim 1" bölümünde.
+   TUI'de "önceki sohbete devam et" çalışıyor (kod+test); kullanıcının canlı TTY doğrulaması bekleniyor.
+2. **Birleşik sohbet-agent modu** ← SIRADAKİ. (ADR gerektirir — chat↔agent köprüsü + izin kapısı sohbete de).
 3. **Uzun-dönem hafıza** (Faz 6) + **konuşma arşivinden kişiselleşme** (kullanıcı tüm Claude sohbetlerini
    arşivledi; yerel LLM tarzını benimsesin → önce stil profili, sonra RAG, gerekirse LoRA ince-ayar).
 4. ✅ **Token güvenilirlik hatası BİTTİ** (Oturum 13, 2026-07-07): `token.ts` `loadExistingToken`
@@ -212,37 +239,17 @@ Kullanıcı onayladı, SIRAYLA yapılacak (ayrıntı: `ROADMAP.md` → "Sıradak
    (`token.test.ts`, 198→203). "Dinleme sonrası yaz" değişmezi korundu. **Not:** hâlihazırda ÇALIŞAN
    daemon eski kodda; etki bir sonraki daemon başlatmasında geçerli (restart'ta token 2decedef… korunur).
 
-Kalan sıra: 1 (oturum sürekliliği) → 2 (birleşik sohbet-agent) → 3 (hafıza/arşiv).
+Kalan sıra: ~~1 (oturum sürekliliği ✅)~~ → **2 (birleşik sohbet-agent) ← SIRADAKİ** → 3 (hafıza/arşiv).
 
-### 📋 Dilim 1 — Oturum sürekliliği: SONRAKİ OTURUM BURADAN BAŞLASIN (adım adım)
+### 📋 Dilim 1 — Oturum sürekliliği: ✅ UYGULANDI (Oturum 14) — plan arşivi
 
-**Hedef:** TUI'de "önceki sohbete devam et" → qwen önceki konuşmanın bağlamını görsün.
-**Kapsam v1:** yalnız SON sohbeti sürdür (tam oturum tarayıcısı v2'ye). Dikey dilim, küçük.
+> Bu adım adım plan uygulandı (yukarıdaki "Dilim 1 BİTTİ" bölümü + `memo/oturumlar/2026-07-08.md`).
+> Kayıt olarak bırakıldı; v2 (tam oturum tarayıcısı: liste/arama/model-değişince-devam) yapılırken referans.
+> Uygulama planla birebir gitti: REST+daemon değişmedi (history zaten Faz 2'de REST'te, REPLACE semantiği),
+> `DaemonClient.listSessions/sessionDetail` + `ChatFlow` + `resume-picker.tsx` + `chat.tsx` prop tohumu.
 
-**Önce oku (yalnız bunlar):** `cli/src/tui/app.tsx` (akış) · `cli/src/tui/chat.tsx` (sessionId +
-history state) · `shared/src/protocol/rest.ts` (history uç şemaları) · `core/src/db/store.ts`
-(sessions/messages sorguları) · `core/src/server/daemon.ts` (REST /api/history/* handler'ları).
-
-**Adımlar:**
-1. **Protokol kontrolü (ADR/PROTOKOL gerekmez muhtemelen):** history ZATEN REST'te (`/api/history/*`,
-   sessions+messages — Faz 2). Daemon sessionId'ye REPLACE semantiğiyle yazıyor → eski sessionId'yi
-   yeniden kullanıp tüm mesaj dizisini göndermek yeterli. `chat.start`'a alan EKLEME (gerekmiyor).
-   YALNIZCA yeni bir REST ucu yoksa (son sohbeti + mesajlarını çekmek) küçük bir ekleme gerekebilir —
-   önce mevcut history uçlarının ne döndürdüğüne bak; varsa dokunma.
-2. **CLI istemci:** `daemon-client.ts`'e REST'ten geçmiş çeken küçük yardımcı (token + daemon base
-   URL zaten var; `fetch`). Son session + o session'ın mesajları.
-3. **app.tsx akışı:** karşılama sonrası, Sohbet dalında model seçiminden önce/sonra bir adım:
-   "Yeni sohbet / Önceki sohbete devam et" (yalnız kayıtlı sohbet varsa göster). Devam seçilirse
-   eski `sessionId` + önceden yüklenmiş mesajları `Chat`'e prop olarak geçir.
-4. **chat.tsx:** opsiyonel `initialSessionId?` + `initialHistory?` prop'ları; `useState`/`useRef`
-   bunlarla tohumlanır (yoksa bugünkü davranış: yeni UUID + boş history).
-5. **Test:** ink-testing-library — "devam et seçilince eski mesajlar render + yeni mesaj eski
-   sessionId ile gönderilir". Gerekirse store/client birim testi. Test geçmeden dilim kapanmaz.
-6. **Doğrulama:** build+test+lint; TUI raw-mode TTY istediği için canlı doğrulama KULLANICIYA
-   (terminalde `symphony` → Sohbet → "önceki sohbete devam" → qwen önceki bağlamı hatırlıyor mu?).
-
-**Tuzak:** TUI istemcisi WS; history REST'ten gelir (aynı token). `sessionId` REPLACE semantiği
-nedeniyle eski oturuma yazınca mesajlar çiftlemesin — daemon zaten replace yapıyor, yeni ekleme yapma.
+**v2'ye ertelenenler:** tam oturum tarayıcısı (son sohbet değil herhangi biri); önceki oturumun modeli
+artık mevcut değilse (ör. Ollama modeli silinmiş) devam — şu an bu durumda "devam et" gizlenir; başlık/arama.
 Aşağıdaki eski Faz 4 dilimleri hâlâ geçerli ama kullanıcı önceliği yukarıdaki maddeler.
 
 ## Sıradaki adım (Faz 4 sonraki dilimler)

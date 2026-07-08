@@ -7,10 +7,14 @@ import { WebSocket } from "ws";
 import type { z } from "zod";
 import {
   createMessage,
+  HistorySessionDetailResponseSchema,
+  HistorySessionsResponseSchema,
   parseMessage,
   PROTOCOL_VERSION,
   type EventPayload,
   type EventType,
+  type HistorySessionDetailResponse,
+  type HistorySessionSummary,
   type REQUEST_PAYLOAD_SCHEMAS,
   type RequestType,
   type Snapshot,
@@ -300,6 +304,39 @@ export class DaemonClient {
 
       ws.send(JSON.stringify(message));
     });
+  }
+
+  // ---- REST geçmiş sorguları (PROTOKOL §1.1) ----
+  // Kalıcı sohbet geçmişi WS olayı değildir; Bearer token'lı REST ile sorgulanır (ADR-011).
+  // WS zaten açık olduğundan port+token elimizde; ayrı bir el sıkışmasına gerek yok.
+
+  /** /api/health dışı uçlar Bearer token ister; 404 → null (yok), diğer hatalar fırlatır. */
+  private async getHistory(path: string): Promise<unknown | null> {
+    const response = await fetch(`http://127.0.0.1:${this.options.port}${path}`, {
+      headers: { authorization: `Bearer ${this.options.token}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { message?: string } | null;
+      throw new DaemonError(
+        "INTERNAL_HISTORY_FAILED",
+        body?.message ?? `Geçmiş sorgusu başarısız (HTTP ${response.status})`,
+      );
+    }
+    return response.json();
+  }
+
+  /** Son sohbet oturumları (yeni→eski). Kayıt yoksa boş dizi. */
+  async listSessions(limit = 50): Promise<HistorySessionSummary[]> {
+    const raw = await this.getHistory(`/api/history/sessions?limit=${limit}`);
+    return HistorySessionsResponseSchema.parse(raw).sessions;
+  }
+
+  /** Bir oturumun mesajlarıyla tam dökümü. Oturum yoksa null. */
+  async sessionDetail(sessionId: string): Promise<HistorySessionDetailResponse | null> {
+    const raw = await this.getHistory(`/api/history/sessions/${encodeURIComponent(sessionId)}`);
+    return raw === null ? null : HistorySessionDetailResponseSchema.parse(raw);
   }
 
   close(): void {
