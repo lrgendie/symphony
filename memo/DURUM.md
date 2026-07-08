@@ -3,7 +3,7 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-08 (Oturum 14, Opus — Dilim 1 "oturum sürekliliği" BİTTİ ve testli: TUI'de "önceki sohbete devam et")
+**Son güncelleme:** 2026-07-08 (Oturum 14, Opus — Dilim 1 "oturum sürekliliği" BİTTİ+testli; Dilim 2 "birleşik sohbet-agent modu" ADR-012 + protokol tasarımı BİTTİ, kod dilimleri sırada)
 
 ## Dilim 1 (2026-07-08): Oturum sürekliliği — TUI "önceki sohbete devam et" — BİTTİ ve testli
 
@@ -31,6 +31,57 @@ eski sessionId'yi yeniden kullanıp tüm mesaj dizisini yeniden göndermek yeter
 - **Canlı doğrulama KULLANICIYA:** TUI raw-mode TTY ister (Bash'ten sürülemez). Terminalde `symphony`
   → Sohbet → "önceki sohbete devam et" → qwen önceki bağlamı hatırlıyor mu? (Not: global CLI junction →
   `pnpm build` sonrası `symphony` yeni akışı anında alır; daemon restart GEREKMEZ — history REST'ten gelir.)
+
+## Dilim 2 (2026-07-08): Birleşik sohbet-agent modu — ADR-012 + protokol tasarımı BİTTİ; kod dilimleri sırada
+
+Kullanıcı önceliği #2 ("Claude Code gibi sohbet ederken araç kullanımına geçebilme"). Kullanıcı
+mimariyi ONAYLADI: **Seçenek A (konuşmalı motor) + akışlı (streamText)**. Bu oturumda tasarım
+keystone'u teslim edildi; kod dikey dilimlere bölündü (Kural 7).
+
+- **ADR-012 yazıldı** (`docs/kararlar/KARARLAR.md`): iki yol (chat.start akışlı/araçsız vs
+  agent.start araçlı/izinli/akışsız/tek-seferlik) **konuşmalı motorla** birleşir. Konuşma =
+  tamamlanınca `finish` etmek yerine `awaiting_user`'a park olan çok-turlu agent koşusu; sonraki
+  tur `agent.say`. Düz sohbet = araçsız "asistan" agent'ı. İzin kapısı/jail/araç döngüsü TEK yerde
+  (engine) kalır — B (chat'e araç ekle) ve C (yeni converse.*) güvenlik/çoğaltma nedeniyle reddedildi.
+- **PROTOKOL.md güncellendi** (ADDITIVE, PROTOCOL_VERSION=1 korunur): `agent.delta {runId,text}` olayı;
+  `awaiting_user` durumu; `agent.say {runId,text}` isteği; `agent.start`'a `conversational?`. `chat.start`
+  kaldırılmaz (curl/geri-uyum). shared şeması + engine kullanımı dilim dilim gelir (Kural 1: PROTOKOL→shared→kullan).
+
+### 📋 Dilim 2 — kod dilimleri (SONRAKİ OTURUM(LAR) BURADAN, sırayla)
+
+**Önce oku (yalnız bunlar):** ADR-012 + PROTOKOL.md §3-5 · `core/src/agent/engine.ts` (runLoop) ·
+`core/src/agent/engine.test.ts` (mock: `MockLanguageModelV3.doGenerate` → `doStream` GEÇİŞİ) ·
+`shared/src/protocol/{events,requests,agent-state}.ts` · `cli/src/tui/agent-run.tsx`.
+
+**Dilim 2.1 — akış (streamText + agent.delta).** GÖRÜNÜR KAZANIM, düşük risk, temel.
+1. PROTOKOL zaten güncel → `shared/events.ts`: `AgentDeltaPayloadSchema {runId:uuid, text}` +
+   `EVENT_PAYLOAD_SCHEMAS["agent.delta"]`. (+ şema testi.)
+2. `engine.ts` runLoop: `generateText(...)` → `streamText(...)` (SENKRON döner, await YOK). Metni
+   `for await (const c of result.textStream)` ile tüket → her parça `bus.broadcast("agent.delta",{runId,text:c})`.
+   Sonra `await result.response` (.messages/.headers), `await result.usage`, `await result.providerMetadata`,
+   `await result.text`, `await result.toolCalls`. Kalan mantık (tool loop/izin/jail/finish) AYNI kalır.
+3. `engine.test.ts` mock: `languageModel()` içinde `doGenerate` yanında/yerine `doStream` sağla —
+   scripted `turn()` içeriğini stream part'larına çevir (text-delta + tool-call + finish{usage}).
+   **TUZAK:** AI SDK v7 doStream part şekilleri sürüme özgü — node_modules'daki `ai/test` tiplerinden
+   birebir doğrula, tahmin etme. Mevcut kabul testleri (izin/jail/deny) YEŞİL kalmalı.
+4. `agent-run.tsx`: `agent.delta`'ya abone ol → `streamText` state biriktir (green render); `agent.tool.started`
+   ve run bitişinde temizle. +1 test. build/test/lint temiz olmadan dilim kapanmaz.
+
+**Dilim 2.2 — çok-tur (awaiting_user + agent.say + conversational).**
+- `agent-state.ts`: enum'a `awaiting_user`; VALID_TRANSITIONS: thinking→awaiting_user, awaiting_user→thinking,
+  awaiting_user→cancelled. `requests.ts`: `AgentSayPayloadSchema {runId,text}` + `AgentStartPayload`'a
+  `conversational?:boolean`. `events.ts` gerekmez (agent.run.state yeni değeri taşır).
+- `engine.ts`: `run.conversational` alanı; tur araçsız bitince `conversational` ise `finish` YERİNE
+  `transition(run,"awaiting_user")` + koşuyu haritada TUT (messages canlı). `say(runId,text)`: awaiting_user
+  koşusuna `messages.push({role:"user",content:text})` + runLoop'un bir sonraki turunu tetikle (döngüyü
+  "await next user" ile park edecek şekilde yeniden yapılandır — ya da turAsync yapıyı promise-gate ile böl).
+  `agent.cancel` konuşmalı koşuyu kapatır. daemon.ts switch'e `agent.say` handler.
+- Test: konuşmalı koşu 2 tur (ilk cevap → awaiting_user → say → ikinci cevap), aynı runId.
+- TUI: `agent-run.tsx` outcome yerine awaiting_user'da tekrar görev girişi (aynı koşu).
+
+**Dilim 2.3 — birleşik TUI.** Varsayılan "asistan" agent tanımı (araçsız/salt-okur, `~/.symphony/agents`
+gömülü default). `app.tsx`: Sohbet/Agent ayrımı tek "konuşma" yüzeyinde birleşir; sohbet = conversational
+asistan koşusu; araç modele göre isteğe bağlı, izin kapısı arkasında. ChatFlow (Dilim 1) bununla harmanlanır.
 
 ## Oturum 13 (2026-07-07): "Flaşlayan/glitch pencere" KÖK NEDEN bulundu ve düzeltildi
 

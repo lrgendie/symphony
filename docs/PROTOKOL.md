@@ -55,8 +55,9 @@ Tüm WS mesajları tek zarf tipindedir:
 | `state.sync` | `{}` | Tam durum anlık görüntüsü iste (yeniden bağlanmada) |
 | `chat.start` | `{ sessionId?, provider, model, messages[], options? }` | Sohbet başlat. `options: { temperature? (vars. 0), maxTokens? }` |
 | `chat.cancel` | `{ sessionId }` | Akışı durdur |
-| `agent.start` | `{ agentId, task, cwd, model?, provider? }` | Agent görevi başlat (agentId = `~/.symphony/agents/` tanımı) |
-| `agent.cancel` | `{ runId }` | Koşan agent'ı iptal et |
+| `agent.start` | `{ agentId, task, cwd, model?, provider?, conversational? }` | Agent görevi başlat (agentId = `~/.symphony/agents/` tanımı). `conversational: true` (ADR-012) → koşu tur bitince `completed` yerine `awaiting_user`'a park olur, `agent.say` ile sürer |
+| `agent.say` | `{ runId, text }` | Konuşmalı koşuya (ADR-012) sonraki kullanıcı turunu ekle — koşu `awaiting_user`'dayken; `thinking`'e geçip devam eder |
+| `agent.cancel` | `{ runId }` | Koşan agent'ı iptal et (konuşmalı koşuyu da kapatır) |
 | `permission.respond` | `{ requestId, decision: "allow"\|"deny"\|"always_allow"\|"allow_for_run" }` | Bekleyen izin isteğine cevap — `allow_for_run`: bu koşu boyunca aynı araç için tekrar sormaz, diske YAZILMAZ (SPEC-AGENT §5) |
 | `models.list` | `{}` | Tüm sağlayıcıların kullanılabilir modelleri |
 | `agents.list` | `{}` | Kayıtlı agent tanımları (`~/.symphony/agents/*.md`). Cevap: `agents.list.ok { agents: AgentSummary[] }` |
@@ -82,6 +83,7 @@ eş zamanlılığının kaynağı budur).
 | `chat.completed` | `{ sessionId, usage: { inputTokens, outputTokens, costUsd } }` | |
 | `agent.run.started` | `{ runId, agentId, task, model, cwd }` | |
 | `agent.run.state` | `{ runId, state }` | Durum makinesi geçişi (bkz. §5) |
+| `agent.delta` | `{ runId, text }` | Streaming asistan metni parçası (ADR-012; `chat.delta`'nın koşu-anahtarlı ikizi) |
 | `agent.step.thinking` | `{ runId, summary? }` | Model düşünüyor |
 | `agent.tool.requested` | `{ runId, requestId, tool, args, riskClass, diff? }` | İzin gerekiyorsa; `diff` dosya değişikliklerinde zorunlu |
 | `agent.tool.started` | `{ runId, tool, argsSummary }` | |
@@ -99,11 +101,15 @@ eş zamanlılığının kaynağı budur).
 ```
 queued → thinking → executing_tool → thinking → ... → completed
               ↘ awaiting_permission ↗                ↘ failed
-   (her durumdan) → cancelled
+              ↘ awaiting_user ↗ (konuşmalı, ADR-012)   ↘ (her durumdan) cancelled
 ```
 
 Geçerli geçişler yalnız bunlardır; `agent.run.state` başka değer taşıyamaz.
 `awaiting_permission` süresiz bekler (timeout yok — insan kararı beklenir); iptal edilebilir.
+**Konuşmalı koşu (ADR-012):** `conversational: true` başlatılan koşu, tur araç çağrısı OLMADAN
+bitince `completed` yerine `awaiting_user`'a geçer ve sonraki `agent.say`'i bekler (thinking'e döner).
+Koşu yalnız `agent.cancel` (ya da daemon kapanışı) ile sonlanır. Tek-seferlik koşularda davranış
+değişmez (`thinking → completed`).
 
 ## 6. Yeniden bağlanma
 
