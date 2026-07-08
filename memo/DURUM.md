@@ -3,7 +3,7 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-08 (Oturum 14, Opus — Dilim 1 "oturum sürekliliği" BİTTİ+testli; Dilim 2 "birleşik sohbet-agent modu": ADR-012 + protokol BİTTİ, **Dilim 2.1 akış/streamText BİTTİ+testli**; sırada 2.2 çok-tur, 2.3 birleşik TUI)
+**Son güncelleme:** 2026-07-08 (Oturum 14, Opus — Dilim 1 "oturum sürekliliği" BİTTİ+testli; Dilim 2 "birleşik sohbet-agent modu": ADR-012 + protokol BİTTİ, **Dilim 2.1 akış (TUI+masaüstü) BİTTİ+testli**; sırada 2.2 çok-tur, 2.3 birleşik TUI)
 
 ## Dilim 1 (2026-07-08): Oturum sürekliliği — TUI "önceki sohbete devam et" — BİTTİ ve testli
 
@@ -66,6 +66,14 @@ keystone'u teslim edildi; kod dikey dilimlere bölündü (Kural 7).
 - `agent-run.tsx`: `agent.delta`→`streaming` state (green render); `agent.tool.started` ve run
   bitişinde temizlenir. +1 test. build/test/lint temiz (209 geçer; welcome ortamsal).
 - **Kalan:** durum/çok-tur DEĞİŞMEDİ (bu dilim yalnız akış). Konuşma yaşam döngüsü 2.2'de.
+
+**Dilim 2.1b — masaüstü akış paritesi. ✅ BİTTİ ve testli (2026-07-08).** Terminal ⇄ masaüstü eş
+zamanlılığı (ROADMAP kabul testi): agent.delta artık masaüstü panosunda da akıyor.
+- `ui/store.ts`: `runStreams: Record<runId,string>` — `agent.delta` biriktirir; `agent.tool.started`
+  (yeni tur), `agent.run.completed/failed`, state `cancelled` ve `applySnapshot`'ta temizlenir.
+- `ui/App.tsx`: aktif koşu satırının altında canlı akış metni (`.run-stream`, cyan).
+- Test: `store.test.ts` +1 (biriktir → araç başlayınca temizle → koşu bitince temizle). 210→**211**.
+- daemon/protokol DEĞİŞMEDİ (agent.delta zaten 2.1'de eklendi). Görsel doğrulama kullanıcıya (`desktop:dev`).
 
 **Dilim 2.2 — çok-tur (awaiting_user + agent.say + conversational).**
 - `agent-state.ts`: enum'a `awaiting_user`; VALID_TRANSITIONS: thinking→awaiting_user, awaiting_user→thinking,

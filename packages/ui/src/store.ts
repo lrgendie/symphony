@@ -46,6 +46,8 @@ interface UiState {
   daemonVersion: string | null;
   providers: ProviderHealth[];
   runs: ActiveRun[];
+  /** Koşu başına akışlı asistan metni (agent.delta; ADR-012). Araç başlayınca/koşu bitince temizlenir. */
+  runStreams: Record<string, string>;
   pendingPermissions: PendingPermission[];
   /** Son hata anı (ms) — yaşayan küre kısa bir "kırmızı flaş" için okur (scene/mood.ts). */
   lastErrorAt: number | null;
@@ -135,12 +137,26 @@ export const useStore = create<UiState>((set) => {
   const removeRun = (runId: string): void =>
     set((state) => ({ runs: state.runs.filter((r) => r.runId !== runId) }));
 
+  const appendStream = (runId: string, text: string): void =>
+    set((state) => ({
+      runStreams: { ...state.runStreams, [runId]: (state.runStreams[runId] ?? "") + text },
+    }));
+
+  const clearStream = (runId: string): void =>
+    set((state) => {
+      if (!(runId in state.runStreams)) return {};
+      const next = { ...state.runStreams };
+      delete next[runId];
+      return { runStreams: next };
+    });
+
   return {
     status: "connecting",
     error: null,
     daemonVersion: null,
     providers: [],
     runs: [],
+    runStreams: {},
     pendingPermissions: [],
     lastErrorAt: null,
     log: [],
@@ -167,6 +183,8 @@ export const useStore = create<UiState>((set) => {
         daemonVersion,
         providers: snapshot.providers,
         runs: snapshot.runs,
+        // Bayat akış metnini temizle — koşular snapshot'tan taze gelir, deltalar yeniden akar.
+        runStreams: {},
         pendingPermissions: snapshot.pendingPermissions,
         sessionTokens: 0,
         sessionCostUsd: 0,
@@ -198,10 +216,18 @@ export const useStore = create<UiState>((set) => {
         case "agent.run.state": {
           const p = payload as { runId: string; state: ActiveRun["state"] };
           patchRun(p.runId, { state: p.state });
+          if (p.state === "cancelled") clearStream(p.runId);
+          return;
+        }
+        case "agent.delta": {
+          // Akışlı asistan metni (ADR-012): koşu başına birikir — terminal ⇄ masaüstü parite.
+          const p = payload as { runId: string; text: string };
+          appendStream(p.runId, p.text);
           return;
         }
         case "agent.tool.started": {
-          const p = payload as { tool: string; argsSummary: string };
+          const p = payload as { runId: string; tool: string; argsSummary: string };
+          clearStream(p.runId); // yeni tur başlıyor: önceki turun metnini temizle
           pushLog("tool", `⚙ ${short(p.argsSummary)}`);
           return;
         }
@@ -234,12 +260,14 @@ export const useStore = create<UiState>((set) => {
         case "agent.run.completed": {
           const p = payload as { runId: string; usage: { costUsd: number } };
           removeRun(p.runId);
+          clearStream(p.runId);
           pushLog("good", `✔ koşu tamamlandı — $${p.usage.costUsd.toFixed(4)}`);
           return;
         }
         case "agent.run.failed": {
           const p = payload as { runId: string; error: { code: string } };
           removeRun(p.runId);
+          clearStream(p.runId);
           set({ lastErrorAt: Date.now() });
           pushLog("bad", `✘ koşu başarısız: ${p.error.code}`);
           return;

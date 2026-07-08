@@ -26,6 +26,7 @@ export function App(): React.JSX.Element {
   const daemonVersion = useStore((s) => s.daemonVersion);
   const providers = useStore((s) => s.providers);
   const runs = useStore((s) => s.runs);
+  const runStreams = useStore((s) => s.runStreams);
   const pending = useStore((s) => s.pendingPermissions);
   const log = useStore((s) => s.log);
   const usageTotals = useStore((s) => s.usageTotals);
@@ -121,6 +122,9 @@ export function App(): React.JSX.Element {
                 <span className="run-agent">{r.agentId}</span>
                 {r.model !== undefined && <span className="dim">{r.model}</span>}
                 <span className="run-task">{r.task}</span>
+                {runStreams[r.runId] !== undefined && runStreams[r.runId] !== "" && (
+                  <p className="run-stream">{runStreams[r.runId]}</p>
+                )}
               </li>
             ))}
           </ul>
