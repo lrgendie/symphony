@@ -3,7 +3,7 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-08 (Oturum 14, Opus — Dilim 1 "oturum sürekliliği" BİTTİ+testli; Dilim 2 "birleşik sohbet-agent modu" ADR-012 + protokol tasarımı BİTTİ, kod dilimleri sırada)
+**Son güncelleme:** 2026-07-08 (Oturum 14, Opus — Dilim 1 "oturum sürekliliği" BİTTİ+testli; Dilim 2 "birleşik sohbet-agent modu": ADR-012 + protokol BİTTİ, **Dilim 2.1 akış/streamText BİTTİ+testli**; sırada 2.2 çok-tur, 2.3 birleşik TUI)
 
 ## Dilim 1 (2026-07-08): Oturum sürekliliği — TUI "önceki sohbete devam et" — BİTTİ ve testli
 
@@ -53,19 +53,19 @@ keystone'u teslim edildi; kod dikey dilimlere bölündü (Kural 7).
 `core/src/agent/engine.test.ts` (mock: `MockLanguageModelV3.doGenerate` → `doStream` GEÇİŞİ) ·
 `shared/src/protocol/{events,requests,agent-state}.ts` · `cli/src/tui/agent-run.tsx`.
 
-**Dilim 2.1 — akış (streamText + agent.delta).** GÖRÜNÜR KAZANIM, düşük risk, temel.
-1. PROTOKOL zaten güncel → `shared/events.ts`: `AgentDeltaPayloadSchema {runId:uuid, text}` +
-   `EVENT_PAYLOAD_SCHEMAS["agent.delta"]`. (+ şema testi.)
-2. `engine.ts` runLoop: `generateText(...)` → `streamText(...)` (SENKRON döner, await YOK). Metni
-   `for await (const c of result.textStream)` ile tüket → her parça `bus.broadcast("agent.delta",{runId,text:c})`.
-   Sonra `await result.response` (.messages/.headers), `await result.usage`, `await result.providerMetadata`,
-   `await result.text`, `await result.toolCalls`. Kalan mantık (tool loop/izin/jail/finish) AYNI kalır.
-3. `engine.test.ts` mock: `languageModel()` içinde `doGenerate` yanında/yerine `doStream` sağla —
-   scripted `turn()` içeriğini stream part'larına çevir (text-delta + tool-call + finish{usage}).
-   **TUZAK:** AI SDK v7 doStream part şekilleri sürüme özgü — node_modules'daki `ai/test` tiplerinden
-   birebir doğrula, tahmin etme. Mevcut kabul testleri (izin/jail/deny) YEŞİL kalmalı.
-4. `agent-run.tsx`: `agent.delta`'ya abone ol → `streamText` state biriktir (green render); `agent.tool.started`
-   ve run bitişinde temizle. +1 test. build/test/lint temiz olmadan dilim kapanmaz.
+**Dilim 2.1 — akış (streamText + agent.delta). ✅ BİTTİ ve testli (2026-07-08).**
+- `shared/events.ts`: `AgentDeltaPayloadSchema {runId,text}` + `EVENT_PAYLOAD_SCHEMAS["agent.delta"]`.
+- `engine.ts` runLoop: `generateText`→`streamText` (SENKRON döner). Metin `for await (result.textStream)`
+  ile tüketilip `bus.broadcast("agent.delta",{runId,text})`; sonra `await result.{response,usage,
+  providerMetadata,text,toolCalls}`. Tool loop/izin/jail/finish AYNI. **daemon.ts DEĞİŞMEDİ** (bus
+  tüm event'leri otomatik yayar).
+- Test mock'ları (`engine.test.ts` + `daemon-agent.test.ts`): `doGenerate`→`doStream` — scripted
+  `turn()` içeriğini AI SDK v3 stream part'larına (`stream-start`→text-start/delta/end|tool-call→
+  `finish{usage,finishReason}`) çeviren `scriptToStream`. Part şekilleri `@ai-sdk/provider@4.0.1`
+  `LanguageModelV3StreamPart`'tan birebir doğrulandı. Güvenlik testleri (izin/jail/deny) YEŞİL.
+- `agent-run.tsx`: `agent.delta`→`streaming` state (green render); `agent.tool.started` ve run
+  bitişinde temizlenir. +1 test. build/test/lint temiz (209 geçer; welcome ortamsal).
+- **Kalan:** durum/çok-tur DEĞİŞMEDİ (bu dilim yalnız akış). Konuşma yaşam döngüsü 2.2'de.
 
 **Dilim 2.2 — çok-tur (awaiting_user + agent.say + conversational).**
 - `agent-state.ts`: enum'a `awaiting_user`; VALID_TRANSITIONS: thinking→awaiting_user, awaiting_user→thinking,

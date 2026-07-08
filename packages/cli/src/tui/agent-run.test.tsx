@@ -248,6 +248,28 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
     expect(respond?.payload).toEqual({ requestId: "req-destructive", decision: "deny" });
   });
 
+  it("agent.delta → akışlı asistan metnini gösterir; araç başlayınca sıfırlanır (ADR-012)", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
+    );
+    await skipCwdAndModel(stdin);
+    stdin.write("selam ver");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    fake.emit("agent.delta", { runId: RUN_ID, text: "Merhaba " });
+    fake.emit("agent.delta", { runId: RUN_ID, text: "dünya" });
+    await tick();
+    expect(lastFrame()).toContain("Merhaba dünya");
+
+    // Araç başlayınca önceki turun metni temizlenir (yeni tur taze akar).
+    fake.emit("agent.tool.started", { runId: RUN_ID, tool: "read_file", argsSummary: "a.txt" });
+    await tick();
+    expect(lastFrame()).not.toContain("Merhaba dünya");
+  });
+
   it("agent.run.completed → sonuç ve token/maliyet satırını gösterir", async () => {
     const fake = fakeClient();
     const { stdin, lastFrame } = render(

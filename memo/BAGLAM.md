@@ -70,7 +70,10 @@ protokol WS/REST üzerinden konuşulur.
   - `mcp.ts` — MCP istemcisi (ADR-007): `~/.symphony/mcp-servers.json` kayıt defteri
     (stdio), sunucu araçlarını `AgentToolSpec`'e sarar (`mcp__<sunucu>__<araç>`, hep `mutating`)
   - `engine.ts` — koşu döngüsü (AI SDK tool-calling), izin kapısı, durum makinesi, iptal,
-    MCP bağlan/kapat (koşu ömrüyle eşleşir)
+    MCP bağlan/kapat (koşu ömrüyle eşleşir). **Akışlı** (`streamText`, ADR-012): asistan metni
+    `agent.delta {runId,text}` ile token-token yayılır. Test mock'ları `doStream` kullanır
+    (`scriptToStream`; AI SDK v3 stream part'ları). Birleşik sohbet-agent modu buradan büyüyecek
+    (2.2 awaiting_user+agent.say çok-tur, 2.3 birleşik TUI — bkz. ADR-012 + DURUM Dilim 2)
 
 ### packages/cli/src — symphony komutu
 - `index.ts` — commander kayıtları; argümansız → TUI
