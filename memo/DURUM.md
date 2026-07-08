@@ -3,7 +3,56 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-07 (Oturum 13, Opus — flaşlayan pencere KÖK NEDEN düzeltildi: daemon'ın 2sn nvidia-smi çağrısı windowsHide'sızdı; + masaüstü AUTH_TOKEN_INVALID teşhisi)
+**Son güncelleme:** 2026-07-08 (Oturum 14, Fable — Dilim 8 + 8b: Yaşayan TESSERACT ve sinematik revizyon)
+
+## Dilim 8b (2026-07-08): Sinematik revizyon — "çok basit" geri bildirimi üzerine — BİTTİ (211 test)
+
+Kullanıcı ilk tesseract'ı "güzel ama çok basit/düzlemsel" buldu; "katmanlı küp + fütüristik,
+şaşırt beni, uç noktana kadar git" dedi. Yapılanlar (hepsi UI-only, protokol değişmedi,
+YENİ PAKET YOK — bloom three'nin kendi addon'larından):
+- **ÜÇ kademeli küp:** kapı boncukları yerine tam DERİN küp (iç kübün 0.48 ölçekli kopyası,
+  12 kenar + 8 bağ). Topoloji: 25 düğüm / 60 kenar. Converge artık 3 kademeli ŞELALE:
+  köprüler→bağlar→spoke'lar (gecikmeli dalgalar) → çekirdek patlaması.
+- **GERÇEK bloom:** EffectComposer + UnrealBloomPass + OutputPass (`three/examples/jsm`).
+  Sahne kendi atmosferini çizer: koyu zemin + yıldız alanı (380) + nebula lekeleri (3 sprite).
+- **GLSL akış shader'ı:** cyan/violet tüplerin İÇİNDE merkeze akan enerji bantları
+  (instancing-uyumlu ShaderMaterial; kenarlar merkeze sıralı olduğundan yön doğal).
+- **Jiroskop yörünge halkaları ×3** (bakır=GPU, cyan=LLM, violet=çekirdek — katman sürücüsüyle
+  parlar) + **veri zerreleri** (220 mot, 3 aile, yörüngede) + **sinematik kamera** (aktiviteyle
+  yaklaşır, sürekli süzülür) + HUD köşe braketleri + `SYMPHONY // LIVING CORE` etiketi.
+  Sahne yüksekliği 300→380px.
+- Test 212→**211** (kapı testleri derin-küp testlerine dönüştü). build/test/lint temiz.
+- **Görsel doğrulama KULLANICIYA** (aşağıdaki dilim 8 talimatı aynen geçerli). Bloom şiddeti
+  ayarı: `TesseractScene.tsx` BLOOM_STRENGTH/RADIUS/THRESHOLD; katman parlaklıkları bölüm 11.
+
+## Dilim 8 (2026-07-08): Yaşayan TESSERACT — küre emekli edildi — BİTTİ ve testli (212 test)
+
+Kullanıcı `Tasarım/görsel1.png`+`görsel2.png` (bakır dış küp, cyan/mor sinaps ağı, kırmızı
+çekirdek) + R3F geliştirme promptu verdi; "şaşırt beni" diyerek serbest geliştirme yetkisi verdi.
+- **TASARIM.md** §1 palete `--copper #c9803f` + `--violet #a78bfa` eklendi (index.css'e de);
+  §2 baştan yazıldı: küre + vektörel dalga EMEKLİ (git geçmişinde), yerine Yaşayan Tesseract.
+- **Saf modüller (testli):** `ui/scene/tesseract/geometry.ts` — GERÇEK 4B hiperküp (16 köşe,
+  perspektif bölme f=K/(K−w), K=3 → dış/iç 2:1) + XW düzleminde hiper-dönüş + 8 kapı boncuğu +
+  çekirdek; 40 kenar (12 dış+12 iç+8 köprü+8 spoke, hepsi merkeze-doğru a→b sıralı).
+  `ui/scene/tesseract/pulses.ts` — atım sistemi (rng enjekte, deterministik test): synapse
+  (iç ağ, LLM/ajan aktivitesi) + energy (bakır, GPU yükü) + converge salvosu (köprüler içeri →
+  gecikmeli spoke'lar merkeze → coreHits). Önce-hareket-sonra-doğum sırası (aynı adımda doğup
+  emekli olmaz). MAX_PULSES 240 / HARD_CAP 320.
+- **TesseractScene.tsx:** 3 anlam düzlemi — bakır iskelet+köprüler (GPU; ısı korlaştırır),
+  cyan iç ağ (mood rengini giyer: idle cyan/executing magenta/awaiting amber/error kırmızı),
+  kırmızı çekirdek (İÇİNDE gerçek point-light — patlamada bakırı içeriden aydınlatır).
+  Ekstralar: komet kuyruklu atımlar (Points+CPU attr), düğüm haleleri (sahte bloom), converge
+  şok-dalgası halkası, kalp atışı, imleç parallax'ı, VRAM→innerSwell, nefes korundu. Instanced
+  silindir/küre (düzlem başına tek draw call). Yumuşatma RISE/FALL_TAU miras.
+- **Store:** `lastCompletedAt` (agent.run.completed + chat.completed) → converge tetikleyicisi;
+  hata (`lastErrorAt`) da tetikler. Protokol DEĞİŞMEDİ.
+- **Silinen:** `wave-field.ts` + testi (11 test). Test: 203 → **212** (geometri 10 + atım 9 +
+  store 1). build/test/lint temiz.
+- **Görsel doğrulama KULLANICIYA:** `pnpm --filter @symphony/desktop desktop:dev` (proje
+  kökünden; daemon çalışıyor olsun). Beklenen: bakır tesseract yavaş döner + hiper-salınım;
+  qwen koşusu → bakırda ağır korlar; sohbet/ajan → iç ağda hızlı cyan atımlar; tur/koşu bitince
+  TÜM sinapslar merkeze ateşler + çekirdek patlar + halka. İnce ayar noktaları:
+  TesseractScene.tsx üst sabitleri (NODE_RADIUS/STRUT_RADIUS/TRAIL*/CORE_*) + pulses.ts hızları.
 
 ## Oturum 13 (2026-07-07): "Flaşlayan/glitch pencere" KÖK NEDEN bulundu ve düzeltildi
 
@@ -250,10 +299,9 @@ Aşağıdaki eski Faz 4 dilimleri hâlâ geçerli ama kullanıcı önceliği yuk
 > Küre (dilim 3), Model panosu (4), GPU vitalleri (5), API kapasitesi+cache (6), Küre revizyonu/
 > vektörel dalga (7) BİTTİ. Sırada, kullanıcının görsel ince ayarından sonra aşağıdakiler:
 
-> **NOT (dilim 7 sonrası):** Küre revizyonu kodu+testi BİTTİ; kullanıcının canlı görsel onayı ve
-> olası ince ayarı bekleniyor (wave-field.ts ayar sabitleri: MAX_DISP/WAVE_K/WAVE_SPEED/FOCUS_EXP/
-> FOCUS_BULGE/RISE_TAU/FALL_TAU). "Çok zayıf/çok abartılı/yön yanlış" gibi bir geri bildirim gelirse
-> yalnız bu sabitler oynanır (matematik/mimari sağlam). Yön ekseni `FOCUS_DIR = normalize(1,1,0.4)`.
+> **NOT (dilim 8 sonrası):** Küre ve wave-field EMEKLİ (dilim 8'de tesseract'a dönüştü; eski kod
+> git geçmişinde). Görsel ince ayar artık `TesseractScene.tsx` üst sabitleri + `tesseract/pulses.ts`
+> hız sabitleriyle yapılır; kullanıcının canlı görsel onayı bekleniyor.
 
 **Sonraki dilimler:**
 

@@ -22,10 +22,15 @@ sinaps/nöral bağlantı noktaları; kenarlardaki ışık akışı = sinaps atı
 |---|---|---|
 | `--cyan` | `#22d3ee` | çerçeve, sağlıklı bağlantı, "düşünüyor" akışı |
 | `--magenta` | `#e879f9` | ajan/işlem düzlemi, sohbet |
-| `--red` | `#ef4444` | hata, aktif odak, "dikkat" |
+| `--red` | `#ef4444` | hata, aktif odak, "dikkat" — tesseract çekirdeği |
 | `--green` | `#34d399` | başarı, "bağlı", tamamlandı |
 | `--amber` | `#fbbf24` | bekleyen izin, uyarı |
+| `--copper` | `#c9803f` | tesseract DIŞ iskeleti: donanım/enerji düzlemi (metalik bakır) |
+| `--violet` | `#a78bfa` | sinaps kapı düğümleri, iç akış derinliği |
 | `--bg` | `#0a0b10` | koyu zemin |
+
+> Bakır + violet 2026-07-08'de eklendi (referans: `Tasarım/görsel1.png` + `görsel2.png`).
+> Logo grafiği cyan/magenta kalır; bakır YALNIZ yaşayan tesseract sahnesinin donanım düzlemidir.
 
 Masaüstü varsayılan olarak KOYU temadır (marka bu). Tipografi: monospace (HUD hissi);
 başlıklarda kalın, büyük harf, geniş harf aralığı (display).
@@ -36,45 +41,74 @@ Referans: "A LIVING INTERFACE" görseli — merkezde **nefes alan parçacık kü
 HUD çerçeveleme. Slogan: *"Pure motion shaped by intent. The seed of an environment that
 breathes back."* (Niyetle şekillenen saf hareket; geri nefes alan bir ortamın tohumu.)
 
-**Parçacık küresi (Three.js / @react-three/fiber):** sistemin ambiyans "canlılığı".
-Durum → görsel eşlemesi (her hareketin anlamı):
-- **boşta (idle):** yavaş, düzenli nefes alıp verme (breathe); cyan, düşük parlaklık.
-- **düşünüyor (thinking):** yüzeyde dalgalanma/ripple; cyan → daha parlak.
-- **araç çalıştırıyor (executing):** hızlanma, sıklaşan atım; magenta tonu karışır.
-- **izin bekliyor (awaiting):** amber nabız — kullanıcı eylemi bekleniyor.
-- **hata (failed):** kısa kırmızı flaş + dağılma, sonra toparlanma.
+**YAŞAYAN TESSERACT (2026-07-08 revizyonu — küre emekli edildi).** Merkez artık parçacık
+küresi değil, markanın kendisi: **canlı tesseract**. Referans: `Tasarım/görsel1.png` +
+`görsel2.png`. Küre dönemi (dilim 3–7) ve vektörel-dalga modeli git geçmişinde
+(`ui/scene/wave-field.ts`, silindi); yumuşatma ilkeleri ve anlam eşlemesi tesseract'a taşındı.
 
-**Fiziksel vitaller (donanım katmanı — 2026-07-07 eklendi):** Küre iki katman sürer.
-Mood (yukarıdaki) sistemin NE YAPTIĞINI; donanım vitalleri fiziksel olarak NE HİSSETTİĞİNİ
-gösterir. Kaynak: `hardware.updated` olayı (yerel GPU; NVIDIA v1, nvidia-smi ~2sn). Yalnız
-gerçekten ölçülen telemetri kullanılır — uydurma metrik yok (ilke: her hareketin GERÇEK anlamı).
+**Topoloji (`ui/scene/tesseract/geometry.ts` — SAF, testli) — ÜÇ KADEMELİ KÜP (2026-07-08
+sinematik revizyon):** dış+iç küp gerçek 4B hiperküp projeksiyonudur: 16 köşe = (±1,±1,±1,±1);
+`w=+1` → **dış küp**, `w=−1` → **iç küp** (perspektif bölme `f=K/(K−w)`, K=3 → 2:1 derinlik).
+Üçüncü kademe **DERİN küp** = iç kübün merkeze ölçekli kopyası (DEEP_SCALE 0.48; görsel1'deki
+en içteki mor küp) — iç küple nefes alır/şişer. Akış zinciri merkeze sıralı: 8 **köprü**
+(dış→iç) → 8 **bağ** (iç→derin) → 8 **spoke** (derin→çekirdek); + küp başına 12 kenar = 60 kenar,
+25 düğüm. **Hiper-dönüş:** XW düzleminde salınan 4B dönüş (±~0.38 rad — küpler kimlik
+DEĞİŞTİRMEZ); hızı canlılıkla artar, görev tamamlanınca kısa süre dalgalanır ("boyut değiştirme").
 
-**Yük ifadesi = vektörel dalga (2026-07-07 revizyonu).** Erken sürüm yükü bir "zorlanma nabzı"yla
-(ölçek titreşimi) gösteriyordu; kullanıcı bunu yüksek-frekans kalp atışı gibi buldu ve GPU %0→%100
-sıçrayınca ANİ oluyordu. Yeni model: yük artık ölçeği titretmez; kürenin YÜZEYİNDE ilerleyen bir
-**ses-dalgası** olur. İlke: ham veri sert, görsel yumuşak.
-- **Yumuşatma:** ham GPU yükü/ısısı sert sıçrar → yumuşatma ile hedefe hızlı-ama-yumuşak biner,
-  yavaş söner (afterglow). Kare-hızından bağımsız (exp) lerp; iniş/çıkış farklı zaman sabiti.
-- **Vektörel dalga:** parçacıklar radyal normal boyunca ötelenir (`r = R + genlik·dalga`); dalga,
-  yüzeyde ilerleyen sinüs + harmonik. Dalga sabit bir yöne — ekran **SAĞ-ÜST**, GPU göstergesinin
-  yazılı olduğu taraf — doğru rulo yapar. Küre dönerken bu bölge ekranda SABİT kalsın diye dönüş
-  world-uzayında pozisyona pişirilir (parçacıklar sabit "atılım bölgesi"nin içinden akar).
-- **Yönlü keskinleşme:** odak yönüne (`normalize(1,1,0.4)`) hizanın pozitif lobu üsle keskinleştirilir
-  (`max(0,dot)^p`) → genlik o dar bölgede büyür, "dalga yönüne doğru sivrilir" + sabit dışa atılım.
-- **Yönlü renk:** tüm küreye tek-tip değil; ısı × odak bölgesi (+ dalga tepesi) ile per-parçacık
-  taban→sıcak (turuncu-kırmızı) lerp → renk sıcaklığı dalga yönüne gelir, o bölge ısınır.
-- **Ortak sürücü:** dalga genliği `max(GPU yükü, LLM aktivitesi)`. Yerelde GPU yükü sürer; bulut
-  LLM'de (Claude/Gemini sesli sohbet gibi) GPU yükselmez, mood aktivitesi (thinking/executing/…)
-  dalgayı sürer. Kaynak: `mood.ts` `activity` alanı + `hardware-vitals.ts` `load`.
-- **Renk sıcaklığı** → ÖNCELİKLE GPU kullanımına bağlı: kullanım artınca taban (cyan/mood)
-  renginden amber→kırmızıya kayar, kullanım düşünce soğur. GPU sıcaklığı yalnız GERÇEKTEN
-  kızışınca (termal uyarı eşiği ~72°C üstü) ek sıcaklık katar — böylece boşta ~50°C idle'da
-  laptop GPU'su rengi turuncuya kaydırmaz.
-- **VRAM doluluğu %** ("ön bellek şişmesi") → kürenin şişmesi (yumuşak ölçek büyümesi, kalıcı).
-- **Yumuşak nefes** (mood breathe) korunur — küre daima nefes alır; yalnız yük ifadesi ölçek→dalga oldu.
+**Malzeme düzlemleri (her düzlemin anlamı ayrı):**
+- **Dış küp + köprüler = BAKIR (`--copper`), metalik (MeshStandard + ışıklar):** fiziksel/donanım
+  düzlemi. GPU yükü bu iskelette **enerji atımları** (yavaş, ağır korlar) doğurur; ısı bakır koru
+  kırmızıya kaydırır (termal eşik kuralı korunur: ~72°C altı yalnız yük ısıtır).
+- **İç küp = CYAN sinaps ağı (GLSL akış shader'ı):** zihinsel düzlem. Tüplerin İÇİNDE ilerleyen
+  enerji bantları; LLM/ajan aktivitesi (mood `activity`) hem bant hızını/parlaklığını hem
+  **hızlı elektriksel sinaps atımlarını** sürer. İç ağın rengi mood'u giyer (aşağıda).
+- **Derin küp + bağlar = VIOLET (akış shader'ı):** çekirdek kafesi; akış bantları MERKEZE akar
+  (kenarlar merkeze sıralı olduğundan shader yönü doğal olarak içeri).
+- **Spoke'lar = VIOLET→KIRMIZI (akış shader'ı):** son kademe; çekirdek enerjisiyle kızarır ve hızlanır.
+- **Çekirdek = KIRMIZI kalp:** içinde gerçek bir point-light taşır — patlamada bakır iskeleti
+  İÇERİDEN aydınlatır. Nabız hızı aktiviteyle artar.
+
+**Sinematik katman (2026-07-08):** GERÇEK bloom — `UnrealBloomPass` (EffectComposer → RenderPass →
+Bloom → OutputPass; three'nin kendi addon'ları, **yeni paket yok**). Sahne kendi atmosferini çizer:
+çok koyu zemin (#05060a) + **yıldız alanı** (uzak kabukta göz kırpan noktalar) + **nebula lekeleri**
+(çok soluk cyan/magenta/bakır). **Jiroskop yörünge halkaları** ×3 — katman başına bir: bakır=donanım,
+cyan=zihin, violet=çekirdek; kendi katmanının sürücüsüyle parlar/hızlanır. **Veri zerreleri**
+(~220 mot) üç ailede yapıyı yörüngeler; ailesinin sürücüsüyle parlar. **Sinematik kamera:**
+aktivite arttıkça yavaşça yaklaşır, sürekli hafif süzülür; imleç parallax'ı korunur.
+
+**Durum → görsel eşlemesi (mood, öncelik sırası `scene/mood.ts`):**
+- **boşta (idle):** yavaş nefes + tek tük sinaps kıvılcımı (yapı asla ölü değil); cyan.
+- **düşünüyor (thinking):** iç ağ atımları sıklaşır, parlaklık artar.
+- **araç çalıştırıyor (executing):** magenta ton + yoğun atım trafiği + hızlı dönüş.
+- **izin bekliyor (awaiting):** iç ağ amber'e döner — kullanıcı eylemi bekleniyor.
+- **hata (failed):** kırmızı flaş + converge salvosu (kritik an); sonra toparlanma.
+- **çevrimdışı:** tüm düzlemler söner (presence ~%22), atım doğmaz.
+
+**CONVERGE salvosu (görev sonuçlanması / kritik an) — ÜÇ KADEMELİ ŞELALE:**
+`agent.run.completed`, `chat.completed` ya da hata anında tüm köprüler İÇERİ → (gecikmeli)
+tüm bağlar DERİNE → (daha gecikmeli) tüm spoke'lar MERKEZE ateşler; atımlar çekirdeğe varınca
+(`coreHits`) çekirdek **patlar**: emissive + iç ışık fırlar, glow sprite büyür (bloom bunu
+çiçeğe çevirir) ve bir **şok-dalgası halkası** dışa genişleyip söner. Kaynak sinyal: store
+`lastCompletedAt` / `lastErrorAt` (protokol değişikliği yok — mevcut olaylar).
+
+**Atım sistemi (`ui/scene/tesseract/pulses.ts` — SAF, testli, rng enjekte):** oran-birikimli
+doğum (atım/sn), kenar üzerinde `t∈[0,1]` ilerleme, swap-pop emeklilik, `MAX_PULSES=240`
+(converge taşması için tavan 320). Havuzlar: synapse = iç+bağ+derin (LLM/ajan), energy =
+dış+köprü (GPU). Render: tek `THREE.Points` + CPU BufferAttribute (proje test disiplini;
+atım başına 3 noktalı **komet kuyruğu**). Düğümlerde additive **hale katmanı** (tek Points,
+25 nokta) düzlem enerjisiyle parlar; gerçek bloom hepsini çiçeklendirir.
+
+**Yumuşatma ilkesi (küreden miras):** ham GPU/aktivite verisi sert sıçrar; görsel sürücüler
+exp-lerp ile biner (RISE_TAU 0.55) ve yavaş söner (FALL_TAU 1.4, afterglow). Kare-hızından bağımsız.
+- **Ortak canlılık:** iç atım oranı = LLM aktivitesi; bakır atım oranı = GPU yükü — bulut LLM'de
+  GPU yükselmese de iç ağ yaşar (kaynak: `mood.ts activity` + `hardware-vitals.ts load`).
+- **VRAM doluluğu %** → İÇ KÜBÜN şişmesi (innerSwell; kalıcı, yumuşak).
+- **Nefes** → tüm grup ölçeğinde yumuşak sinüs (mood frekans/genliği).
+- **Derinlik parallax'ı:** imleç konumuyla ±~0.1 rad eğim — süs değil, 3B yapının okunabilirliği
+  (iç/dış küp ayrımı) için derinlik ipucu.
 - **GPU HUD (sağ-üst):** `GPU %util · kullanılan/toplam GB · °C`; çubuk ve sayı ısıyla renklenir.
-- GPU yoksa (nvidia-smi başarısız/AMD/Apple) katman sessizce kapanır; küre yalnız mood ile sürülür
-  (LLM aktivitesi dalgayı yine de sürer). Saf mantık: `ui/scene/hardware-vitals.ts` + `ui/scene/wave-field.ts`.
+- GPU yoksa (nvidia-smi başarısız/AMD/Apple) bakır düzlem sakinleşir; iç ağ mood ile yaşamaya
+  devam eder. Saf mantık: `hardware-vitals.ts` + `tesseract/geometry.ts` + `tesseract/pulses.ts`.
 
 **"Mimari durum" okuması (tesseract'ın ikinci işlevi):** tesseract yalnız logo değil, sistemin
 CANLI mimari haritası olabilir — düğümler = daemon / sağlayıcılar / aktif ajanlar; kenar atımı =
@@ -107,8 +141,8 @@ akrabadır; ayrı ve büyük bir girişimdir (kendi dilimleri olacak).
 
 ## 4. Uygulama sırası (öneri)
 
-1. **Yaşayan Arayüz parçacık küresi** (Faz 4 sonraki dilim) — dashboard'un reaktif merkezi;
-   ref görsel 2'nin doğrudan hedefi, ROADMAP'te zaten var. `@react-three/fiber`.
+1. **Yaşayan Arayüz merkezi** ✅ — küre olarak doğdu (dilim 3–7), 2026-07-08'de yaşayan
+   TESSERACT'a evrildi (§2). `@react-three/fiber`.
 2. **HUD kabuğu** — köşe braketleri, teknik etiketler, display tipografi (mevcut panelleri sarar).
 3. **Tesseract'ı canlı mimari haritasına bağlama** — düğümler = sistem bileşenleri.
 4. **Bağlam Haritası** — SQLite verisinden zamansal graf (ayrı, büyük dilim; REST/protokol

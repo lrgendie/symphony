@@ -11,6 +11,8 @@
   --red: #ef4444;
   --green: #34d399;
   --amber: #fbbf24;
+  --copper: #c9803f;
+  --violet: #a78bfa;
   font-family: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
 }
 
@@ -385,13 +387,42 @@ body {
 /* ---- Yaşayan Arayüz sahnesi (parçacık küresi + HUD) ---- */
 .scene {
   position: relative;
-  height: 300px;
+  height: 380px;
   flex-shrink: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
-  background:
-    radial-gradient(ellipse at center, rgba(34, 211, 238, 0.05), transparent 70%), var(--panel);
+  background: #05060a; /* sahne kendi atmosferini çizer (yıldız+nebula); canvas arka planıyla aynı */
+}
+
+/* HUD çerçeveleme (TASARIM.md §2): köşe braketleri + teknik etiket */
+.scene-frame {
+  position: absolute;
+  inset: 10px;
+  pointer-events: none;
+}
+.scene-frame .corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 0 solid rgba(34, 211, 238, 0.45);
+}
+.scene-frame .tl { top: 0; left: 0; border-top-width: 1px; border-left-width: 1px; }
+.scene-frame .tr { top: 0; right: 0; border-top-width: 1px; border-right-width: 1px; }
+.scene-frame .bl { bottom: 0; left: 0; border-bottom-width: 1px; border-left-width: 1px; }
+.scene-frame .br { bottom: 0; right: 0; border-bottom-width: 1px; border-right-width: 1px; }
+.scene-tag {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  padding: 3px 8px;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--dim);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(10, 11, 16, 0.55);
+  backdrop-filter: blur(4px);
 }
 .scene canvas {
   display: block;

@@ -19,6 +19,7 @@ beforeEach(() => {
     runs: [],
     pendingPermissions: [],
     lastErrorAt: null,
+    lastCompletedAt: null,
     log: [],
     usageTotals: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
     usageByModel: [],
@@ -60,6 +61,20 @@ describe("ui store", () => {
     store.handleEvent("agent.run.completed", { runId: RUN, result: "ok", usage: { inputTokens: 1, outputTokens: 1, costUsd: 0.001 } });
     expect(useStore.getState().runs).toHaveLength(0);
     expect(useStore.getState().log[0]?.tone).toBe("good");
+  });
+
+  it("görev sonuçlanması converge sinyalini (lastCompletedAt) günceller — agent VE sohbet", () => {
+    const store = useStore.getState();
+    expect(useStore.getState().lastCompletedAt).toBeNull();
+
+    store.handleEvent("agent.run.completed", { runId: RUN, result: "ok", usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 } });
+    const afterRun = useStore.getState().lastCompletedAt;
+    expect(afterRun).not.toBeNull();
+
+    store.handleEvent("chat.completed", { usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 } });
+    const afterChat = useStore.getState().lastCompletedAt;
+    expect(afterChat).not.toBeNull();
+    expect(afterChat ?? 0).toBeGreaterThanOrEqual(afterRun ?? 0);
   });
 
   it("izin akışı: tool.requested tam detay saklar (kart render edebilsin), permission.resolved requestId'e göre temizler", () => {

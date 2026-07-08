@@ -1,0 +1,44 @@
+Tesseract "Living Scene" Geliştirme Promptu
+Rol ve Bağlam
+Sen kıdemli bir React Three Fiber (R3F), WebGL ve GLSL shader uzmanısın. Mevcut 3D 'LivingScene' bileşenimizi, bir küre topolojisinden dinamik bir "Tesseract (Hiperküp)" modeline geçiriyoruz. Bu yapı, arka planda çalışan yerel LLM'in GPU kullanım metriklerine ve otonom ajanların (agents) işlem durumlarına gerçek zamanlı tepki veren yaşayan bir organizma/sinir ağı simülasyonu olarak çalışacak.
+
+Görsel Topoloji ve Materyal Yapısı
+
+Ana Form: İç içe geçmiş iki küp ve bunları köşelerinden birbirine bağlayan köprülerden oluşan 4 boyutlu Tesseract geometrisi.
+
+Dış Küp (Çerçeve): Bakır/bronz tonlarında, enerji akışını yansıtan metalik ve organik bir doku.
+
+İç Küp ve Sinapslar: Camgöbeği (cyan) ve mor tonlarında parlayan, birbirine bağlı nöron ağları (sinapslar).
+
+Merkez Çekirdek: Sistemin kalbini temsil eden, parlak kırmızı renkte ışık saçan merkezi bir nod.
+
+Dinamik Durumlar ve Animasyon Döngüleri (State Machine)
+Aşağıdaki 3 ana durumu (state) yönetecek animasyon ve shader mantığını yazmanı istiyorum:
+
+State 1: Bekleme Modu (Idle & Stabil Salınım)
+
+Tesseract yapısı sürekli olarak yavaş ve ritmik bir "nefes alma-verme" (scale in/out) hareketi yapmalıdır.
+
+Dış küp sakin bir formda kalmalı, iç sinapslardaki camgöbeği ve mor ışıklar hafifçe dalgalanmalıdır.
+
+State 2: Yüksek GPU Yükü (Donanım Stres Tepkisi)
+
+LLM'in ekran kartı kullanımı arttığında, dış kübün etrafındaki enerji aurası ve alev benzeri dalgalanmalar (Shader üzerinden noise/glow değerleri) agresifleşmelidir.
+
+En üstteki dış küp yapısında animasyonel bir hızlanma olmalı ve sinaps bağlantıları daha belirgin hale gelmelidir.
+
+Yük azaldığında sistem pürüzsüz bir interpolasyon (örneğin lerp fonksiyonu ile) ile State 1'deki stabil haline geri dönmelidir.
+
+State 3: Ajan Görev İşleme (Sinyal İletimi ve Atımlar)
+
+Sisteme bir prompt gönderildiğinde veya arka plandaki ajanlar bir görev yürüttüğünde (Agent Activity), iç küpteki sinaps yolları üzerinde hızlı, elektriksel atımlar (particle flow / emissive hareketler) oluşmalıdır.
+
+Görev sonuçlandığında veya kritik bir işlem anında, tüm dış ve iç sinapslar eşzamanlı olarak elektriksel atımlarını merkeze, kırmızı çekirdek noda doğru ateşlemelidir. Merkezdeki kırmızı ışık geçici olarak parlamalıdır (Bloom effect patlaması).
+
+Teknik Beklentiler
+
+Bu yapı için gerekli R3F component yapısını oluştur.
+
+Görsel geçişlerin (GPU yükü 0'dan 100'e çıkarken veya ajanlar tetiklendiğinde) keskin değil, yumuşak ve akıcı (smooth transition) olmasını sağla.
+
+Performans odaklı düşünerek sinaps atımlarını instanced mesh veya shader tabanlı partiküller ile çöz.

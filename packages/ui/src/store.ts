@@ -47,8 +47,13 @@ interface UiState {
   providers: ProviderHealth[];
   runs: ActiveRun[];
   pendingPermissions: PendingPermission[];
-  /** Son hata anı (ms) — yaşayan küre kısa bir "kırmızı flaş" için okur (scene/mood.ts). */
+  /** Son hata anı (ms) — yaşayan tesseract kısa bir "kırmızı flaş" için okur (scene/mood.ts). */
   lastErrorAt: number | null;
+  /**
+   * Son görev sonuçlanma anı (ms; agent.run.completed / chat.completed) — yaşayan tesseract
+   * converge salvosunu (tüm sinapslar merkeze ateşler, çekirdek patlar) bununla tetikler.
+   */
+  lastCompletedAt: number | null;
   log: LogItem[];
   /** Tüm-zaman token/maliyet toplamı (bağlanınca usage.query ile seed, usage.updated ile büyür). */
   usageTotals: Usage;
@@ -143,6 +148,7 @@ export const useStore = create<UiState>((set) => {
     runs: [],
     pendingPermissions: [],
     lastErrorAt: null,
+    lastCompletedAt: null,
     log: [],
     usageTotals: { ...EMPTY_USAGE },
     usageByModel: [],
@@ -234,6 +240,7 @@ export const useStore = create<UiState>((set) => {
         case "agent.run.completed": {
           const p = payload as { runId: string; usage: { costUsd: number } };
           removeRun(p.runId);
+          set({ lastCompletedAt: Date.now() });
           pushLog("good", `✔ koşu tamamlandı — $${p.usage.costUsd.toFixed(4)}`);
           return;
         }
@@ -246,6 +253,7 @@ export const useStore = create<UiState>((set) => {
         }
         case "chat.completed": {
           const p = payload as { usage: { inputTokens: number; outputTokens: number; costUsd: number } };
+          set({ lastCompletedAt: Date.now() });
           pushLog("chat", `💬 sohbet turu — ${p.usage.inputTokens}+${p.usage.outputTokens} token · $${p.usage.costUsd.toFixed(4)}`);
           return;
         }

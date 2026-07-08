@@ -93,17 +93,27 @@ protokol WS/REST üzerinden konuşulur.
 - `store.ts` — zustand; `handleEvent` olay tiplerini UI durumuna (providers/runs/log/pending +
   usage + `limits` + oturum cache sayaçları) çevirir. **WS→UI eşlemesinin TEK yeri**
   (testli: `store.test.ts`). Usage: `usage.query.ok` seed'ler, `usage.updated` girdiyi totals'la
-  DEĞİŞTİRİR (çift saymaz) + cache biriktirir; `provider.limits` sağlayıcı başına son görüntü
+  DEĞİŞTİRİR (çift saymaz) + cache biriktirir; `provider.limits` sağlayıcı başına son görüntü;
+  `lastCompletedAt`/`lastErrorAt` = tesseract converge/flaş sinyalleri
 - `App.tsx` — Şef Paneli: bağlantı + sağlayıcı sağlığı + **Model panosu** (token/maliyet/önbellek)
   + **API kapasitesi** (rate-limit çubukları) + aktif koşular + izin kartları + canlı akış
-- `scene/LivingScene.tsx` — Three.js parçacık küresi (@react-three/fiber): mood katmanı (ne
-  yapıyor) + **vektörel dalga katmanı** (GPU yükü/LLM aktivitesi→yüzey dalgası sağ-üste, ısı→renk,
-  VRAM→şişme). Yumuşatma ref'leri (drive/heatSmooth); ölçek = nefes + swell; sağ-üst GPU HUD
+- `scene/LivingScene.tsx` — İNCE KABUK: mood+vitals+converge sinyalini store'dan türetir,
+  Canvas + mood HUD (sol-alt) + GPU HUD (sağ-üst) kurar; sahnenin kendisi TesseractScene'de
+- `scene/TesseractScene.tsx` — YAŞAYAN TESSERACT (dilim 8+8b, sinematik): ÜÇ kademeli küp
+  (bakır dış+köprü = GPU; cyan iç = LLM/mood; violet derin+bağ+spoke = çekirdek kafesi),
+  kırmızı çekirdek (içinde point-light; 3 kademeli converge şelalesi → patlama + şok halkası).
+  GERÇEK bloom (UnrealBloomPass, three addons — paket yok), GLSL akış shader tüpleri,
+  jiroskop halkaları ×3, veri zerreleri (220), yıldız+nebula atmosferi, sinematik kamera,
+  parallax. Ayar sabitleri dosya başında (BLOOM_*, NODE_RADIUS, STRUT_RADIUS, TRAIL…)
+- `scene/tesseract/geometry.ts` — SAF, testli: 3 kademeli küp topolojisi (25 düğüm/60 kenar,
+  merkeze-doğru sıralı; DERİN küp = iç×DEEP_SCALE) + `projectNodes` (XW hiper-dönüş +
+  perspektif bölme + innerSwell)
+- `scene/tesseract/pulses.ts` — SAF, testli, rng enjekte: atım sistemi (synapse/energy/converge),
+  oran-birikimli doğum, önce-hareket-sonra-doğum, `fireConverge` = 3 kademeli şelale
+  (köprü→bağ→spoke) → coreHits (çekirdek patlaması)
 - `scene/mood.ts` — SAF: sistem durumu → mood (offline>error>awaiting>executing>thinking>idle) +
-  stil. `MoodStyle.activity` = GPU'dan bağımsız LLM dalga sürücüsü (bulut LLM'de dalgayı sürer)
+  stil. `MoodStyle.activity` = GPU'dan bağımsız LLM sürücüsü (iç sinaps atım oranını sürer)
 - `scene/hardware-vitals.ts` — SAF: `deriveGpuVitals` (en yoğun GPU → load/heat/memPct). Testli
-- `scene/wave-field.ts` — SAF, testli: `computeWaveField` (radyal deformasyon + per-parçacık renk),
-  `rotateDir`/`focusWeight`. Yön `FOCUS_DIR=normalize(1,1,0.4)` (sağ-üst); dönüş pozisyona pişirilir
 - `index.css` — marka paleti (cyan/magenta/red, logo ile aynı); düz CSS
 
 ### packages/desktop/src-tauri — Tauri 2 kabuğu (Rust) — `ui/dist`'i sarar
