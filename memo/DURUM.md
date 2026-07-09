@@ -3,7 +3,30 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-09 (Oturum 15 devamı, Opus — Dilim 2.3a+2.3b BİTTİ: birleşik giriş + konuşma kalıcılığı)
+**Son güncelleme:** 2026-07-09 (Oturum 15 devamı, Opus — Dilim 2.3a+2.3b+2.3c BİTTİ: birleşik giriş + kalıcılık + agent resume)
+
+## Dilim 2.3c (2026-07-09, Opus): TUI agent-konuşması resume UX — BİTTİ ve testli (240 test)
+
+2.3b backend'i (agent.start `sessionId`) üzerine TUI akışı bağlandı — asistan/coder konuşmaları da
+"önceki konuşmaya devam et" ile sürdürülebilir. **CLI-only → daemon restart GEREKMEZ.**
+- **`app.tsx AgentFlow`** (YENİ, ChatFlow'un agent paraleli): agent personası seçilince (kayıtlı
+  konuşma + modeli hâlâ mevcutsa) `ResumePicker` (yeni/devam) → devam: `sessionDetail` REST'ten
+  yükle, ekrana tohumla, AgentRun'a `initialSessionId`+`seedExchange`+`fixedModel` geç. yeni:
+  fresh AgentRun. Kayıt yoksa doğrudan AgentRun.
+- **`agent-run.tsx`:** opsiyonel `initialSessionId`/`seedExchange`/`fixedModel` props'ları. sessionId
+  varsa `agent.start`'a eklenir (o oturuma devam); fixedModel varsa model seçici atlanır; seedExchange
+  ekrana tohumlanır (`> ` kullanıcı, `🤖 ` asistan — submitSay ile aynı biçim).
+- **Test +3 (237→240):** agent-flow — devam→eski sessionId+eski konuşma ekranda (model sabit) ·
+  yeni→sessionId'siz+model seçici · kayıt yoksa doğrudan cwd. build/test/lint temiz.
+- **Not:** Hem "Sohbet" (chat.start) hem agent personaları artık AYNI son oturumu resume teklif
+  edebilir (sessions paylaşımlı) — çakışma yok, esneklik: son konuşma hangi personayla sürdürülürse
+  o personanın yetenekleriyle devam eder.
+- **ADR-012'nin SON opsiyonel adımı:** "Sohbet personasını da konuşmalı asistan'a taşıyıp chat.start'ı
+  yalnız curl/compat ucuna indirmek" — artık teknik engel YOK (agent konuşmaları kalıcı+resume).
+  Yapılmadı: doğrulanmış chat-resume yolunu bozmamak için; istenirse ayrı küçük dilim. **Böylece
+  ROADMAP kullanıcı önceliği #2 (birleşik sohbet-agent) İŞLEVSEL OLARAK TAMAM.**
+
+## Dilim 2.3b (2026-07-09, Opus): Konuşmalı agent kalıcılığı + resume — BİTTİ ve testli (237 test)
 
 ## Dilim 2.3b (2026-07-09, Opus): Konuşmalı agent kalıcılığı + resume — BİTTİ ve testli (237 test)
 

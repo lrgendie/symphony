@@ -42,10 +42,16 @@ export function AgentRun(props: {
   models: ModelInfo[];
   /** Koşu bitince Esc → ana menü (App mode/agent'ı sıfırlar). TUI kapanmaz. */
   onExit: () => void;
+  /** Resume (Dilim 2.3c): verilirse agent.start bu oturuma DEVAM eder (geçmiş daemon'da tohumlanır). */
+  initialSessionId?: string;
+  /** Resume: önceki konuşmanın ekrana tohumlanan satırları (`> ` kullanıcı, `🤖 ` asistan). */
+  seedExchange?: string[];
+  /** Resume: model önceki oturumunkiyle sabitlenir → model seçici atlanır. */
+  fixedModel?: ModelInfo;
 }): JSX.Element {
   const [cwd, setCwd] = useState<string | null>(null);
   const [cwdDraft, setCwdDraft] = useState(props.cwd);
-  const [modelChoice, setModelChoice] = useState<ModelChoice | null>(null);
+  const [modelChoice, setModelChoice] = useState<ModelChoice | null>(props.fixedModel ?? null);
   const [task, setTask] = useState<string | null>(null);
   const [taskDraft, setTaskDraft] = useState("");
   const [runId, setRunId] = useState<string | null>(null);
@@ -58,8 +64,8 @@ export function AgentRun(props: {
   // Konuşmalı koşu (ADR-012, dilim 2.2): tur bitince awaiting_user → devam girişi.
   const [awaiting, setAwaiting] = useState(false);
   const [sayDraft, setSayDraft] = useState("");
-  /** Biten turların dökümü (agent cevabı + kullanıcı devamı) — ekranda kalır. */
-  const [exchange, setExchange] = useState<string[]>([]);
+  /** Biten turların dökümü (agent cevabı + kullanıcı devamı) — ekranda kalır. Resume'da tohumlanır. */
+  const [exchange, setExchange] = useState<string[]>(props.seedExchange ?? []);
   const runIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -112,7 +118,15 @@ export function AgentRun(props: {
         : {};
     props.client
       // conversational (ADR-012): görev bitince koşu kapanmaz, awaiting_user'da devam beklenir.
-      .request("agent.start", { agentId: props.agentId, task, cwd, conversational: true, ...modelFields })
+      // sessionId (2.3c): verilirse önceki konuşmaya devam (daemon geçmişi bağlama tohumlar).
+      .request("agent.start", {
+        agentId: props.agentId,
+        task,
+        cwd,
+        conversational: true,
+        ...modelFields,
+        ...(props.initialSessionId !== undefined ? { sessionId: props.initialSessionId } : {}),
+      })
       .then((ok) => {
         runIdRef.current = ok.runId;
         setRunId(ok.runId);

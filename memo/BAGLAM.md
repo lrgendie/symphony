@@ -99,13 +99,18 @@ protokol WS/REST üzerinden konuşulur.
     (mode-picker + agent-picker'ın YERİNE — ikisi de silindi.)
   - `app.tsx` içinde `ChatFlow` — "Sohbet" personası orkestrasyonu: (kayıtlı sohbet varsa) yeni/devam
     seçimi → model seç → Chat. Devam: `sessionDetail` REST'ten tohum + model sabitlenir (v1: son sohbet)
+  - `app.tsx` içinde `AgentFlow` (2.3c) — agent personası orkestrasyonu, ChatFlow paraleli: yeni/devam
+    (ResumePicker) → AgentRun. Devam: `sessionDetail` tohumu → AgentRun'a `initialSessionId`/
+    `seedExchange`/`fixedModel`; agent.start `sessionId` ile aynı oturuma yazar (2.3b üstüne oturur)
   - `model-picker.tsx` / `chat.tsx` — Sohbet dalı (`chat.tsx`: opsiyonel `initialSessionId`/`initialHistory`
     tohumu → önceki oturuma devam; `HistoryEntry` dışa aktarılır)
   - `resume-picker.tsx` — "Yeni sohbet / Önceki sohbete devam et" seçici (↑/↓+Enter; picker deseni)
   - `agent-run.tsx` — asistan/coder personası: görev girişi + canlı koşu (izin kutusu tek tuş e/d/h, renkli diff,
     araç günlüğü, Esc iptal) — `cli/commands/agent.ts` ile aynı olaylara abone, Ink sunumu.
     Dilim 2.2: koşular `conversational: true` başlar; awaiting_user'da "devam yaz" girişi
-    (`agent.say`, aynı runId), biten turlar `exchange` dökümünde kalır
+    (`agent.say`, aynı runId), biten turlar `exchange` dökümünde kalır. Dilim 2.3c: opsiyonel
+    `initialSessionId` (agent.start'a → oturuma devam) / `seedExchange` (ekran tohumu) / `fixedModel`
+    (model seçici atlanır) — AgentFlow resume'da geçer
 
 ### packages/ui/src — masaüstü dashboard (React+Vite, Faz 4) — hem tarayıcı hem Tauri
 - `config.ts` — `getBootstrap()`: token+port'u `window.__SYMPHONY__` (Tauri enjekte eder) ya

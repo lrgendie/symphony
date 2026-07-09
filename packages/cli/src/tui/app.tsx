@@ -110,6 +110,95 @@ export function ChatFlow(props: {
 }
 
 /**
+ * Agent personası dalı (Dilim 2.3c): (kayıtlı konuşma varsa) yeni/devam seçimi → AgentRun.
+ * "Devam et" seçilirse önceki konuşmanın mesajları REST'ten yüklenip AgentRun'a tohumlanır;
+ * agent.start `sessionId` ile AYNI oturuma yazılır (2.3b kalıcılığı üzerine oturur). ChatFlow'un
+ * agent karşılığı — aynı ResumePicker deseni, tek fark: konuşma araçlı bir agent koşusudur.
+ */
+export function AgentFlow(props: {
+  client: DaemonClient;
+  agentId: string;
+  cwd: string;
+  models: ModelInfo[];
+  lastSession: HistorySessionSummary | null;
+  onExit: () => void;
+}): JSX.Element {
+  const resumeModel =
+    props.lastSession !== null
+      ? (props.models.find(
+          (m) => m.provider === props.lastSession?.provider && m.id === props.lastSession?.model,
+        ) ?? null)
+      : null;
+  const canResume = props.lastSession !== null && resumeModel !== null;
+
+  type Stage =
+    | { kind: "resume-choice" }
+    | { kind: "loading" }
+    | { kind: "run"; sessionId?: string; seed?: string[]; fixedModel?: ModelInfo };
+
+  const [stage, setStage] = useState<Stage>(canResume ? { kind: "resume-choice" } : { kind: "run" });
+  const [error, setError] = useState<string | null>(null);
+
+  if (stage.kind === "resume-choice" && props.lastSession !== null && resumeModel !== null) {
+    const session = props.lastSession;
+    const model = resumeModel;
+    return (
+      <ResumePicker
+        lastSession={session}
+        onPick={(choice) => {
+          if (choice === "new") {
+            setStage({ kind: "run" });
+            return;
+          }
+          setStage({ kind: "loading" });
+          props.client
+            .sessionDetail(session.sessionId)
+            .then((detail) => {
+              if (detail === null) {
+                setStage({ kind: "run" });
+                return;
+              }
+              // Ekrana tohum: kullanıcı `> `, asistan `🤖 ` (submitSay ile aynı biçim).
+              const seed = detail.messages
+                .filter((m) => m.role === "user" || m.role === "assistant")
+                .map((m) => (m.role === "user" ? `> ${m.content}` : `🤖 ${m.content}`));
+              setStage({ kind: "run", sessionId: detail.session.sessionId, seed, fixedModel: model });
+            })
+            .catch((err: unknown) => {
+              setError(err instanceof Error ? err.message : String(err));
+              setStage({ kind: "run" });
+            });
+        }}
+      />
+    );
+  }
+
+  if (stage.kind === "loading") {
+    return <Text dimColor>önceki konuşma yükleniyor…</Text>;
+  }
+
+  if (stage.kind === "run") {
+    return (
+      <Box flexDirection="column">
+        {error !== null && <Text color="red">⚠ {error}</Text>}
+        <AgentRun
+          client={props.client}
+          agentId={props.agentId}
+          cwd={props.cwd}
+          models={props.models}
+          onExit={props.onExit}
+          initialSessionId={stage.sessionId}
+          seedExchange={stage.seed}
+          fixedModel={stage.fixedModel}
+        />
+      </Box>
+    );
+  }
+  // Ulaşılmaz: resume-choice yalnız lastSession+resumeModel varken başlangıç durumudur.
+  return <Text dimColor>yükleniyor…</Text>;
+}
+
+/**
  * `symphony` (argümansız): karşılama → persona seçici → konuşma.
  * Birleşik giriş (ADR-012, Dilim 2.3): tek "kiminle konuşmak istersin?" adımı — Sohbet
  * (araçsız, geçmiş korunur) YA DA bir agent personası (asistan/coder, araçlar izin kapısında).
@@ -133,11 +222,12 @@ export function App(props: {
         <ChatFlow client={props.client} models={props.models} lastSession={props.lastSession} />
       )}
       {persona?.kind === "agent" && (
-        <AgentRun
+        <AgentFlow
           client={props.client}
           agentId={persona.agent.id}
           cwd={props.cwd}
           models={props.models}
+          lastSession={props.lastSession}
           // Konuşma bitince Esc → persona seçimine dön (TUI kapanmaz).
           onExit={() => setPersona(null)}
         />
