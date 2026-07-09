@@ -80,10 +80,13 @@ ADR-012'nin kalbi: `awaiting_user` + `agent.say` + `conversational` artık UYGUL
   "planlandı — Dilim 2.2, henüz uygulanmadı" işaretleri kondu (belge artık uygulama durumunu söylüyor).
 - **Birleşik doğrulama:** build ✓ · test **37 dosya / 219 test, tümü geçti** (raporun ~219 tahmini
   birebir tuttu; welcome.test dahil) ✓ · lint ✓.
-- **Sıradaki:** ✅ Dilim 2.2 (Fable) ve ✅ rapor §5 paketi (Sonnet) bitti (üstteki iki bölüm).
-  Kalan: kullanıcı görsel onayları (tesseract 8b · TUI "devam et" · masaüstü agent akışı ·
-  konuşmalı agent) → **Dilim 2.3 (birleşik TUI)** ← SIRADAKİ TEK KOD İŞİ (Opus'a uygun: yarı
-  tasarım yarı uygulama, ADR-012'nin sahibi).
+- **Sıradaki:** ✅ Dilim 2.2 (Fable), ✅ rapor §5 paketi (Sonnet) ve ✅ DÖRT canlı kullanıcı
+  kontrolü (tesseract 8b, TUI konuşmalı agent, masaüstü agent akışı, TUI "önceki sohbete devam
+  et" — hepsi 2026-07-09'da onaylandı, ayrıntı: "Bekleyenler" bölümü) bitti. **SIRADAKİ TEK KOD
+  İŞİ: Dilim 2.3 (birleşik TUI)** — model Opus'a geçiyor (yarı tasarım yarı uygulama, ADR-012'nin
+  sahibi zaten o). Hedef: varsayılan araçsız "asistan" agent tanımı + Sohbet/Agent modlarının tek
+  konuşma yüzeyinde birleşmesi + ChatFlow (Dilim 1) ile harmanlama. ROADMAP kullanıcı önceliği
+  #2'nin son parçası — bu bitince öncelik #3 (uzun-dönem hafıza) sırası gelir.
 
 > Aşağıdaki Dilim 8b / 8 bölümleri Fable'ın Oturum 14 anlatısıdır (main, 2026-07-08 akşam).
 
@@ -494,8 +497,13 @@ Claude/Gemini sohbeti → GPU yükselmese de mood-activity dalgayı sürmeli. İ
 
 ## Bekleyenler / kullanıcıdan gerekenler
 
-- [ ] **Masaüstü dashboard görsel doğrulaması** (yukarıda — Faz 4 dilim 1'in son adımı).
-- [ ] TUI agent modu canlı doğrulaması (Faz 3 — hâlâ kullanıcının bir kez denemesi bekleniyor).
+- [x] **Masaüstü dashboard + tesseract görsel doğrulaması** ✅ 2026-07-09 (Oturum 15 devamı,
+      Sonnet): kullanıcı `desktop:dev` penceresini gördü, tesseract sinematik hâliyle (dilim 8+8b)
+      dönüyor onaylandı.
+- [x] **TUI agent modu canlı doğrulaması** ✅ 2026-07-09 — konuşmalı agent (dilim 2.2) denendi,
+      "gayet güzel çalıştı" onayı geldi.
+- [x] **TUI "önceki sohbete devam et" canlı doğrulaması** ✅ 2026-07-09 — seçenek çıktı, eski
+      mesajlar yüklendi, qwen bağlamı hatırladı; tam onay.
 - [ ] OpenAI/Google API anahtarları (gelince: `pnpm --filter @symphony/core key:set openai`).
 - [ ] Tauri ikonları şu an jenerik (init varsayılanı) — sonraki dilimde Symphony tesseract
       logosuyla değiştirilecek (`tauri icon <kaynak.png>`).
