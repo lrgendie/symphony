@@ -400,6 +400,50 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
     expect(exited).toBe(false);
   });
 
+  it("resume (initialSessionId) sonrası Enter→yeni görev, YENİ agent.start sessionId'SİZ gider (rapor2 §3.1)", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun
+        client={fake.client}
+        agentId="coder"
+        cwd="/ws"
+        models={models}
+        onExit={() => {}}
+        initialSessionId="33333333-3333-4333-8333-333333333333"
+      />,
+    );
+    // fixedModel verilmedi → model adımı hâlâ sorulur; cwd zaten hazır (initialSessionId modeli sabitlemez).
+    await tick();
+    stdin.write("\r"); // cwd varsayılan
+    await tick();
+    stdin.write("\r"); // model: router
+    await tick();
+    stdin.write("ilk görev (resume)");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    expect(fake.requests[0]?.payload).toMatchObject({
+      sessionId: "33333333-3333-4333-8333-333333333333",
+    });
+
+    fake.emit("agent.run.completed", {
+      runId: RUN_ID,
+      result: "bitti",
+      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+    });
+    await tick();
+    stdin.write("\r"); // Enter → yeni görev
+    await tick();
+    expect(lastFrame()).toContain("Görev nedir?");
+
+    stdin.write("ikinci görev (yeni)");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    const secondStart = fake.requests.filter((r) => r.type === "agent.start")[1];
+    expect(secondStart?.payload).not.toHaveProperty("sessionId");
+  });
+
   it("koşu bitince Esc → onExit çağrılır (ana menüye dönüş)", async () => {
     const fake = fakeClient();
     let exited = false;

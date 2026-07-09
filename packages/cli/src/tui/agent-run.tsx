@@ -66,6 +66,9 @@ export function AgentRun(props: {
   const [sayDraft, setSayDraft] = useState("");
   /** Biten turların dökümü (agent cevabı + kullanıcı devamı) — ekranda kalır. Resume'da tohumlanır. */
   const [exchange, setExchange] = useState<string[]>(props.seedExchange ?? []);
+  // Resume oturumu (rapor2 §3.1): prop SABİTTİR ama koşu bitip "yeni görev" ile sıfırlanınca
+  // eski oturuma sessizce devam ETMEMELİ — bu yüzden state'e alınıp reset'te undefined'a düşürülür.
+  const [sessionId, setSessionId] = useState<string | undefined>(props.initialSessionId);
   const runIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -119,13 +122,14 @@ export function AgentRun(props: {
     props.client
       // conversational (ADR-012): görev bitince koşu kapanmaz, awaiting_user'da devam beklenir.
       // sessionId (2.3c): verilirse önceki konuşmaya devam (daemon geçmişi bağlama tohumlar).
+      // "Yeni görev" (resetForNewTask) sonrası bu state undefined'a düşer — yeni oturum üretilir.
       .request("agent.start", {
         agentId: props.agentId,
         task,
         cwd,
         conversational: true,
         ...modelFields,
-        ...(props.initialSessionId !== undefined ? { sessionId: props.initialSessionId } : {}),
+        ...(sessionId !== undefined ? { sessionId } : {}),
       })
       .then((ok) => {
         runIdRef.current = ok.runId;
@@ -140,7 +144,11 @@ export function AgentRun(props: {
     };
   }, [task, cwd]);
 
-  /** Aynı agent/dizin/model ile yeni görev: koşu durumunu sıfırla, görev girişine dön. */
+  /**
+   * Aynı agent/dizin/model ile yeni görev: koşu durumunu sıfırla, görev girişine dön.
+   * sessionId de undefined'a düşer (rapor2 §3.1) — "yeni görev" GERÇEKTEN yeni oturum
+   * üretir; aksi hâlde ekran boşken model resume edilen eski geçmişi görmeye devam ederdi.
+   */
   const resetForNewTask = (): void => {
     runIdRef.current = null;
     setRunId(null);
@@ -155,6 +163,7 @@ export function AgentRun(props: {
     setAwaiting(false);
     setSayDraft("");
     setExchange([]);
+    setSessionId(undefined);
   };
 
   /** awaiting_user'daki koşuya sonraki kullanıcı turunu gönderir (agent.say, aynı runId). */

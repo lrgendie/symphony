@@ -3,7 +3,40 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-09 (Oturum 15 devamı, Opus — Dilim 2.3a+2.3b+2.3c BİTTİ: birleşik giriş + kalıcılık + agent resume)
+**Son güncelleme:** 2026-07-09 akşam (Sonnet — rapor2 §3.1-§3.4 dört düzeltme TAMAM)
+
+## Rapor2 §3 düzeltme paketi (2026-07-09, Sonnet): §3.1-§3.4 BİTTİ ve testli (244 test)
+
+`rapor/fabelincelemeraporu2.md`'nin 4 maddesi mekanik olarak uygulandı (devir talimatıyla,
+yeniden denetim yapılmadan — kararlar zaten raporda vardı):
+1. **§3.1 TUI resume + "Enter→yeni görev"** (`agent-run.tsx`): `initialSessionId` artık state'e
+   alınıyor (`sessionId`), `resetForNewTask` onu `undefined`'a düşürüyor — "yeni görev" artık
+   GERÇEKTEN yeni oturum. +1 test (resume→bitir→Enter→yeni görev→agent.start sessionId'siz).
+2. **§3.2 say() persist penceresi** (`engine.ts`): iki yeni `persistConversation` çağrısı —
+   (a) ilk görev metni transcript'e girer girmez (model turu başlamadan), (b) `agent.say`
+   sonrası kullanıcı turu transcript'e eklenir eklenmez (asistan turu bitmeden). +2 test
+   (`engine.test.ts` — yeni `deferredTurn()`/`deferredStream()` test yardımcıları: stream
+   test elle push/finish çağırana dek asılı kalır, race'siz "asistan cevabı gelmeden önce
+   kalıcılaştı" doğrulaması sağlar).
+3. **§3.3 queued→failed geçersiz geçiş** (`engine.ts`): `runLoop`'un ilk `transition(thinking)`'i
+   artık MCP bağlantısından/`languageModel` çağrısından ÖNCE — bu adımlardan biri atarsa
+   `finish(failed)` artık geçerli `thinking→failed` geçişi yapıyor (`agent.run.state` olayı
+   yayınlanıyor; önceden sessizce düşüyordu). PROTOKOL/agent-state.ts'e DOKUNULMADI (taşıma
+   seçeneği seçildi — rapor'un önerdiği küçük yol). +1 test (MCP hatasında state dizisi
+   `["thinking","failed"]`).
+4. **§3.4 requests.session_id** (`engine.ts` `recordTurnUsage`): `run.runId` yerine
+   `run.sessionId` yazılıyor — chat.start ile aynı sütun anlamı (oturum kimliği), koşu
+   granülaritesi zaten `agent_runs`/`agent_steps`'te. Test gerekmedi (mevcut testler bu
+   sütunu doğrulamıyordu).
+- **Test:** 240→**244** (agent-run +1, engine +3). `pnpm build && pnpm test && pnpm lint`
+  bu oturumda TEMİZ (38 dosya/244 test).
+- **Not (yan bulgu):** §3.3'ün erken `transition(thinking)` eklemesi, mevcut §3.2 testlerinden
+  birinin "thinking" olay SAYISINA dayanan senkronizasyonunu bozdu (event artık MCP-connect'ten
+  ÖNCE ateşleniyor) — düzeltme: o test artık `adapter.deferred.length > 0`'ı bekliyor (modelin
+  GERÇEKTEN çağrıldığı an), bus olayı saymak yerine. **Ders:** mock-tabanlı zamanlama testlerinde
+  olay SAYISI yerine somut yan etkiyi (burada: doStream'in çağrılmış olması) beklemek daha sağlam.
+
+**Sıradaki:** ROADMAP kullanıcı önceliği **#3 (uzun-dönem hafıza/arşiv)** — henüz başlanmadı.
 
 ## Dilim 2.3c (2026-07-09, Opus): TUI agent-konuşması resume UX — BİTTİ ve testli (240 test)
 

@@ -122,13 +122,68 @@ function errorStream(entry: ErrorTurnEntry): ReadableStream<unknown> {
   });
 }
 
+/**
+ * Test kontrolünde, TAMAMLANMASI ELLE tetiklenen tur (rapor2 §3.2): normal `turn()` mock'u
+ * near-senkron çözüldüğünden "asistan turu bitmeden ÖNCE kalıcılaştı" iddiasını `waitState`
+ * ile yakalamak yarış yaratır — bu, streamText çağrılana kadar hiçbir şey üretmeyen bir
+ * ReadableStream sağlayıp denetimi teste bırakır (push/finish teste kadar asılı kalır).
+ */
+interface DeferredTurnEntry {
+  __deferred: true;
+}
+
+function deferredTurn(): DeferredTurnEntry {
+  return { __deferred: true };
+}
+
+function isDeferredTurn(entry: unknown): entry is DeferredTurnEntry {
+  return typeof entry === "object" && entry !== null && (entry as DeferredTurnEntry).__deferred === true;
+}
+
+interface DeferredStreamController {
+  pushText(text: string): void;
+  finish(): void;
+}
+
+function deferredStream(): { stream: ReadableStream<unknown>; controller: DeferredStreamController } {
+  let ctrl: ReadableStreamDefaultController<unknown> | null = null;
+  let textId = 0;
+  const stream = new ReadableStream<unknown>({
+    start(controller) {
+      ctrl = controller;
+      controller.enqueue({ type: "stream-start", warnings: [] });
+    },
+  });
+  return {
+    stream,
+    controller: {
+      pushText(text) {
+        const id = `d${++textId}`;
+        ctrl?.enqueue({ type: "text-start", id });
+        ctrl?.enqueue({ type: "text-delta", id, delta: text });
+        ctrl?.enqueue({ type: "text-end", id });
+      },
+      finish() {
+        ctrl?.enqueue({
+          type: "finish",
+          usage: { inputTokens: { total: 3 }, outputTokens: { total: 2 } },
+          finishReason: { unified: "stop" },
+        });
+        ctrl?.close();
+      },
+    },
+  };
+}
+
 class FakeAdapter implements ProviderAdapter {
   readonly name = "fake";
   readonly forwardsTemperature = true;
   /** Her model turunun çağrı seçenekleri (konuşmalı test: sonraki tur user mesajını görüyor mu). */
   readonly prompts: unknown[] = [];
+  /** deferredTurn() sırasıyla üretilen kontrolörler — test elle push/finish çağırır. */
+  readonly deferred: DeferredStreamController[] = [];
 
-  constructor(private readonly script: Array<GenerateResult | ErrorTurnEntry>) {}
+  constructor(private readonly script: Array<GenerateResult | ErrorTurnEntry | DeferredTurnEntry>) {}
 
   listModels(): Promise<ModelInfo[]> {
     return Promise.resolve([{ provider: "fake", id: "fake-1", local: true }]);
@@ -141,6 +196,7 @@ class FakeAdapter implements ProviderAdapter {
   languageModel(): Promise<MockLanguageModelV3> {
     const script = this.script;
     const prompts = this.prompts;
+    const deferred = this.deferred;
     // Motor artık streamText kullanıyor → doStream (ADR-012). Config'i cast'liyoruz:
     // doStream'in tam dönüş tipi @ai-sdk/provider'da (transitive; core'dan içe aktarılmaz).
     const config = {
@@ -148,6 +204,11 @@ class FakeAdapter implements ProviderAdapter {
         prompts.push(options);
         const next = script.shift();
         if (next === undefined) throw new Error("senaryo bitti ama model yine çağrıldı");
+        if (isDeferredTurn(next)) {
+          const { stream, controller } = deferredStream();
+          deferred.push(controller);
+          return Promise.resolve({ stream });
+        }
         const stream = isErrorTurn(next) ? errorStream(next) : scriptToStream(next);
         return Promise.resolve({ stream });
       },
@@ -210,7 +271,7 @@ class CaptureBus extends EventBus {
 
 const openStores: DataStore[] = [];
 
-function makeEngine(script: Array<GenerateResult | ErrorTurnEntry>): {
+function makeEngine(script: Array<GenerateResult | ErrorTurnEntry | DeferredTurnEntry>): {
   engine: AgentEngine;
   bus: CaptureBus;
   store: DataStore;
@@ -455,6 +516,18 @@ describe("AgentEngine (SPEC-AGENT §4-§6)", () => {
     const failed = await bus.waitFor("agent.run.failed");
     expect(failed.error.code).toBe("AGENT_MCP_SERVER_UNKNOWN");
   });
+
+  it("rapor2 §3.3: MCP bağlantı hatasında agent.run.state:'failed' de yayınlanır (queued→thinking→failed geçerli)", async () => {
+    const { engine, bus } = makeEngine([turn([text("hiç buraya gelmemeli")])]);
+    await engine.start({ ...START, agentId: "mcpli" });
+    await bus.waitFor("agent.run.failed");
+    // Düzeltmeden önce: queued→failed geçersiz geçiş olduğundan bu olay HİÇ yayınlanmazdı
+    // (yalnız "geçersiz agent durum geçişi engellendi" logu düşerdi, istemci queued'da kalırdı).
+    const states = bus.emitted
+      .filter((e) => e.type === "agent.run.state")
+      .map((e) => (e.payload as { state: string }).state);
+    expect(states).toEqual(["thinking", "failed"]);
+  });
 });
 
 // ---- Dilim 2.2: konuşmalı koşu (ADR-012 — awaiting_user + agent.say + conversational) ----
@@ -473,6 +546,16 @@ async function waitState(
     ).length;
     if (seen >= count) return;
     if (Date.now() > deadline) throw new Error(`'${state}' durumu (${count}.) zamanında gelmedi`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+/** Serbest koşul için genel bekleme (ör. deferredTurn'ün GERÇEKTEN çağrıldığının doğrulanması). */
+async function waitUntil(predicate: () => boolean, timeoutMs = 4000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (predicate()) return;
+    if (Date.now() > deadline) throw new Error("koşul zamanında sağlanmadı");
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
@@ -665,5 +748,56 @@ describe("AgentEngine — konuşma kalıcılığı (Dilim 2.3b)", () => {
     await bus.waitFor("agent.run.completed");
     // Konuşmalı değil → oturum kaydı yok (one-shot task, yalnız agent_runs'ta).
     expect(store.sessionDetail(sessionId)).toBeNull();
+  });
+
+  it("rapor2 §3.2: görev metni İLK model turu bitmeden önce zaten kalıcılaşır", async () => {
+    // deferredTurn(): stream biz push/finish çağırana dek hiçbir şey üretmez — "thinking"e
+    // geçmiş olması, asistan cevabının GELMEDİĞİNİN garantisidir (yarış yok).
+    const { engine, bus, store, adapter } = makeEngine([deferredTurn()]);
+    const { runId, sessionId } = await engine.start({ ...START, conversational: true });
+
+    // rapor2 §3.3 sonrası "thinking" MCP bağlantısından ÖNCE de ateşlenebiliyor — asıl garanti
+    // noktamız modelin GERÇEKTEN çağrıldığı an (deferred stream oluşturulunca).
+    await waitUntil(() => adapter.deferred.length > 0);
+    // İlk tur hâlâ asılı (deferred) — henüz asistan metni YOK; görev zaten DB'de olmalı.
+    expect(transcript(store, sessionId)).toEqual(["user:test görevi"]);
+
+    adapter.deferred[0]?.pushText("cevap");
+    adapter.deferred[0]?.finish();
+    await waitState(bus, "awaiting_user", 1);
+    expect(transcript(store, sessionId)).toEqual(["user:test görevi", "assistant:cevap"]);
+
+    engine.cancel(runId);
+    await waitState(bus, "cancelled", 1);
+  });
+
+  it("rapor2 §3.2: agent.say kullanıcı turu, SONRAKİ asistan turu bitmeden önce kalıcılaşır", async () => {
+    const { engine, bus, store, adapter } = makeEngine([turn([text("İlk cevap")]), deferredTurn()]);
+    const { runId, sessionId } = await engine.start({ ...START, conversational: true });
+    await waitState(bus, "awaiting_user", 1);
+
+    engine.say({ runId, text: "ikinci mesaj" });
+    // İkinci tur "thinking"e geçti ama deferred stream hiçbir şey üretmediği için ASILI —
+    // kullanıcı mesajı bu noktada ZATEN yazılmış olmalı (model turu ortasında koşu ölse bile
+    // artık kalıcı — kayıp penceresi kapandı).
+    await waitState(bus, "thinking", 2);
+    expect(transcript(store, sessionId)).toEqual([
+      "user:test görevi",
+      "assistant:İlk cevap",
+      "user:ikinci mesaj",
+    ]);
+
+    adapter.deferred[0]?.pushText("İkinci cevap");
+    adapter.deferred[0]?.finish();
+    await waitState(bus, "awaiting_user", 2);
+    expect(transcript(store, sessionId)).toEqual([
+      "user:test görevi",
+      "assistant:İlk cevap",
+      "user:ikinci mesaj",
+      "assistant:İkinci cevap",
+    ]);
+
+    engine.cancel(runId);
+    await waitState(bus, "cancelled", 1);
   });
 });

@@ -309,6 +309,12 @@ export class AgentEngine {
     };
 
     try {
+      // rapor2 §3.3: queued'dan doğrudan failed'e geçiş VALID_TRANSITIONS'ta YOK (yalnız
+      // thinking/cancelled) — MCP bağlantısı (aşağıda) queued'dayken atılabilir bir hata
+      // fırlatırsa geçiş REDDEDİLİR ve agent.run.state hiç yayınlanmazdı. Loop'un kendi ilk
+      // transition(thinking)'ini burada, hazırlık adımlarından ÖNCE çağırmak bunu kapatır
+      // (state zaten thinking'ken loop'un tekrar çağırması no-op'tur, çifte olay YOK).
+      this.transition(run, "thinking");
       // MCP istemcisi (ADR-007, SPEC-AGENT §2): koşu başında bağlan, finally'de kapat —
       // hata olursa (AGENT_MCP_*) aşağıdaki catch tarafından normal akışla işlenir.
       mcpConnections = await connectMcpServers(this.deps.mcpServersFile, definition.mcpServers);
@@ -335,6 +341,9 @@ export class AgentEngine {
               .map((m) => ({ role: m.role, content: m.content })) ?? [])
           : [];
       run.transcript = [...seeded, { role: "user", content: run.task }];
+      // rapor2 §3.2: görev metni model turu başlamadan HEMEN kalıcılaşır — ilk tur ölürse
+      // (maxSteps, sağlayıcı hatası) bile kullanıcının görevi/resume bağlamı DB'de kaybolmaz.
+      if (run.conversational) this.persistConversation(run);
       // transcript yalnız user/assistant taşır; her elemanı somut rol literaliyle ModelMessage'a çevir.
       const messages: ModelMessage[] = run.transcript.map((m): ModelMessage =>
         m.role === "assistant"
@@ -407,6 +416,9 @@ export class AgentEngine {
           this.transition(run, "awaiting_user");
           const nextText = await this.waitForUser(run);
           run.transcript.push({ role: "user", content: nextText });
+          // rapor2 §3.2: agent.say'in getirdiği kullanıcı turu, SONRAKİ asistan turu bitmeden
+          // de kalıcılaşır — model turu ortasında koşu ölürse kullanıcının son mesajı kaybolmaz.
+          this.persistConversation(run);
           messages.push({ role: "user", content: nextText });
           continue;
         }
@@ -835,7 +847,9 @@ export class AgentEngine {
     };
     this.deps.store.recordRequest({
       id: randomUUID(),
-      sessionId: run.runId,
+      // rapor2 §3.4: run.runId DEĞİL run.sessionId — chat.start ile aynı sütun anlamını taşır
+      // (oturum kimliği), böylece requests tablosu oturum-bazlı maliyet/router v2 için birleşir.
+      sessionId: run.sessionId,
       provider: run.provider,
       model: run.model,
       startedAt,
