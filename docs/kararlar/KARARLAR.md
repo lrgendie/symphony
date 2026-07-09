@@ -138,3 +138,71 @@ asistan agent'ına taşınır.
 **Geri dönüş koşulu:** streamText göçü mevcut agent kabul testlerini (izin/jail/deny) kırarsa ya da
 konuşma yaşam döngüsü koşu semantiğini bulanıklaştırırsa dilim geri alınır ve C (ayrı `converse.*`)
 yeniden değerlendirilir. Değişmezler dokunulmaz: izin kapısı, jail, anahtar yönetimi.
+
+## ADR-013 — Uzun-dönem hafıza: dosya-tabanlı stil/tercih profili, salt-okur enjeksiyon (2026-07-09, Fable)
+**Bağlam:** ROADMAP kullanıcı önceliği #3 (Faz 6 "Kullanıcı hafızası" + konuşma arşivinden
+kişiselleşme). Üç katman önerilmişti: (a) stil/tercih profili → system prompt'a enjekte,
+(b) RAG (arşiv embedding + sorguda bağlama çekme), (c) LoRA ince-ayar. Kullanıcı tüm geçmiş
+Claude sohbetlerini arşivledi; yerel LLM'in kullanıcıyı tanıyıp tarzını benimsemesi isteniyor.
+
+**Karar 1 — (a) ile başla; (b) ertelendi; (c) ertelendi.**
+- **(a) profil:** sıfır yeni bağımlılık (embedding/vektör DB/eğitim yok), hemen görünür kazanım,
+  tam kullanıcı kontrolü (düz markdown). "Tarz benimseme"nin %80'i buradan gelir.
+- **(b) RAG:** Faz 6 "Bağlam Haritası" ile aynı altyapıyı (embedding + indeks) paylaşacak —
+  o işten BAĞIMSIZ şimdi kurmak altyapı kararını iki kez verdirir. Geri dönüş koşulu: profil
+  "geçmişe atıf" ihtiyacını karşılayamazsa (kullanıcı 'şunu konuşmuştuk'u arıyorsa) Bağlam
+  Haritası dilimiyle birlikte tasarlanır. Enjeksiyon noktası (aşağıda) RAG çıktısının da aynı
+  borudan akabileceği şekilde tek yerde tutulur.
+- **(c) LoRA:** en ağır (veri hazırlığı + eğitim + Modelfile/GGUF içe aktarma); profil+RAG
+  yetmezse yeniden değerlendirilir. Şimdi yapılmaz.
+
+**Karar 2 — Yazma kısıtı KORUNUR ve güçlendirilir (Faz 6 kapsam kararı, 2026-07-05):**
+- Canlı profil `~/.symphony/memory/profil.md` YALNIZ insan eliyle yazılır (herhangi bir editör,
+  Claude Code, ya da M2'deki REST PUT — hepsi kullanıcı eylemi).
+- Agent'lar/motor profili ASLA yazamaz — arşiv damıtma (M3) dahi yalnız `profil.taslak.md`
+  TASLAĞI üretir; taslağın canlıya alınması kullanıcının açık eylemidir (gözden geçir + kopyala).
+  Gerekçe: kendi hafızasını kendisi genişleten agent, yanlış/yanıltıcı bir "gerçeği" sonraki TÜM
+  koşulara bulaştırır; arşiv içeriğinden gelebilecek prompt-injection da insan onayı kapısında süzülür.
+- Not: kullanıcı `~/.symphony`'yi bilerek jail'e verirse (extraDirs açık onaydır, SPEC §3) bu
+  bilinçli karardır; motor ayrıca engellemez.
+
+**Karar 3 — Veri katmanı DOSYA, DB değil:** `~/.symphony/memory/profil.md` (paths.ts'e girer).
+Gerekçe: kullanıcı-düzenlenebilir + diff'lenebilir + Faz 7 `symphony sync` git eşitlemesiyle
+bedavaya taşınır + göç gerektirmez. SQLite'a koymak düzenleme/inceleme sürtünmesi ekler, kazanım yok.
+Boyut sınırı: MAX_PROFILE_CHARS ≈ 8000 (≈2K token); aşan kısım kesilir ve loglanır (hatayı yutma).
+Dosya yoksa daemon açılışta BOŞ İSKELET yazar (yalnız başlıklar — ensureDefaultAgent deseni);
+içerik hep kullanıcıdan.
+
+**Karar 4 — Enjeksiyon noktası TEK ve sunucu tarafında (iki yol, tek kaynak):**
+- Agent yolu: `engine.ts buildSystemPrompt` sonuna "Kullanıcı profili" bölümü. Engine'e dep
+  olarak `loadMemoryProfile: () => string | null` verilir (testte sahtelenir).
+- Chat yolu: `daemon.ts runChat` provider çağrısına giden mesaj KOPYASINA system-önek olarak
+  eklenir; `saveChatTurn`'a giden `payload.messages` DEĞİŞMEZ (kalıcı geçmişe system girmez —
+  mevcut temizlik korunur). İstemcinin ilk mesajı zaten system ise profil o mesajın sonuna
+  BİRLEŞTİRİLİR (iki system mesajı riski yok).
+- Her koşu/istek başında dosyadan taze okunur (µs-ölçek; cache karmaşıklığı gereksiz). Profil
+  stabil kaldığı sürece system-önek değişmez → Anthropic prompt-cache prefix'i bozulmaz (maliyet
+  endişesi düşük). `config.json → memory.enabled` (vars. true) tek anahtarla kapatılabilir
+  (kirlenmiş profil şüphesinde hızlı devre dışı bırakma).
+
+**Karar 5 — Arşiv damıtma (M3) YENİ PROTOKOL YÜZEYİ AÇMADAN agent olarak koşar:**
+`symphony memory distill <arşiv-dizini>` = salt-okur araçlı (read_file/glob/grep) bir "damıtıcı"
+agent koşusu: cwd=arşiv dizini, task=damıtma talimatı, sonuç (`agent.run.completed.result`) CLI
+tarafından `profil.taslak.md`'ye yazılır (CLI = kullanıcı eylemi; taslak zaten canlı değil).
+Kazanım: izin sistemi/jail/telemetri/iptal bedavaya gelir; `memory.distill` diye yeni istek tipi
+gerekmez. **Gizlilik varsayılanı:** damıtma YEREL model şart koşar (arşiv buluta gönderilmez);
+`--bulut` bayrağıyla bilinçli override. Büyük arşivde v1 sınırı: karakter bütçesi (en yeni
+dosyalardan başla); map-reduce özetleme gerekirse ayrı dilim.
+
+**Protokol dokunuşu (yalnız M2, ADDITIVE):** REST `GET /api/memory` (profil + meta) ve
+`PUT /api/memory` (tam içerik değiştirme — insan arayüzünden). M1 ve M3 protokolsüz.
+PROTOKOL.md'ye "planlandı (M2)" işaretiyle şimdi yazıldı (rapor1 §3.2 dersi: işaretsiz
+gelecek özellik belgelenmez).
+
+**Dikey dilimler (Kural 7):** M1 çekirdek enjeksiyon (core-only, protokolsüz) → M2 yüzey
+(REST + CLI `symphony memory` + TUI göstergesi) → M3 damıtıcı agent. Adım adım talimat:
+`memo/DURUM.md`. (b)/(c) bu ADR'nin kapsamı DIŞI — geri dönüş koşulları yukarıda.
+
+**Geri dönüş koşulu:** Profil enjeksiyonu model davranışını ölçülebilir bozarsa (kabul testleri /
+kullanıcı gözlemi) `memory.enabled=false` anında kapatır; dosya-tabanlı yaklaşım çok-makine
+senkronunda yetersiz kalırsa Faz 7 sync ile birlikte yeniden değerlendirilir.

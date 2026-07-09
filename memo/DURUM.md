@@ -3,7 +3,79 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-09 akşam (Sonnet — rapor2 §3.1-§3.4 dört düzeltme TAMAM)
+**Son güncelleme:** 2026-07-09 gece (Fable — öncelik #3 hafıza TASARIMI tamam: ADR-013 + M1/M2/M3 dilim planı)
+
+## Öncelik #3 — Uzun-dönem hafıza: TASARIM BİTTİ (2026-07-09, Fable); uygulama Sonnet'e
+
+**Kararlar `docs/kararlar/KARARLAR.md` ADR-013'te** (oku!): (a) stil/tercih profili ile
+başlanıyor; RAG (b) Bağlam Haritası'na, LoRA (c) süresiz ertelendi. Yazma kısıtı KORUNDU:
+canlı `~/.symphony/memory/profil.md`'yi yalnız İNSAN yazar; damıtma yalnız TASLAK üretir.
+Dosya-tabanlı (DB değil); enjeksiyon sunucu tarafında tek boru; `memory.enabled` anahtarı.
+PROTOKOL.md §1.1'e M2 REST uçları "planlandı" işaretiyle kondu. Kod YAZILMADI — dilimler:
+
+### 📋 Dilim M1 — çekirdek enjeksiyon (core-only, SIFIR protokol değişikliği) ← SIRADAKİ
+
+**Önce oku (yalnız bunlar):** ADR-013 · `core/src/config/paths.ts` · `core/src/config/config.ts` ·
+`core/src/agent/engine.ts` (buildSystemPrompt + AgentEngineDeps) · `core/src/server/daemon.ts`
+(runChat + engine kurulumu) · `core/src/agent/engine.test.ts` (FakeAdapter.prompts deseni).
+
+1. `paths.ts`: `memoryDir` (`~/.symphony/memory`) + `profileFile` (`.../profil.md`) ekle;
+   `ensureSymphonyHome` dizini oluştursun.
+2. YENİ `core/src/memory/profile.ts` (SAF, testli):
+   - `MAX_PROFILE_CHARS = 8000`.
+   - `loadProfile(file): { text: string; truncated: boolean } | null` — dosya yok/boş/yalnız
+     iskelet-başlıklar → null; varsa trim + cap (aşımı `truncated:true` ile bildir; loglama
+     ÇAĞIRANDA, pino warn).
+   - `ensureProfileScaffold(file): void` — dosya YOKSA yalnız başlıklardan iskelet yaz:
+     `# Kullanıcı Profili` + `## Kimlik` + `## Üslup ve dil tercihleri` + `## Teknik tercihler`
+     + `## Projeler` + `## Düzeltmeler ve öğrenimler` (+ tepeye 1 satır yorum: "Bu dosyayı sen
+     doldurursun; agent'lar yalnız OKUR — ADR-013").
+3. `config.ts`: `memory?: { enabled?: boolean }` (vars. true) config şemasına.
+4. `engine.ts`: `AgentEngineDeps`e `loadMemoryProfile: () => string | null` ekle;
+   `buildSystemPrompt`e üçüncü parametre `profile: string | null` — null değilse sona:
+   `"\n\n## Kullanıcı profili (salt-okunur bağlam)\n" + profile`. runLoop çağrısında
+   `this.deps.loadMemoryProfile()` geç.
+5. `daemon.ts`: açılışta `ensureProfileScaffold`; engine kurulumuna gerçek loader
+   (enabled=false → hep null döndüren fonksiyon; truncated'ta pino warn). `runChat`:
+   provider'a giden mesajların KOPYASINA profil system-önek olarak eklenir — ilk mesaj
+   zaten system ise İÇİNE birleştir (sonuna ekle), değilse başa `{role:"system"}` ekle.
+   ⚠️ `saveChatTurn`'a giden `payload.messages` DEĞİŞMEDEN kalmalı (kalıcılığa system girmez).
+6. **Testler (+~5):** profile.test (yok→null · cap/truncated · iskelet-yalnız→null) ·
+   engine.test: profil verildiğinde FakeAdapter.prompts[0] profil metnini İÇERİR (deps'e sahte
+   loader) ve loader null iken prompt değişmez · daemon.test: chat yolunda provider'a giden
+   mesajlarda profil VAR ama `sessionDetail` dökümünde YOK.
+7. Kabul (ROADMAP Faz 6 maddesiyle birebir): profil.md'ye bir tercih yaz → yeni agent koşusu
+   VE chat, bağlamında görüyor. **Daemon restart gerekir** (core değişti).
+
+### 📋 Dilim M2 — yüzey (REST + CLI + TUI göstergesi)
+
+Kural 1 sırası: ÖNCE PROTOKOL.md'deki iki `(planlandı — M2)` işaretini kaldır → `shared/rest.ts`e
+`MemoryGetResponseSchema {content, chars, truncated, updatedAt}` + `MemoryPutRequestSchema
+{content}` → `daemon.ts`e `GET/PUT /api/memory` (Bearer; PUT → dosyaya yaz + iskelet değilse
+doğrudan kabul) → `cli/client/daemon-client.ts`e `getMemory/putMemory` → YENİ
+`cli/commands/memory.ts`: `symphony memory` (göster: içerik + karakter + truncated uyarısı),
+`symphony memory path` (dosya yolu — kullanıcı kendi editörüyle açar). TUI karşılamada tek
+satır: "🧠 profil aktif (N karakter)" (profil null ise gösterme). Test: REST auth'suz 401 ·
+GET/PUT roundtrip · CLI komut çıktısı.
+
+### 📋 Dilim M3 — arşiv damıtma (taslak üreten salt-okur agent; protokolsüz)
+
+ADR-013 Karar 5. YENİ agent tanımı "damitici" (`definition.ts ensureDefaultAgent`e üçüncü
+varsayılan: araçlar read_file/glob/grep, provider/model BOŞ — router seçer). YENİ
+`cli/commands/memory.ts`e alt komut: `symphony memory distill <arşiv-dizini>`:
+1. Yerel model şartı: `models.list`ten `local:true` yoksa hata ("arşiv buluta gönderilmez;
+   --bulut ile bilinçli geç"); `--bulut` bayrağı override.
+2. `agent.start {agentId:"damitici", cwd:<arşiv>, task:<damıtma talimatı>, conversational:false}` —
+   talimat: "bu dizindeki konuşma dökümlerinden kullanıcının kimliği/üslubu/teknik tercihleri/
+   projelerini damıt; profil.md bölüm başlıklarıyla, ≤6000 karakter, yalnız kalıcı gerçekler".
+   Karakter bütçesi: en yeni dosyalardan başla (glob mtime), bütçe dolunca dur.
+3. `agent.run.completed.result` → CLI `profil.taslak.md`'ye yazar (CANLI profile DOKUNMAZ) +
+   kullanıcıya: "taslağı gözden geçir: <yol>; onaylıyorsan içeriği profil.md'ye taşı".
+Test: sahte arşiv dizini + FakeAdapter ile result→taslak dosyası yazılır, profil.md değişmez.
+Not: arşivin gerçek yolu/formatı kullanıcıdan gelecek — komut dizin alır, format varsaymaz
+(agent read_file/glob ile kendisi gezer).
+
+**Dilim sırası M1→M2→M3; her dilim sonrası `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.**
 
 ## Rapor2 §3 düzeltme paketi (2026-07-09, Sonnet): §3.1-§3.4 BİTTİ ve testli (244 test)
 

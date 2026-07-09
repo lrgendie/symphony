@@ -23,10 +23,17 @@
 | `POST /api/chat` | Bearer | Streaming sohbet (gövde: `chat.start` şeması; cevap: SSE) — curl kabul testlerinin ucu |
 | `GET /api/history/sessions?limit=50` | Bearer | Son sohbet oturumları (yeniden eskiye): `{ sessions: HistorySessionSummary[] }` |
 | `GET /api/history/sessions/:id` | Bearer | Bir oturumun tam dökümü: `{ session, messages: HistoryMessage[] }`; yoksa 404 |
+| `GET /api/memory` | Bearer | **(planlandı — Dilim M2, ADR-013; henüz uygulanmadı)** Kullanıcı profili: `{ content, chars, truncated, updatedAt }`; dosya yoksa boş iskelet |
+| `PUT /api/memory` | Bearer | **(planlandı — Dilim M2, ADR-013; henüz uygulanmadı)** Profilin TAM içeriğini değiştirir (gövde: `{ content }`) — yalnız insan arayüzünden çağrılır; agent araç yüzeyinde bu uca giden yol YOKTUR (ADR-013 yazma kısıtı) |
 
 Kalıcı geçmiş SQLite'tadır ve YALNIZ REST ile sorgulanır (§6: olay replay'i yok).
 Cevap şemaları `shared`'dadır: `HistorySessionSummarySchema`, `HistoryMessageSchema`,
 `HistorySessionsResponseSchema`, `HistorySessionDetailResponseSchema`.
+
+**Kullanıcı profili (hafıza, ADR-013):** `~/.symphony/memory/profil.md` içeriği daemon
+tarafından her agent koşusu ve chat isteğinde system bağlamına eklenir (sunucu tarafı;
+kalıcı oturum geçmişine YAZILMAZ). Protokol mesajlarını değiştirmez — istemciler profili
+görmez/taşımaz; yönetimi yalnız yukarıdaki REST uçları (M2) ve doğrudan dosya düzenlemesiyledir.
 
 ## 2. Zarf (envelope)
 

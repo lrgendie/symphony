@@ -20,6 +20,7 @@
 | Tauri kabuk / token enjeksiyonu | `desktop/src-tauri/src/lib.rs` + `desktop/src-tauri/tauri.conf.json` |
 | Daemon davranışı | `core/src/server/daemon.ts` (tek dosya, ~600 satır) |
 | Mimari karar değişikliği | `docs/kararlar/KARARLAR.md` (önce ADR oku!) |
+| Hafıza/profil işi (öncelik #3, M1-M3) | ADR-013 (KARARLAR.md) + `memo/DURUM.md` M-dilim talimatları |
 | Model devri (Fable→Opus vb.) | `memo/DEVIR.md` — rol, disiplin, tuzak haritası |
 
 ## Paket grafiği

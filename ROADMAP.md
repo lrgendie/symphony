@@ -187,6 +187,8 @@ symphony/
    2.3c TUI agent-resume (`AgentFlow`). Canlı doğrulandı. Opsiyonel kırıntı: "Sohbet"i de agent'a taşı.
 3. **Uzun-dönem hafıza (= aşağıdaki Faz 6 "Kullanıcı hafızası")** — `~/.symphony/memory/` kalıcı
    profil, her oturumda bağlama enjekte. Kapsam kararı Faz 6'da (agent kendi yazamaz).
+   **→ TASARIM TAMAM (2026-07-09, ADR-013):** (a) profil ile başlanıyor, (b) RAG Bağlam
+   Haritası'na ertelendi, (c) LoRA süresiz; dilimler M1/M2/M3 `memo/DURUM.md`'de, uygulama Sonnet'te.
    **+ Konuşma arşivinden kişiselleşme (kullanıcı isteği 2026-07-07):** kullanıcı tüm geçmiş Claude
    sohbetlerini arşivledi; yerel LLM'in kullanıcıyı tanıyıp *tarzını benimsemesi* isteniyor. FİZİBIL,
    3 katman (artan maliyet, önerilen sıra a→b→c):
