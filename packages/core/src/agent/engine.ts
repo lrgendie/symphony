@@ -17,6 +17,7 @@ import { computeCostUsd } from "../providers/pricing.js";
 import { extractCacheTokens, parseRateLimits } from "../providers/telemetry.js";
 import type { ProviderAdapter } from "../providers/types.js";
 import type { EventBus } from "../server/bus.js";
+import { DeltaBatcher } from "../server/delta-batcher.js";
 import {
   listAgentDefinitions,
   loadAgentDefinition,
@@ -109,6 +110,10 @@ const STALE_DIFF_LIMIT = 3;
 
 export class AgentEngine {
   private readonly runs = new Map<string, ActiveRunRecord>();
+  // rapor §5.1: token-başına WS broadcast amplifikasyonunu azaltır (anahtar = runId).
+  private readonly deltaBatcher = new DeltaBatcher((runId, text) =>
+    this.deps.bus.broadcast("agent.delta", { runId, text }),
+  );
 
   constructor(private readonly deps: AgentEngineDeps) {}
 
@@ -325,10 +330,25 @@ export class AgentEngine {
           ...(adapter.forwardsTemperature ? { temperature: definition.temperature } : {}),
         });
         // Asistan metnini token-token yayınla (agent.delta) — sohbet UX'inin temeli.
+        // rapor §5.1: WS broadcast'i chunk başına DEĞİL, kısa bir pencerede toplu yapar.
         for await (const chunk of result.textStream) {
-          this.deps.bus.broadcast("agent.delta", { runId: run.runId, text: chunk });
+          this.deltaBatcher.push(run.runId, chunk);
         }
+        // Tur bitti (ya da sağlayıcı hatasıyla erken kesildi) — kalanı HEMEN yayınla, akan
+        // metin kaybolmasın (rapor §5.4).
+        this.deltaBatcher.flush(run.runId);
         const response = await result.response;
+        // rapor §5.4 bulgusu (ai@7.0.11'de bir izole script'le DOĞRULANDI — kaynak okuması
+        // yanıltıcıydı): stream ORTASINDA sağlayıcı hatası `result.response`/`result.usage`
+        // promise'lerini REDDETMEZ; SDK bunu `finishReason:"error"` ile "normal" tamamlanmış
+        // gibi döner. Kontrol edilmezse motor bunu BOŞ bir "completed" sonucu sanırdı —
+        // burada açıkça fırlatılıp mevcut failed yoluna (catch → agent.run.failed) yönlendirilir.
+        if ((await result.finishReason) === "error") {
+          throw new AgentError(
+            "PROVIDER_STREAM_ERROR",
+            "Sağlayıcı akışı hata ile bitti (finishReason: error) — model turu tamamlanamadı",
+          );
+        }
         this.recordTurnUsage(run, await result.usage, turnStartedAt);
         // Telemetri: rate-limit her turda en taze; cache token'ları koşu boyunca birikir.
         const cache = extractCacheTokens(await result.providerMetadata);
@@ -426,6 +446,9 @@ export class AgentEngine {
         if (parts.length > 0) messages.push({ role: "tool", content: parts });
       }
     } catch (error) {
+      // Güvenlik ağı: iptal/hata for-await'i erken kesmiş olabilir (normal yoldaki explicit
+      // flush hiç çalışmamıştır) — terminal olaydan ÖNCE yayınla ki istemcide sıra bozulmasın.
+      this.deltaBatcher.flush(run.runId);
       if (
         run.abort.signal.aborted ||
         (error instanceof AgentError && error.name === "AGENT_CANCELLED")

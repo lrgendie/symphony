@@ -38,6 +38,8 @@ export interface ModelUsage {
 }
 
 const MAX_LOG = 200;
+// rapor §5.2: pano bir önizleme yüzeyidir, tam döküm değil — uzun cevaplarda sınırsız büyümesin.
+const MAX_RUN_STREAM_CHARS = 2000;
 let logSeq = 0;
 
 interface UiState {
@@ -143,9 +145,10 @@ export const useStore = create<UiState>((set) => {
     set((state) => ({ runs: state.runs.filter((r) => r.runId !== runId) }));
 
   const appendStream = (runId: string, text: string): void =>
-    set((state) => ({
-      runStreams: { ...state.runStreams, [runId]: (state.runStreams[runId] ?? "") + text },
-    }));
+    set((state) => {
+      const next = ((state.runStreams[runId] ?? "") + text).slice(-MAX_RUN_STREAM_CHARS);
+      return { runStreams: { ...state.runStreams, [runId]: next } };
+    });
 
   const clearStream = (runId: string): void =>
     set((state) => {
@@ -222,7 +225,12 @@ export const useStore = create<UiState>((set) => {
         case "agent.run.state": {
           const p = payload as { runId: string; state: ActiveRun["state"] };
           patchRun(p.runId, { state: p.state });
-          if (p.state === "cancelled") clearStream(p.runId);
+          if (p.state === "cancelled") {
+            // completed/failed'la aynı davranış (rapor §5.3) — aksi hâlde satır panoda
+            // bir sonraki snapshot'a dek "zombi" kalır (görsel fark olmadan asılı durur).
+            clearStream(p.runId);
+            removeRun(p.runId);
+          }
           return;
         }
         case "agent.delta": {

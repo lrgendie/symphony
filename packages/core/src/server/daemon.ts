@@ -31,6 +31,7 @@ import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent } from "../agent/definition.js";
 import { registerMcpServer } from "../agent/mcp.js";
 import { EventBus } from "./bus.js";
+import { DeltaBatcher } from "./delta-batcher.js";
 import { generateDaemonToken, loadExistingToken, persistDaemonToken } from "./token.js";
 
 export const DAEMON_VERSION = "0.1.0";
@@ -100,6 +101,10 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   const bus = new EventBus();
   const activeChats = new Map<string, AbortController>();
+  // rapor §5.1: chat.delta de agent.delta ile aynı desende toplu yayınlanır (anahtar = sessionId).
+  const chatDeltaBatcher = new DeltaBatcher((sessionId, text) =>
+    bus.broadcast("chat.delta", { sessionId, text }),
+  );
 
   // Yerel GPU vitalleri (TASARIM §2): periyodik örneklenir, hardware.updated ile TÜM istemcilere
   // yayınlanır; yeni bağlanan istemciye son örnek anında gönderilir. Snapshot GPU taşımaz —
@@ -205,9 +210,12 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           break;
         }
         answer += next.value;
-        bus.broadcast("chat.delta", { sessionId, text: next.value });
+        // rapor §5.1: WS broadcast'i chunk başına DEĞİL, kısa bir pencerede toplu yapar.
+        chatDeltaBatcher.push(sessionId, next.value);
         onDelta?.(next.value);
       }
+      // Tur bitti — kalanı chat.completed'DAN ÖNCE yayınla (istemcide sıra bozulmasın, rapor §5.1).
+      chatDeltaBatcher.flush(sessionId);
       const usage: Usage = {
         inputTokens: usageResult.inputTokens,
         outputTokens: usageResult.outputTokens,
@@ -255,6 +263,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       log.info({ sessionId, model: payload.model, ...usage }, "sohbet tamamlandı");
       return usage;
     } catch (error) {
+      // Güvenlik ağı: hata/iptal döngüyü erken kesmiş olabilir (normal yoldaki explicit flush
+      // hiç çalışmamıştır) — kalıntı kaybolmasın (rapor §5.1/§5.4, agent.delta ile aynı desen).
+      chatDeltaBatcher.flush(sessionId);
       const cancelled = abort.signal.aborted;
       const errorPayload = toErrorPayload(error);
       store.recordRequest({

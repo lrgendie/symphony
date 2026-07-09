@@ -3,7 +3,39 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-09 (Oturum 15, Fable — merge SONRASI Dilim 2.2 de BİTTİ: çok-tur konuşmalı koşu)
+**Son güncelleme:** 2026-07-09 (Oturum 15 devamı, Sonnet — rapor §5 küçük iyileştirme paketi BİTTİ)
+
+## Rapor §5 küçük iyileştirme paketi (2026-07-09, Sonnet): BİTTİ ve testli (232 test)
+
+Fable'ın devrettiği 4 madde (`rapor/fabelincelemeraporu.md` §5), Dilim 2.3'ten ÖNCE kapatıldı
+(canlı kullanıcı onaylarına bağlı olmadığı için paralel yürütüldü):
+
+1. **`agent.delta`/`chat.delta` batch yayını** — yeni `core/src/server/delta-batcher.ts` (SAF,
+   testli, 5 test): anahtar (runId/sessionId) başına ~40ms pencerede birikip tek parça yayınlanır.
+   `engine.ts` + `daemon.ts`'in ikisi de kullanır. **Sıra kritik:** flush HER ZAMAN terminal
+   olaydan (`agent.run.completed`/`chat.completed`/`failed`) ÖNCE — for-await bitince explicit
+   flush, hata/iptal `catch` bloğunun BAŞINDA (finally'de DEĞİL — finally, catch'in `finish()`
+   çağrısından SONRA çalışır, terminal olaydan sonraya düşerdi).
+2. **`runStreams` sınırsız büyüme** — `ui/store.ts` `appendStream` son 2000 karakteri tutar
+   (`MAX_RUN_STREAM_CHARS`, `slice(-N)`).
+3. **"cancelled" zombi satır** — `agent.run.state:"cancelled"` artık completed/failed gibi
+   `removeRun` de çağırıyor (önceden yalnız state güncelliyordu, satır bir sonraki snapshot'a
+   dek panoda asılı kalıyordu).
+4. **Stream-ortası-hata testi → GERÇEK BUG bulundu ve düzeltildi.** Rapor "SDK sürümüne duyarlı"
+   diye sormuştu; kaynak okuması yanıltıcı çıktı, izole bir Node script'iyle (`ai@7.0.11`,
+   `MockLanguageModelV3`) EMPİRİK doğrulandı: stream ortasında `{type:"error"}` parçası
+   `result.response`/`result.usage`'ı REDDETMEZ — SDK bunu `finishReason:"error"` ile "normal"
+   tamamlanmış gibi döndürüyor. **Motor bunu kontrol etmiyordu** → gerçek bir sağlayıcı hatası
+   sessizce BOŞ bir `agent.run.completed` üretirdi. Düzeltme: `engine.ts` `await result.response`
+   sonrası `await result.finishReason === "error"` kontrolü → `AgentError("PROVIDER_STREAM_ERROR",
+   ...)` fırlatır, mevcut failed yoluna girer. `engine.test.ts`'e `errorTurn()` yardımcı fonksiyonu
+   + KABUL testi (+1). **Ders:** AI SDK gibi harici kütüphanelerin hata semantiğini varsaymak
+   yerine küçük izole script'le doğrula — kaynak okuması (minifed, çok dallı) yanıltıcı olabiliyor.
+- **Test:** 224→**232** (delta-batcher 5, store +2, engine +1). build/test/lint temiz.
+- **Kapsam notu:** SSE debug ucunun (`POST /api/chat`, `onDelta` callback) batch'e alınmadı —
+  tek istemcilik curl test ucu, WS fan-out amplifikasyonu yok; kasıtlı kapsam dışı bırakıldı.
+
+## Dilim 2.2 (2026-07-09, Fable — merge SONRASI): çok-tur konuşmalı koşu — BİTTİ ve testli
 
 ## Dilim 2.2 (2026-07-09): Çok-tur konuşmalı koşu — BİTTİ ve testli (224 test)
 
@@ -48,9 +80,10 @@ ADR-012'nin kalbi: `awaiting_user` + `agent.say` + `conversational` artık UYGUL
   "planlandı — Dilim 2.2, henüz uygulanmadı" işaretleri kondu (belge artık uygulama durumunu söylüyor).
 - **Birleşik doğrulama:** build ✓ · test **37 dosya / 219 test, tümü geçti** (raporun ~219 tahmini
   birebir tuttu; welcome.test dahil) ✓ · lint ✓.
-- **Sıradaki:** ✅ Dilim 2.2 aynı oturumda bitti (üstteki bölüm). Kalan: kullanıcı görsel onayları
-  (tesseract 8b · TUI "devam et" · masaüstü agent akışı · YENİ: TUI konuşmalı agent) →
-  **Dilim 2.3 (birleşik TUI)** → küçük iyileştirme paketi (rapor §5).
+- **Sıradaki:** ✅ Dilim 2.2 (Fable) ve ✅ rapor §5 paketi (Sonnet) bitti (üstteki iki bölüm).
+  Kalan: kullanıcı görsel onayları (tesseract 8b · TUI "devam et" · masaüstü agent akışı ·
+  konuşmalı agent) → **Dilim 2.3 (birleşik TUI)** ← SIRADAKİ TEK KOD İŞİ (Opus'a uygun: yarı
+  tasarım yarı uygulama, ADR-012'nin sahibi).
 
 > Aşağıdaki Dilim 8b / 8 bölümleri Fable'ın Oturum 14 anlatısıdır (main, 2026-07-08 akşam).
 

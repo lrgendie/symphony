@@ -45,6 +45,9 @@ protokol WS/REST üzerinden konuşulur.
 - `server/daemon.ts` — Fastify+ws sunucu; TÜM istek işleyicileri buradaki switch'te
 - `server/bus.ts` — EventBus: olaylar bağlı TÜM istemcilere yayınlanır (ADR-001)
 - `server/token.ts` — daemon token üretimi/yazımı (dinleme başarılı olmadan yazılmaz)
+- `server/delta-batcher.ts` — SAF, testli: `agent.delta`/`chat.delta` WS broadcast'ini anahtar
+  (runId/sessionId) başına ~40ms'de toplar (rapor §5.1); `flush(key)` terminal olaydan (completed/
+  failed/cancelled) ÖNCE çağrılmalı — `engine.ts`+`daemon.ts` bu sırayı korur
 - `providers/types.ts` — `ProviderAdapter` arayüzü (streamChat + languageModel)
 - `providers/{anthropic,openai,google,ollama}.ts` — 4 adapter; temperature iletimi
   adapter'a özgü (Claude 4.7+/GPT-5 KABUL ETMEZ → iletilmez; Gemini/Ollama iletilir)

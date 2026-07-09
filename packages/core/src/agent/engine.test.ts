@@ -82,13 +82,53 @@ function scriptToStream(result: GenerateResult): ReadableStream<unknown> {
   });
 }
 
+/** Stream ortasında sağlayıcı hatası enjekte eder (rapor §5.4): finish YOK, yalnız error part. */
+interface ErrorTurnEntry {
+  __errorTurn: true;
+  precedingText: string;
+  error: Error;
+}
+
+function errorTurn(error: Error, precedingText = ""): ErrorTurnEntry {
+  return { __errorTurn: true, precedingText, error };
+}
+
+function isErrorTurn(entry: GenerateResult | ErrorTurnEntry): entry is ErrorTurnEntry {
+  return (
+    typeof entry === "object" && entry !== null && (entry as ErrorTurnEntry).__errorTurn === true
+  );
+}
+
+/**
+ * @ai-sdk/provider `LanguageModelV3StreamPart` = `{ type: "error", error }` — gerçek bir
+ * sağlayıcı ağ/API hatasının stream ORTASINDA kesilmesini birebir taklit eder: `finish`
+ * PARÇASI YOK. AI SDK'nın kendi kaynağına göre (`ai@7.0.11`, `DefaultStreamTextResult`)
+ * `textStream` yalnız text-delta'ları filtreler (error'ı SESSİZCE atlar, throw ETMEZ) —
+ * hata `result.response`/`result.usage` await'inde yüzeye çıkar (rapor §5.4'ün sorduğu soru).
+ */
+function errorStream(entry: ErrorTurnEntry): ReadableStream<unknown> {
+  const parts: Array<Record<string, unknown>> = [{ type: "stream-start", warnings: [] }];
+  if (entry.precedingText.length > 0) {
+    parts.push({ type: "text-start", id: "e1" });
+    parts.push({ type: "text-delta", id: "e1", delta: entry.precedingText });
+    parts.push({ type: "text-end", id: "e1" });
+  }
+  parts.push({ type: "error", error: entry.error });
+  return new ReadableStream({
+    start(controller) {
+      for (const p of parts) controller.enqueue(p);
+      controller.close();
+    },
+  });
+}
+
 class FakeAdapter implements ProviderAdapter {
   readonly name = "fake";
   readonly forwardsTemperature = true;
   /** Her model turunun çağrı seçenekleri (konuşmalı test: sonraki tur user mesajını görüyor mu). */
   readonly prompts: unknown[] = [];
 
-  constructor(private readonly script: GenerateResult[]) {}
+  constructor(private readonly script: Array<GenerateResult | ErrorTurnEntry>) {}
 
   listModels(): Promise<ModelInfo[]> {
     return Promise.resolve([{ provider: "fake", id: "fake-1", local: true }]);
@@ -108,7 +148,8 @@ class FakeAdapter implements ProviderAdapter {
         prompts.push(options);
         const next = script.shift();
         if (next === undefined) throw new Error("senaryo bitti ama model yine çağrıldı");
-        return Promise.resolve({ stream: scriptToStream(next) });
+        const stream = isErrorTurn(next) ? errorStream(next) : scriptToStream(next);
+        return Promise.resolve({ stream });
       },
     } as unknown as ConstructorParameters<typeof MockLanguageModelV3>[0];
     return Promise.resolve(new MockLanguageModelV3(config));
@@ -169,7 +210,7 @@ class CaptureBus extends EventBus {
 
 const openStores: DataStore[] = [];
 
-function makeEngine(script: GenerateResult[]): {
+function makeEngine(script: Array<GenerateResult | ErrorTurnEntry>): {
   engine: AgentEngine;
   bus: CaptureBus;
   store: DataStore;
@@ -507,5 +548,30 @@ describe("AgentEngine — konuşmalı koşu (ADR-012, dilim 2.2)", () => {
           (e.payload as { state: string }).state === "awaiting_user",
       ),
     ).toBe(false);
+  });
+});
+
+describe("AgentEngine — rapor §5.4: akış ortasında sağlayıcı hatası", () => {
+  it("KABUL: stream ortasında sağlayıcı hatası → agent.run.failed (BOŞ 'completed' sanılmaz); hata öncesi akan metin KAYBOLMAZ", async () => {
+    const { engine, bus } = makeEngine([errorTurn(new Error("ağ koptu"), "yarım kalan cev")]);
+    await engine.start(START);
+
+    // Bulgu (izole script'le doğrulandı, kaynak okuması yanıltıcıydı): ai@7.0.11'de stream
+    // ortasındaki "error" parçası result.response/usage'ı REDDETMEZ, finishReason:"error" ile
+    // "normal" döner. Kontrolsüz motor bunu boş bir agent.run.completed sanırdı — engine.ts'e
+    // eklenen finishReason denetimi bunu PROVIDER_STREAM_ERROR ile failed'e çevirir.
+    const failed = await bus.waitFor("agent.run.failed");
+    expect(failed.error.code).toBe("PROVIDER_STREAM_ERROR");
+    expect(bus.emitted.some((e) => e.type === "agent.run.completed")).toBe(false);
+
+    // Hata öncesi akan kısmi metin agent.delta'dan KAYBOLMADI (batching flush güvenlik ağı).
+    const streamed = bus.emitted
+      .filter((e) => e.type === "agent.delta")
+      .map((e) => (e.payload as { text: string }).text)
+      .join("");
+    expect(streamed).toBe("yarım kalan cev");
+
+    // Koşu haritada asılı kalmadı (rapor §4.2'nin genel ilkesi: her çıkış yolu temizler).
+    expect(engine.activeRuns()).toHaveLength(0);
   });
 });

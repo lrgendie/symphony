@@ -274,4 +274,23 @@ describe("ui store", () => {
     store.handleEvent("agent.run.completed", { runId: RUN, usage: { costUsd: 0 } });
     expect(useStore.getState().runStreams[RUN]).toBeUndefined();
   });
+
+  it("runStreams sınırsız büyümez — son MAX_RUN_STREAM_CHARS karakter tutulur (rapor §5.2)", () => {
+    const store = useStore.getState();
+    // 2000 "a" + 2000 "b" = 4000; son 2000 karakter TAMAMEN "b" olmalı (eski "a"lar budandı).
+    store.handleEvent("agent.delta", { runId: RUN, text: "a".repeat(2000) });
+    store.handleEvent("agent.delta", { runId: RUN, text: "b".repeat(2000) });
+    expect(useStore.getState().runStreams[RUN]).toBe("b".repeat(2000));
+  });
+
+  it("agent.run.state cancelled: satır panoda ZOMBİ kalmaz — completed/failed gibi kaldırılır (rapor §5.3)", () => {
+    const store = useStore.getState();
+    store.handleEvent("agent.run.started", { runId: RUN, agentId: "coder", task: "iş", model: "m" });
+    store.handleEvent("agent.delta", { runId: RUN, text: "yarım kalan" });
+    expect(useStore.getState().runs).toHaveLength(1);
+
+    store.handleEvent("agent.run.state", { runId: RUN, state: "cancelled" });
+    expect(useStore.getState().runs).toHaveLength(0); // ZOMBİ satır yok
+    expect(useStore.getState().runStreams[RUN]).toBeUndefined();
+  });
 });
