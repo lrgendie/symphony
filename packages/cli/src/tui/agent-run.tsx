@@ -50,6 +50,7 @@ export function AgentRun(props: {
   const [log, setLog] = useState<ToolLogEntry[]>([]);
   const [pending, setPending] = useState<PendingPermission | null>(null);
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
+  const [streaming, setStreaming] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
   const runIdRef = useRef<string | null>(null);
 
@@ -63,8 +64,14 @@ export function AgentRun(props: {
         setThinking(payload.state === "thinking");
         if (payload.state === "cancelled") setOutcome({ kind: "cancelled" });
       }),
+      // Akışlı asistan metni (ADR-012): tur boyunca birikir, araç başlayınca sıfırlanır.
+      props.client.on("agent.delta", (payload) => {
+        if (!mine(payload.runId)) return;
+        setStreaming((s) => s + payload.text);
+      }),
       props.client.on("agent.tool.started", (payload) => {
         if (!mine(payload.runId)) return;
+        setStreaming("");
         setLog((l) => [...l, { kind: "started", tool: payload.tool, summary: payload.argsSummary }]);
       }),
       props.client.on("agent.tool.completed", (payload) => {
@@ -119,6 +126,7 @@ export function AgentRun(props: {
     setPending(null);
     setThinking(false);
     setOutcome(null);
+    setStreaming("");
     setStartError(null);
   };
 
@@ -216,7 +224,10 @@ export function AgentRun(props: {
           {entry.summary}
         </Text>
       ))}
-      {thinking && pending === null && outcome === null && <Text dimColor>· düşünüyor…</Text>}
+      {streaming.length > 0 && outcome === null && <Text color="green">{streaming}</Text>}
+      {thinking && streaming.length === 0 && pending === null && outcome === null && (
+        <Text dimColor>· düşünüyor…</Text>
+      )}
       {pending !== null && <PermissionBox permission={pending} />}
       {outcome !== null && (
         <>

@@ -103,6 +103,11 @@ export const AgentRunStatePayloadSchema = z
   .object({ runId: z.string().uuid(), state: AgentRunStateSchema })
   .strip();
 
+/** Streaming asistan metni (ADR-012): `chat.delta`'nın koşu-anahtarlı ikizi. */
+export const AgentDeltaPayloadSchema = z
+  .object({ runId: z.string().uuid(), text: z.string() })
+  .strip();
+
 export const AgentStepThinkingPayloadSchema = z
   .object({ runId: z.string().uuid(), summary: z.string().optional() })
   .strip();
@@ -232,6 +237,7 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   "chat.completed": ChatCompletedPayloadSchema,
   "agent.run.started": AgentRunStartedPayloadSchema,
   "agent.run.state": AgentRunStatePayloadSchema,
+  "agent.delta": AgentDeltaPayloadSchema,
   "agent.step.thinking": AgentStepThinkingPayloadSchema,
   "agent.tool.requested": AgentToolRequestedPayloadSchema,
   "agent.tool.started": AgentToolStartedPayloadSchema,

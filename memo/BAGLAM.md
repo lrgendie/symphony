@@ -70,15 +70,23 @@ protokol WS/REST üzerinden konuşulur.
   - `mcp.ts` — MCP istemcisi (ADR-007): `~/.symphony/mcp-servers.json` kayıt defteri
     (stdio), sunucu araçlarını `AgentToolSpec`'e sarar (`mcp__<sunucu>__<araç>`, hep `mutating`)
   - `engine.ts` — koşu döngüsü (AI SDK tool-calling), izin kapısı, durum makinesi, iptal,
-    MCP bağlan/kapat (koşu ömrüyle eşleşir)
+    MCP bağlan/kapat (koşu ömrüyle eşleşir). **Akışlı** (`streamText`, ADR-012): asistan metni
+    `agent.delta {runId,text}` ile token-token yayılır. Test mock'ları `doStream` kullanır
+    (`scriptToStream`; AI SDK v3 stream part'ları). Birleşik sohbet-agent modu buradan büyüyecek
+    (2.2 awaiting_user+agent.say çok-tur, 2.3 birleşik TUI — bkz. ADR-012 + DURUM Dilim 2)
 
 ### packages/cli/src — symphony komutu
 - `index.ts` — commander kayıtları; argümansız → TUI
-- `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`)
+- `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`) +
+  REST geçmiş sorguları (`listSessions`/`sessionDetail` — Bearer token, shared şema, 404→null)
 - `commands/` — status/models/watch/history/agents/agent/add (her komut tek dosya)
   - `add.ts` — `symphony add <npm-paketi>`: eklenti sistemi, `mcp.addServer` isteği atar
 - `tui/` — Ink: app.tsx (akış: karşılama→mod seçici→sohbet|agent), welcome.tsx, logo.ts
-  - `model-picker.tsx` / `chat.tsx` — sohbet dalı
+  - `app.tsx` içinde `ChatFlow` — sohbet dalı orkestrasyonu: (kayıtlı sohbet varsa) yeni/devam
+    seçimi → model seç → Chat. Devam: `sessionDetail` REST'ten tohum + model sabitlenir (v1: son sohbet)
+  - `model-picker.tsx` / `chat.tsx` — sohbet dalı (`chat.tsx`: opsiyonel `initialSessionId`/`initialHistory`
+    tohumu → önceki oturuma devam; `HistoryEntry` dışa aktarılır)
+  - `resume-picker.tsx` — "Yeni sohbet / Önceki sohbete devam et" seçici (↑/↓+Enter; picker deseni)
   - `mode-picker.tsx` — Sohbet/Agent seçici (↑/↓+Enter)
   - `agent-picker.tsx` — kayıtlı agent listesinden seçim
   - `agent-run.tsx` — görev girişi + canlı koşu (izin kutusu tek tuş e/d/h, renkli diff,
@@ -94,9 +102,11 @@ protokol WS/REST üzerinden konuşulur.
   usage + `limits` + oturum cache sayaçları) çevirir. **WS→UI eşlemesinin TEK yeri**
   (testli: `store.test.ts`). Usage: `usage.query.ok` seed'ler, `usage.updated` girdiyi totals'la
   DEĞİŞTİRİR (çift saymaz) + cache biriktirir; `provider.limits` sağlayıcı başına son görüntü;
-  `lastCompletedAt`/`lastErrorAt` = tesseract converge/flaş sinyalleri
+  `lastCompletedAt`/`lastErrorAt` = tesseract converge/flaş sinyalleri; `runStreams`
+  (runId→metin, `agent.delta` biriktirir; araç başlayınca/koşu bitince/snapshot'ta temizlenir)
 - `App.tsx` — Şef Paneli: bağlantı + sağlayıcı sağlığı + **Model panosu** (token/maliyet/önbellek)
-  + **API kapasitesi** (rate-limit çubukları) + aktif koşular + izin kartları + canlı akış
+  + **API kapasitesi** (rate-limit çubukları) + aktif koşular (altında `.run-stream` canlı agent
+  akış metni, dilim 2.1b) + izin kartları + canlı akış
 - `scene/LivingScene.tsx` — İNCE KABUK: mood+vitals+converge sinyalini store'dan türetir,
   Canvas + mood HUD (sol-alt) + GPU HUD (sağ-üst) kurar; sahnenin kendisi TesseractScene'de
 - `scene/TesseractScene.tsx` — YAŞAYAN TESSERACT (dilim 8+8b, sinematik): ÜÇ kademeli küp

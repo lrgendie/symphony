@@ -91,3 +91,37 @@ tam durumu alır, kalıcı geçmişi REST/SQLite'tan sorgular.
 %80'i, değerin %20'si. Snapshot basit ve her zaman doğru.
 **Geri dönüş koşulu:** UI'da "kopukluk anında olan biteni kaçırdım" gerçek bir sorun olursa
 Faz 5+'ta değerlendirilir.
+
+## ADR-012 — Birleşik sohbet-agent modu: konuşmalı motor (2026-07-08, Opus)
+**Bağlam:** Sohbet (`chat.start` → `runChat`, akışlı, araçsız/izinsiz/jail'siz, çok-tur istemci-sürer)
+ile agent (`agent.start` → `AgentEngine`, araçlı + izin kapısı + jail, akışsız `generateText`,
+TEK-seferlik task) ayrı iki yol. Kullanıcı Claude Code gibi "sohbet ederken gerektiğinde araç
+kullanımına geçebilme" istiyor (ROADMAP "Sıradaki dilimler" #2 — en büyük kazanım).
+**Karar:** İki yolu **konuşmalı motor** ile birleştir: bir konuşma = tamamlanınca `finish` etmek
+yerine yeni bir `awaiting_user` (boşta) durumuna park olan, çok-turlu bir agent koşusudur. Sonraki
+kullanıcı mesajı aynı koşuya `agent.say { runId, text }` ile girer. Düz "sohbet" = araçsız (ya da
+salt-okur) bir "asistan" agent'ıyla yapılan konuşmadır; modelin bir araç çağırmaya karar vermesi =
+aynı koşu, **mevcut izin kapısı + jail zaten devrede** (SPEC-AGENT §8.1'deki TEK kapı çoğaltılmaz).
+Motor akışa taşınır (`generateText` → `streamText`), metin `agent.delta { runId, text }` ile yayılır.
+**Neden A (ret edilen B/C yerine):**
+- **B (chat.start'a araç ekle):** izin kapısı + jail'i chat yoluna kopyalar/çatallar → güvenlik-kritik
+  kod ikiye bölünür (Kural 6 ihlali). Reddedildi.
+- **C (yeni `converse.*` tipi):** kavramsal olarak temiz ama hem chat hem agent mantığını çoğaltma
+  riski + en geniş yeni protokol yüzeyi. Reddedildi.
+- **A:** araç döngüsü/izin/jail/MCP/durum makinesi/telemetri TEK yerde (engine) kalır; en çok
+  yeniden kullanım, en küçük yeni güvenlik yüzeyi.
+**Protokol dokunuşu (ADDITIVE, PROTOCOL_VERSION=1 korunur; tüm istemciler tek `shared` sürümü paylaşır):**
+`agent.delta` olayı; `awaiting_user` durumu (thinking→awaiting_user, awaiting_user→thinking/cancelled);
+`agent.say` isteği; `agent.start`'a `conversational?: boolean` (vars. false). `chat.start` KALDIRILMAZ —
+curl/geri-uyum için ince, tek-seferlik, araçsız uç olarak durur; TUI "sohbet" dalı 2.3'te konuşmalı
+asistan agent'ına taşınır.
+**Dikey dilimler (her biri çalışan bir şey bırakır, Kural 7):**
+- **2.1** `generateText→streamText` + `agent.delta` — agent cevabı token-token akar (görünür kazanım,
+  streamText temelini de-riske eder). Durum/çok-tur DEĞİŞMEZ. (engine.test mock'u `doGenerate`→`doStream`.)
+- **2.2** `awaiting_user` + `agent.say` + `conversational` — motor tur bitince park olur, sonraki
+  kullanıcı mesajıyla devam; TUI agent koşusu çok-turlu olur.
+- **2.3** Birleşik TUI — varsayılan "asistan" agent'ı (araçsız); Sohbet/Agent mod ayrımı tek konuşmalı
+  yüzeyde birleşir; araç modele göre isteğe bağlı, izin kapısı arkasında.
+**Geri dönüş koşulu:** streamText göçü mevcut agent kabul testlerini (izin/jail/deny) kırarsa ya da
+konuşma yaşam döngüsü koşu semantiğini bulanıklaştırırsa dilim geri alınır ve C (ayrı `converse.*`)
+yeniden değerlendirilir. Değişmezler dokunulmaz: izin kapısı, jail, anahtar yönetimi.

@@ -49,6 +49,39 @@ function turn(content: ContentPart[]): GenerateResult {
   } as unknown as GenerateResult;
 }
 
+/**
+ * Scripted `turn()`'ü AI SDK v3 doStream part akışına çevirir (ADR-012 streamText göçü):
+ * stream-start → (text-start/delta/end | tool-call)* → finish{usage,finishReason}.
+ * Part şekilleri @ai-sdk/provider LanguageModelV3StreamPart'tan birebir.
+ */
+function scriptToStream(result: GenerateResult): ReadableStream<unknown> {
+  const r = result as unknown as { content: ContentPart[]; usage: unknown; finishReason: unknown };
+  const parts: Array<Record<string, unknown>> = [{ type: "stream-start", warnings: [] }];
+  let textId = 0;
+  for (const part of r.content) {
+    if (part["type"] === "text") {
+      const id = `t${++textId}`;
+      parts.push({ type: "text-start", id });
+      parts.push({ type: "text-delta", id, delta: part["text"] });
+      parts.push({ type: "text-end", id });
+    } else if (part["type"] === "tool-call") {
+      parts.push({
+        type: "tool-call",
+        toolCallId: part["toolCallId"],
+        toolName: part["toolName"],
+        input: part["input"],
+      });
+    }
+  }
+  parts.push({ type: "finish", usage: r.usage, finishReason: r.finishReason });
+  return new ReadableStream({
+    start(controller) {
+      for (const p of parts) controller.enqueue(p);
+      controller.close();
+    },
+  });
+}
+
 class FakeAdapter implements ProviderAdapter {
   readonly name = "fake";
   readonly forwardsTemperature = true;
@@ -64,15 +97,17 @@ class FakeAdapter implements ProviderAdapter {
   }
 
   languageModel(): Promise<MockLanguageModelV3> {
-    return Promise.resolve(
-      new MockLanguageModelV3({
-        doGenerate: () => {
-          const next = this.script.shift();
-          if (next === undefined) throw new Error("senaryo bitti ama model yine çağrıldı");
-          return Promise.resolve(next);
-        },
-      }),
-    );
+    const script = this.script;
+    // Motor artık streamText kullanıyor → doStream (ADR-012). Config'i cast'liyoruz:
+    // doStream'in tam dönüş tipi @ai-sdk/provider'da (transitive; core'dan içe aktarılmaz).
+    const config = {
+      doStream: () => {
+        const next = script.shift();
+        if (next === undefined) throw new Error("senaryo bitti ama model yine çağrıldı");
+        return Promise.resolve({ stream: scriptToStream(next) });
+      },
+    } as unknown as ConstructorParameters<typeof MockLanguageModelV3>[0];
+    return Promise.resolve(new MockLanguageModelV3(config));
   }
 
   async *streamChat(_request: ChatStreamRequest): AsyncGenerator<string, ChatUsageResult, void> {

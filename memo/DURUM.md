@@ -3,7 +3,28 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-08 (Oturum 14, Fable — Dilim 8 + 8b: Yaşayan TESSERACT ve sinematik revizyon)
+**Son güncelleme:** 2026-07-09 (Oturum 15, Fable — inceleme raporu İCRA edildi: worktree main'e MERGE, tek gerçeklik)
+
+## Oturum 15 (2026-07-09): Rapor icrası — `worktree-oturum-surekliligi` → main MERGE — BİTTİ
+
+`rapor/fabelincelemeraporu.md` (Fable denetimi, 2026-07-08 22:25) uygulandı:
+- **Merge §4.1 reçetesiyle yapıldı.** Öngörülen 3 çakışma çıktı (ui/store.ts + memo/DURUM.md +
+  oturumlar/2026-07-08.md), reçeteyle çözüldü. store.ts'te İKİSİ DE kaldı: main'in
+  `lastCompletedAt`'i (tesseract converge) + worktree'nin `runStreams`'i (agent.delta akışı);
+  `agent.run.completed` → removeRun + clearStream + lastCompletedAt.
+- **⚠️ Raporun §3.1 uyarısı GERÇEKLEŞTİ:** Fable bu sabah, worktree'den habersiz main DURUM'uyla
+  Dilim 1'i (oturum sürekliliği) MÜKERRER ikinci kez yazdı. Mükerrer sürüm `yedek/dilim1-fable-mukerrer`
+  dalına commit'lenip kaldırıldı (hiçbir şey silinmedi); YAŞAYAN uygulama Opus/Sonnet'inki
+  (ChatFlow + resume-picker — üzerine 2.1/2.1b inşa edilmiş, denetimden geçmiş).
+- **PROTOKOL.md §3.2 düzeltmesi:** `agent.say` / `awaiting_user` / `conversational` yanına
+  "planlandı — Dilim 2.2, henüz uygulanmadı" işaretleri kondu (belge artık uygulama durumunu söylüyor).
+- **Birleşik doğrulama:** build ✓ · test **37 dosya / 219 test, tümü geçti** (raporun ~219 tahmini
+  birebir tuttu; welcome.test dahil) ✓ · lint ✓.
+- **Sıradaki:** kullanıcı görsel onayları (tesseract 8b · TUI "devam et" · masaüstü agent akışı) →
+  **Dilim 2.2** (rapor §4.2'nin İKİ ek dikkatiyle: `awaiting_user`'da MCP bağlantı yaşam döngüsü
+  kararı + `cancelAll`'un park etmiş koşuları kapsadığının testi).
+
+> Aşağıdaki Dilim 8b / 8 bölümleri Fable'ın Oturum 14 anlatısıdır (main, 2026-07-08 akşam).
 
 ## Dilim 8b (2026-07-08): Sinematik revizyon — "çok basit" geri bildirimi üzerine — BİTTİ (211 test)
 
@@ -53,6 +74,95 @@ Kullanıcı `Tasarım/görsel1.png`+`görsel2.png` (bakır dış küp, cyan/mor 
   qwen koşusu → bakırda ağır korlar; sohbet/ajan → iç ağda hızlı cyan atımlar; tur/koşu bitince
   TÜM sinapslar merkeze ateşler + çekirdek patlar + halka. İnce ayar noktaları:
   TesseractScene.tsx üst sabitleri (NODE_RADIUS/STRUT_RADIUS/TRAIL*/CORE_*) + pulses.ts hızları.
+> Aşağıdaki Dilim 1 / Dilim 2 bölümleri paralel Opus/Sonnet oturumunun (worktree, 2026-07-08 sabah)
+> anlatısıdır — Oturum 15 merge'iyle tek gerçekliğe katıldı. İçlerindeki test sayıları o günün
+> worktree tabanına göredir; birleşik güncel sayı yukarıda (Oturum 15).
+
+## Dilim 1 (2026-07-08): Oturum sürekliliği — TUI "önceki sohbete devam et" — BİTTİ ve testli
+
+Kullanıcı önceliği #1'di (DURUM.md eski "SIRADAKİ İŞ"). TUI her açılışta yeni sessionId üretip
+geçmişi görmezden geliyordu; artık son sohbet sürdürülebilir. **Sıfır protokol/daemon değişikliği**:
+geçmiş ZATEN REST'te (`/api/history/*`, Faz 2) ve daemon sessionId'ye REPLACE semantiğiyle yazıyor →
+eski sessionId'yi yeniden kullanıp tüm mesaj dizisini yeniden göndermek yeterli (çiftleme yok).
+- **CLI istemci** (`client/daemon-client.ts`): `DaemonClient`'a `listSessions(limit)` + `sessionDetail(id)`
+  eklendi — Bearer token'lı REST (`/api/health` dışı uçlar auth ister), shared şemalarıyla doğrulanır,
+  404→null. Port+token zaten elde (WS açık), ayrı el sıkışması yok.
+- **TUI akışı** (`tui/app.tsx`): yeni `ChatFlow` bileşeni — kayıtlı sohbet VE modeli hâlâ mevcutsa
+  (v1 kapsamı) açılışta "Yeni sohbet / Önceki sohbete devam et" seçtirir. Devam → `sessionDetail`
+  REST'ten mesajları yükler, model önceki oturumunkiyle SABİTLENİR (model picker atlanır), Chat'e tohum.
+  Yeni → bugünkü akış (model picker → temiz Chat). `runTui` açılışta `listSessions(1)` çeker (hata→sessiz).
+- **Yeni bileşen** `tui/resume-picker.tsx` (mode/model picker deseni: ↑/↓+Enter; devam satırında
+  provider/model · mesaj sayısı · başlık özeti).
+- **chat.tsx**: opsiyonel `initialSessionId?` + `initialHistory?` prop'ları; `HistoryEntry` dışa aktarıldı.
+  Verilirse state bunlarla tohumlanır (aynı sessionId'ye yazılır), yoksa bugünkü davranış (yeni UUID + boş).
+- **Test:** `resume-picker.test.tsx` (3) + `chat-flow.test.tsx` (3, entegrasyon: devam→eski mesajlar
+  render + yeni mesaj ESKİ sessionId ile + bağlam yeniden gönderilir; yeni→YENİ uuid; geçmiş yoksa
+  doğrudan model picker). 203→**209 test** (208 geçer; `welcome.test` bu bg-ortamının TTY'siz stdout
+  genişliğinde ink logoyu sararak ÖNCEDEN başarısız — kod değişikliğiyle ilgisiz, gerçek terminalde geçer).
+- **Kapsam v1 notu:** yalnız SON sohbet + modeli hâlâ mevcutsa. Tam oturum tarayıcısı (liste, arama,
+  model değişmişse devam) v2'ye ertelendi.
+- **Canlı doğrulama KULLANICIYA:** TUI raw-mode TTY ister (Bash'ten sürülemez). Terminalde `symphony`
+  → Sohbet → "önceki sohbete devam et" → qwen önceki bağlamı hatırlıyor mu? (Not: global CLI junction →
+  `pnpm build` sonrası `symphony` yeni akışı anında alır; daemon restart GEREKMEZ — history REST'ten gelir.)
+
+## Dilim 2 (2026-07-08): Birleşik sohbet-agent modu — ADR-012 + protokol tasarımı BİTTİ; kod dilimleri sırada
+
+Kullanıcı önceliği #2 ("Claude Code gibi sohbet ederken araç kullanımına geçebilme"). Kullanıcı
+mimariyi ONAYLADI: **Seçenek A (konuşmalı motor) + akışlı (streamText)**. Bu oturumda tasarım
+keystone'u teslim edildi; kod dikey dilimlere bölündü (Kural 7).
+
+- **ADR-012 yazıldı** (`docs/kararlar/KARARLAR.md`): iki yol (chat.start akışlı/araçsız vs
+  agent.start araçlı/izinli/akışsız/tek-seferlik) **konuşmalı motorla** birleşir. Konuşma =
+  tamamlanınca `finish` etmek yerine `awaiting_user`'a park olan çok-turlu agent koşusu; sonraki
+  tur `agent.say`. Düz sohbet = araçsız "asistan" agent'ı. İzin kapısı/jail/araç döngüsü TEK yerde
+  (engine) kalır — B (chat'e araç ekle) ve C (yeni converse.*) güvenlik/çoğaltma nedeniyle reddedildi.
+- **PROTOKOL.md güncellendi** (ADDITIVE, PROTOCOL_VERSION=1 korunur): `agent.delta {runId,text}` olayı;
+  `awaiting_user` durumu; `agent.say {runId,text}` isteği; `agent.start`'a `conversational?`. `chat.start`
+  kaldırılmaz (curl/geri-uyum). shared şeması + engine kullanımı dilim dilim gelir (Kural 1: PROTOKOL→shared→kullan).
+
+### 📋 Dilim 2 — kod dilimleri (SONRAKİ OTURUM(LAR) BURADAN, sırayla)
+
+**Önce oku (yalnız bunlar):** ADR-012 + PROTOKOL.md §3-5 · `core/src/agent/engine.ts` (runLoop) ·
+`core/src/agent/engine.test.ts` (mock: `MockLanguageModelV3.doGenerate` → `doStream` GEÇİŞİ) ·
+`shared/src/protocol/{events,requests,agent-state}.ts` · `cli/src/tui/agent-run.tsx`.
+
+**Dilim 2.1 — akış (streamText + agent.delta). ✅ BİTTİ ve testli (2026-07-08).**
+- `shared/events.ts`: `AgentDeltaPayloadSchema {runId,text}` + `EVENT_PAYLOAD_SCHEMAS["agent.delta"]`.
+- `engine.ts` runLoop: `generateText`→`streamText` (SENKRON döner). Metin `for await (result.textStream)`
+  ile tüketilip `bus.broadcast("agent.delta",{runId,text})`; sonra `await result.{response,usage,
+  providerMetadata,text,toolCalls}`. Tool loop/izin/jail/finish AYNI. **daemon.ts DEĞİŞMEDİ** (bus
+  tüm event'leri otomatik yayar).
+- Test mock'ları (`engine.test.ts` + `daemon-agent.test.ts`): `doGenerate`→`doStream` — scripted
+  `turn()` içeriğini AI SDK v3 stream part'larına (`stream-start`→text-start/delta/end|tool-call→
+  `finish{usage,finishReason}`) çeviren `scriptToStream`. Part şekilleri `@ai-sdk/provider@4.0.1`
+  `LanguageModelV3StreamPart`'tan birebir doğrulandı. Güvenlik testleri (izin/jail/deny) YEŞİL.
+- `agent-run.tsx`: `agent.delta`→`streaming` state (green render); `agent.tool.started` ve run
+  bitişinde temizlenir. +1 test. build/test/lint temiz (209 geçer; welcome ortamsal).
+- **Kalan:** durum/çok-tur DEĞİŞMEDİ (bu dilim yalnız akış). Konuşma yaşam döngüsü 2.2'de.
+
+**Dilim 2.1b — masaüstü akış paritesi. ✅ BİTTİ ve testli (2026-07-08).** Terminal ⇄ masaüstü eş
+zamanlılığı (ROADMAP kabul testi): agent.delta artık masaüstü panosunda da akıyor.
+- `ui/store.ts`: `runStreams: Record<runId,string>` — `agent.delta` biriktirir; `agent.tool.started`
+  (yeni tur), `agent.run.completed/failed`, state `cancelled` ve `applySnapshot`'ta temizlenir.
+- `ui/App.tsx`: aktif koşu satırının altında canlı akış metni (`.run-stream`, cyan).
+- Test: `store.test.ts` +1 (biriktir → araç başlayınca temizle → koşu bitince temizle). 210→**211**.
+- daemon/protokol DEĞİŞMEDİ (agent.delta zaten 2.1'de eklendi). Görsel doğrulama kullanıcıya (`desktop:dev`).
+
+**Dilim 2.2 — çok-tur (awaiting_user + agent.say + conversational).**
+- `agent-state.ts`: enum'a `awaiting_user`; VALID_TRANSITIONS: thinking→awaiting_user, awaiting_user→thinking,
+  awaiting_user→cancelled. `requests.ts`: `AgentSayPayloadSchema {runId,text}` + `AgentStartPayload`'a
+  `conversational?:boolean`. `events.ts` gerekmez (agent.run.state yeni değeri taşır).
+- `engine.ts`: `run.conversational` alanı; tur araçsız bitince `conversational` ise `finish` YERİNE
+  `transition(run,"awaiting_user")` + koşuyu haritada TUT (messages canlı). `say(runId,text)`: awaiting_user
+  koşusuna `messages.push({role:"user",content:text})` + runLoop'un bir sonraki turunu tetikle (döngüyü
+  "await next user" ile park edecek şekilde yeniden yapılandır — ya da turAsync yapıyı promise-gate ile böl).
+  `agent.cancel` konuşmalı koşuyu kapatır. daemon.ts switch'e `agent.say` handler.
+- Test: konuşmalı koşu 2 tur (ilk cevap → awaiting_user → say → ikinci cevap), aynı runId.
+- TUI: `agent-run.tsx` outcome yerine awaiting_user'da tekrar görev girişi (aynı koşu).
+
+**Dilim 2.3 — birleşik TUI.** Varsayılan "asistan" agent tanımı (araçsız/salt-okur, `~/.symphony/agents`
+gömülü default). `app.tsx`: Sohbet/Agent ayrımı tek "konuşma" yüzeyinde birleşir; sohbet = conversational
+asistan koşusu; araç modele göre isteğe bağlı, izin kapısı arkasında. ChatFlow (Dilim 1) bununla harmanlanır.
 
 ## Oturum 13 (2026-07-07): "Flaşlayan/glitch pencere" KÖK NEDEN bulundu ve düzeltildi
 
@@ -250,9 +360,9 @@ daemon çalışıyor olmalı** (token dosyası ancak daemon dinlerken yazılır)
 ## ⭐ SIRADAKİ İŞ — kullanıcıyla anlaşılan öncelik sırası (2026-07-07, Oturum 13 sonu)
 
 Kullanıcı onayladı, SIRAYLA yapılacak (ayrıntı: `ROADMAP.md` → "Sıradaki dilimler — kullanıcı önceliği"):
-1. **Oturum sürekliliği** ← BURADAN BAŞLA. TUI "önceki sohbete devam et"; veri zaten SQLite'ta,
-   TUI her açılışta yeni sessionId üretiyor (`cli/src/tui/chat.tsx`). Küçük dilim.
-2. **Birleşik sohbet-agent modu** (ADR gerektirir — chat↔agent köprüsü + izin kapısı sohbete de).
+1. ✅ **Oturum sürekliliği BİTTİ** (Oturum 14, 2026-07-08) — ayrıntı yukarıda "Dilim 1" bölümünde.
+   TUI'de "önceki sohbete devam et" çalışıyor (kod+test); kullanıcının canlı TTY doğrulaması bekleniyor.
+2. **Birleşik sohbet-agent modu** ← SIRADAKİ. (ADR gerektirir — chat↔agent köprüsü + izin kapısı sohbete de).
 3. **Uzun-dönem hafıza** (Faz 6) + **konuşma arşivinden kişiselleşme** (kullanıcı tüm Claude sohbetlerini
    arşivledi; yerel LLM tarzını benimsesin → önce stil profili, sonra RAG, gerekirse LoRA ince-ayar).
 4. ✅ **Token güvenilirlik hatası BİTTİ** (Oturum 13, 2026-07-07): `token.ts` `loadExistingToken`
@@ -261,37 +371,17 @@ Kullanıcı onayladı, SIRAYLA yapılacak (ayrıntı: `ROADMAP.md` → "Sıradak
    (`token.test.ts`, 198→203). "Dinleme sonrası yaz" değişmezi korundu. **Not:** hâlihazırda ÇALIŞAN
    daemon eski kodda; etki bir sonraki daemon başlatmasında geçerli (restart'ta token 2decedef… korunur).
 
-Kalan sıra: 1 (oturum sürekliliği) → 2 (birleşik sohbet-agent) → 3 (hafıza/arşiv).
+Kalan sıra: ~~1 (oturum sürekliliği ✅)~~ → **2 (birleşik sohbet-agent) ← SIRADAKİ** → 3 (hafıza/arşiv).
 
-### 📋 Dilim 1 — Oturum sürekliliği: SONRAKİ OTURUM BURADAN BAŞLASIN (adım adım)
+### 📋 Dilim 1 — Oturum sürekliliği: ✅ UYGULANDI (Oturum 14) — plan arşivi
 
-**Hedef:** TUI'de "önceki sohbete devam et" → qwen önceki konuşmanın bağlamını görsün.
-**Kapsam v1:** yalnız SON sohbeti sürdür (tam oturum tarayıcısı v2'ye). Dikey dilim, küçük.
+> Bu adım adım plan uygulandı (yukarıdaki "Dilim 1 BİTTİ" bölümü + `memo/oturumlar/2026-07-08.md`).
+> Kayıt olarak bırakıldı; v2 (tam oturum tarayıcısı: liste/arama/model-değişince-devam) yapılırken referans.
+> Uygulama planla birebir gitti: REST+daemon değişmedi (history zaten Faz 2'de REST'te, REPLACE semantiği),
+> `DaemonClient.listSessions/sessionDetail` + `ChatFlow` + `resume-picker.tsx` + `chat.tsx` prop tohumu.
 
-**Önce oku (yalnız bunlar):** `cli/src/tui/app.tsx` (akış) · `cli/src/tui/chat.tsx` (sessionId +
-history state) · `shared/src/protocol/rest.ts` (history uç şemaları) · `core/src/db/store.ts`
-(sessions/messages sorguları) · `core/src/server/daemon.ts` (REST /api/history/* handler'ları).
-
-**Adımlar:**
-1. **Protokol kontrolü (ADR/PROTOKOL gerekmez muhtemelen):** history ZATEN REST'te (`/api/history/*`,
-   sessions+messages — Faz 2). Daemon sessionId'ye REPLACE semantiğiyle yazıyor → eski sessionId'yi
-   yeniden kullanıp tüm mesaj dizisini göndermek yeterli. `chat.start`'a alan EKLEME (gerekmiyor).
-   YALNIZCA yeni bir REST ucu yoksa (son sohbeti + mesajlarını çekmek) küçük bir ekleme gerekebilir —
-   önce mevcut history uçlarının ne döndürdüğüne bak; varsa dokunma.
-2. **CLI istemci:** `daemon-client.ts`'e REST'ten geçmiş çeken küçük yardımcı (token + daemon base
-   URL zaten var; `fetch`). Son session + o session'ın mesajları.
-3. **app.tsx akışı:** karşılama sonrası, Sohbet dalında model seçiminden önce/sonra bir adım:
-   "Yeni sohbet / Önceki sohbete devam et" (yalnız kayıtlı sohbet varsa göster). Devam seçilirse
-   eski `sessionId` + önceden yüklenmiş mesajları `Chat`'e prop olarak geçir.
-4. **chat.tsx:** opsiyonel `initialSessionId?` + `initialHistory?` prop'ları; `useState`/`useRef`
-   bunlarla tohumlanır (yoksa bugünkü davranış: yeni UUID + boş history).
-5. **Test:** ink-testing-library — "devam et seçilince eski mesajlar render + yeni mesaj eski
-   sessionId ile gönderilir". Gerekirse store/client birim testi. Test geçmeden dilim kapanmaz.
-6. **Doğrulama:** build+test+lint; TUI raw-mode TTY istediği için canlı doğrulama KULLANICIYA
-   (terminalde `symphony` → Sohbet → "önceki sohbete devam" → qwen önceki bağlamı hatırlıyor mu?).
-
-**Tuzak:** TUI istemcisi WS; history REST'ten gelir (aynı token). `sessionId` REPLACE semantiği
-nedeniyle eski oturuma yazınca mesajlar çiftlemesin — daemon zaten replace yapıyor, yeni ekleme yapma.
+**v2'ye ertelenenler:** tam oturum tarayıcısı (son sohbet değil herhangi biri); önceki oturumun modeli
+artık mevcut değilse (ör. Ollama modeli silinmiş) devam — şu an bu durumda "devam et" gizlenir; başlık/arama.
 Aşağıdaki eski Faz 4 dilimleri hâlâ geçerli ama kullanıcı önceliği yukarıdaki maddeler.
 
 ## Sıradaki adım (Faz 4 sonraki dilimler)

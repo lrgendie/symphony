@@ -17,6 +17,7 @@ beforeEach(() => {
     daemonVersion: null,
     providers: [],
     runs: [],
+    runStreams: {},
     pendingPermissions: [],
     lastErrorAt: null,
     lastCompletedAt: null,
@@ -256,5 +257,21 @@ describe("ui store", () => {
     const log = useStore.getState().log;
     expect(log.length).toBe(200);
     expect(log[0]?.text).toContain("249"); // en yeni başta
+  });
+
+  it("agent.delta koşu başına metni biriktirir; araç başlayınca ve koşu bitince temizlenir (ADR-012)", () => {
+    const store = useStore.getState();
+    store.handleEvent("agent.delta", { runId: RUN, text: "Merhaba " });
+    store.handleEvent("agent.delta", { runId: RUN, text: "dünya" });
+    expect(useStore.getState().runStreams[RUN]).toBe("Merhaba dünya");
+
+    // Yeni tur (araç başladı) → önceki turun metni temizlenir.
+    store.handleEvent("agent.tool.started", { runId: RUN, tool: "glob", argsSummary: "glob *" });
+    expect(useStore.getState().runStreams[RUN]).toBeUndefined();
+
+    // Koşu bitince de kalıntı bırakmaz.
+    store.handleEvent("agent.delta", { runId: RUN, text: "son cevap" });
+    store.handleEvent("agent.run.completed", { runId: RUN, usage: { costUsd: 0 } });
+    expect(useStore.getState().runStreams[RUN]).toBeUndefined();
   });
 });

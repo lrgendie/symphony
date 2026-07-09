@@ -224,6 +224,16 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Akışlı asistan metni (agent.delta) — koşu satırının altında canlı akar. */
+.run-stream {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  color: var(--cyan);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* ---- Model panosu (token/maliyet) ---- */
 .usage {

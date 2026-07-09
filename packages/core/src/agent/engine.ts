@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { generateText, tool as defineTool, type ModelMessage } from "ai";
+import { streamText, tool as defineTool, type ModelMessage } from "ai";
 import type { Logger } from "pino";
 import {
   canTransition,
@@ -288,7 +288,8 @@ export class AgentEngine {
       for (;;) {
         this.transition(run, "thinking");
         const turnStartedAt = Date.now();
-        const result = await generateText({
+        // streamText SENKRON döner (await YOK); vaatler akış tüketilince çözülür (ADR-012).
+        const result = streamText({
           model: languageModel,
           instructions,
           tools: sdkTools,
@@ -297,12 +298,17 @@ export class AgentEngine {
           // ADR-008: temperature yalnız kabul eden sağlayıcılara iletilir (chat ile aynı kural).
           ...(adapter.forwardsTemperature ? { temperature: definition.temperature } : {}),
         });
-        this.recordTurnUsage(run, result.usage, turnStartedAt);
+        // Asistan metnini token-token yayınla (agent.delta) — sohbet UX'inin temeli.
+        for await (const chunk of result.textStream) {
+          this.deps.bus.broadcast("agent.delta", { runId: run.runId, text: chunk });
+        }
+        const response = await result.response;
+        this.recordTurnUsage(run, await result.usage, turnStartedAt);
         // Telemetri: rate-limit her turda en taze; cache token'ları koşu boyunca birikir.
-        const cache = extractCacheTokens(result.providerMetadata);
+        const cache = extractCacheTokens(await result.providerMetadata);
         run.cacheReadTokens += cache.read;
         run.cacheCreationTokens += cache.creation;
-        const limits = parseRateLimits(result.response.headers);
+        const limits = parseRateLimits(response.headers);
         if (limits !== null) {
           this.deps.bus.broadcast("provider.limits", {
             provider: run.provider,
@@ -310,11 +316,11 @@ export class AgentEngine {
             at: Date.now(),
           });
         }
-        messages.push(...result.response.messages);
+        messages.push(...response.messages);
 
-        const calls = result.toolCalls as unknown as RawToolCall[];
+        const calls = (await result.toolCalls) as unknown as RawToolCall[];
         if (calls.length === 0) {
-          this.finish(run, "completed", { result: result.text });
+          this.finish(run, "completed", { result: await result.text });
           return;
         }
         run.steps += 1;
