@@ -74,11 +74,15 @@ protokol WS/REST üzerinden konuşulur.
 
 ### packages/cli/src — symphony komutu
 - `index.ts` — commander kayıtları; argümansız → TUI
-- `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`)
+- `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`) +
+  `fetchLatestSession()` (REST /api/history'den son sohbet + mesajları; Bearer, zod parse)
 - `commands/` — status/models/watch/history/agents/agent/add (her komut tek dosya)
   - `add.ts` — `symphony add <npm-paketi>`: eklenti sistemi, `mcp.addServer` isteği atar
-- `tui/` — Ink: app.tsx (akış: karşılama→mod seçici→sohbet|agent), welcome.tsx, logo.ts
-  - `model-picker.tsx` / `chat.tsx` — sohbet dalı
+- `tui/` — Ink: app.tsx (akış: karşılama→mod seçici→sohbet|agent; sohbet dalında kayıt varsa
+  devam/yeni adımı, devamda önceki model otomatik seçilir), welcome.tsx, logo.ts
+  - `model-picker.tsx` / `chat.tsx` — sohbet dalı; Chat `initialSessionId?`/`initialHistory?`
+    prop'larıyla eski oturumu sürdürür (daemon REPLACE semantiği)
+  - `session-picker.tsx` — "önceki sohbete devam et / yeni sohbet" seçici (yalnız kayıt varsa)
   - `mode-picker.tsx` — Sohbet/Agent seçici (↑/↓+Enter)
   - `agent-picker.tsx` — kayıtlı agent listesinden seçim
   - `agent-run.tsx` — görev girişi + canlı koşu (izin kutusu tek tuş e/d/h, renkli diff,

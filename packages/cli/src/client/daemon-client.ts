@@ -8,9 +8,12 @@ import type { z } from "zod";
 import {
   createMessage,
   parseMessage,
+  HistorySessionDetailResponseSchema,
+  HistorySessionsResponseSchema,
   PROTOCOL_VERSION,
   type EventPayload,
   type EventType,
+  type HistorySessionDetailResponse,
   type REQUEST_PAYLOAD_SCHEMAS,
   type RequestType,
   type Snapshot,
@@ -300,6 +303,32 @@ export class DaemonClient {
 
       ws.send(JSON.stringify(message));
     });
+  }
+
+  /**
+   * Son sohbet oturumu + tam mesaj dökümü (REST /api/history, PROTOKOL §1.1).
+   * Kayıtlı oturum yoksa null. TUI "önceki sohbete devam et" bunu kullanır.
+   */
+  async fetchLatestSession(): Promise<HistorySessionDetailResponse | null> {
+    const list = HistorySessionsResponseSchema.parse(
+      await this.restGet("/api/history/sessions?limit=1"),
+    );
+    const latest = list.sessions[0];
+    if (latest === undefined) return null;
+    return HistorySessionDetailResponseSchema.parse(
+      await this.restGet(`/api/history/sessions/${latest.sessionId}`),
+    );
+  }
+
+  /** REST GET — WS ile aynı daemon ve token (Bearer). Hata cevabı DaemonError fırlatır. */
+  private async restGet(path: string): Promise<unknown> {
+    const response = await fetch(`http://127.0.0.1:${this.options.port}${path}`, {
+      headers: { authorization: `Bearer ${this.options.token}` },
+    });
+    if (!response.ok) {
+      throw new DaemonError("INTERNAL_REST_FAILED", `REST ${path} → HTTP ${response.status}`);
+    }
+    return response.json();
   }
 
   close(): void {

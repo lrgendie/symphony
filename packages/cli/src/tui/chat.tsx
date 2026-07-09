@@ -5,7 +5,7 @@ import { useRef, useState, type JSX } from "react";
 import type { ChatMessage, ModelInfo, Usage } from "@symphony/shared";
 import type { DaemonClient } from "../client/daemon-client.js";
 
-interface HistoryEntry {
+export interface HistoryEntry {
   role: "user" | "assistant";
   content: string;
   /** Asistan cevabının maliyet satırı (chat.completed'dan). */
@@ -13,14 +13,22 @@ interface HistoryEntry {
 }
 
 /** Streaming sohbet ekranı: delta'lar canlı akar, Esc koşan cevabı iptal eder. */
-export function Chat(props: { client: DaemonClient; model: ModelInfo }): JSX.Element {
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+export function Chat(props: {
+  client: DaemonClient;
+  model: ModelInfo;
+  /** Önceki sohbete devam: eski oturum kimliği (yoksa yeni UUID üretilir). */
+  initialSessionId?: string;
+  /** Önceki sohbete devam: ekrana ve model bağlamına tohumlanan geçmiş turlar. */
+  initialHistory?: HistoryEntry[];
+}): JSX.Element {
+  const [history, setHistory] = useState<HistoryEntry[]>(props.initialHistory ?? []);
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Sabit oturum kimliği: turlar tek sohbet olarak SQLite geçmişine yazılır (PROTOKOL §3).
-  const sessionIdRef = useRef(randomUUID());
+  // Devam modunda eski kimlik korunur → daemon REPLACE semantiğiyle aynı oturuma yazar.
+  const sessionIdRef = useRef(props.initialSessionId ?? randomUUID());
 
   useInput((_input, key) => {
     if (key.escape) abortRef.current?.abort();
