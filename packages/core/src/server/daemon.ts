@@ -489,8 +489,8 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           case "agent.start": {
             const payload = message.payload as RequestPayload<"agent.start">;
             try {
-              const { runId } = await engine.start(payload);
-              bus.sendTo(ws, "agent.start.ok", { runId }, message.id);
+              const { runId, sessionId } = await engine.start(payload);
+              bus.sendTo(ws, "agent.start.ok", { runId, sessionId }, message.id);
             } catch (error) {
               // Beklenen doğrulama hataları (AGENT_UNKNOWN, PERMISSION_JAIL...) —
               // telemetriye değil, isteği yapana gider.

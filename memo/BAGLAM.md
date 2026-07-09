@@ -61,7 +61,9 @@ protokol WS/REST üzerinden konuşulur.
   (`DaemonOptions.sampleHardware`, testte kapalı)
 - `db/store.ts` — SQLite (better-sqlite3, WAL); göçler `MIGRATIONS` dizisinde
   (v1 requests+telemetry, v2 sessions+messages, v3 agent_runs+agent_steps, v4 agent_runs
-  CHECK'ine awaiting_user — tablo yeniden kurma; migrate() göç sırasında FK'yı kapatır)
+  CHECK'ine awaiting_user — tablo yeniden kurma; migrate() göç sırasında FK'yı kapatır).
+  `saveConversation` (2.3b): tam mesaj listesini sessions/messages'a REPLACE eder — chat.start
+  (`saveChatTurn` buna delege) VE konuşmalı-agent (engine) aynı kalıcılık modelini paylaşır
 - `secrets/secret-store.ts` — OS keychain + env yedek; anahtar DİSKE YAZILMAZ
 - `config/paths.ts` — `~/.symphony` yol haritası (SYMPHONY_HOME ile taşınır)
 - `config/config.ts` — config.json yükleme
@@ -77,7 +79,10 @@ protokol WS/REST üzerinden konuşulur.
   - `engine.ts` — koşu döngüsü (AI SDK tool-calling, streamText+agent.delta), izin kapısı,
     durum makinesi, iptal, MCP bağlan/kapat (koşu ömrüyle eşleşir). Dilim 2.2: konuşmalı koşu —
     araçsız tur bitince `awaiting_user`'a runLoop İÇİNDE park (`waitForUser` promise-gate;
-    MCP/bağlam canlı kalır), `say()` sonraki kullanıcı turunu teslim eder. **Akışlı** (`streamText`, ADR-012): asistan metni
+    MCP/bağlam canlı kalır), `say()` sonraki kullanıcı turunu teslim eder. Dilim 2.3b: konuşmalı
+    koşu `sessionId` + temiz `transcript` (yalnız user/assistant metin) taşır; her asistan turunda
+    `store.saveConversation` (kalıcılık), `sessionId` istekte verildiyse `sessionDetail`'den resume
+    tohumlar; `start()` `{runId, sessionId}` döner. **Akışlı** (`streamText`, ADR-012): asistan metni
     `agent.delta {runId,text}` ile token-token yayılır. Test mock'ları `doStream` kullanır
     (`scriptToStream`; AI SDK v3 stream part'ları). Birleşik sohbet-agent modu buradan büyüyecek
     (2.2 awaiting_user+agent.say çok-tur, 2.3 birleşik TUI — bkz. ADR-012 + DURUM Dilim 2)

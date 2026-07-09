@@ -168,14 +168,18 @@ async function waitFor(client: Client, predicate: (env: Envelope) => boolean): P
 }
 
 describe("daemon agent akışı (PROTOKOL §8 örneği)", () => {
-  it("agents.list varsayılan coder + testci döndürür", async () => {
+  it("agents.list varsayılan coder + asistan + testci döndürür", async () => {
     const client = await connect();
     client.ws.send(JSON.stringify(createMessage("agents.list", {})));
     const reply = await waitFor(client, (env) => env.type === "agents.list.ok");
-    const agents = (reply.payload as { agents: Array<{ id: string }> }).agents;
+    const agents = (reply.payload as { agents: Array<{ id: string; tools: string[] }> }).agents;
     const ids = agents.map((a) => a.id);
-    expect(ids).toContain("coder"); // daemon açılışta varsayılanı ekti
+    expect(ids).toContain("coder"); // daemon açılışta varsayılanları ekti
+    expect(ids).toContain("asistan"); // Dilim 2.3a: salt-okur varsayılan da yazıldı
     expect(ids).toContain("testci");
+    // asistan salt-OKUR: yazma/komut araçları yok (birleşik girişin güvenli personası).
+    const asistan = agents.find((a) => a.id === "asistan");
+    expect(asistan?.tools).toEqual(["read_file", "glob", "grep"]);
     client.ws.close();
   });
 

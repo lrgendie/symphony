@@ -3,7 +3,44 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-09 (Oturum 15 devamı, Opus — Dilim 2.3a: birleşik giriş (PersonaPicker) BİTTİ)
+**Son güncelleme:** 2026-07-09 (Oturum 15 devamı, Opus — Dilim 2.3a+2.3b BİTTİ: birleşik giriş + konuşma kalıcılığı)
+
+## Dilim 2.3b (2026-07-09, Opus): Konuşmalı agent kalıcılığı + resume — BİTTİ ve testli (237 test)
+
+Konuşmalı agent koşuları artık `sessions`/`messages`'a yazılıyor → asistan/coder konuşmaları da
+`symphony history`'de görünür ve sürdürülebilir; chat.start ile AYNI kalıcılık modeli. Kural 1
+sırası: PROTOKOL → shared → core → daemon.
+- **PROTOKOL (ADDITIVE):** `agent.start`'a `sessionId?` (verilirse o oturuma DEVAM — geçmiş bağlama
+  tohumlanır, aynı oturuma yazılır); `agent.start.ok` artık `{runId, sessionId}`. PROTOCOL_VERSION
+  değişmedi. §3'e konuşmalı-agent kalıcılık notu (yalnız user/assistant metin turları yazılır —
+  araç çağrısı/sonucu geçmişe GİRMEZ; her asistan turu REPLACE).
+- **shared:** `AgentStartPayloadSchema.sessionId?` + `AgentStartOkPayloadSchema.sessionId` (zorunlu).
+- **store.ts:** yeni `saveConversation({sessionId,provider,model,messages})` — tam mesaj listesini
+  REPLACE eder (upsert session + `at` koru + insert). `saveChatTurn` artık buna delege eder (DRY).
+- **engine.ts:** konuşmalı koşu `sessionId` (payload ?? yeni uuid) + `resumeFrom` (payload.sessionId
+  ?? null) + TEMİZ `transcript` taşır. runLoop: resumeFrom varsa `store.sessionDetail`'den
+  user/assistant metinleri hem model `messages`'a hem transcript'e tohumlar; task eklenir. Araçsız
+  tur bitince (awaiting_user park + completed) asistan nihai metnini transcript'e yazar ve
+  konuşmalıysa `persistConversation` (DB hatası koşuyu öldürmez, loglanır). `start()` artık
+  `{runId, sessionId}` döner. Tek-seferlik (non-conversational) koşu YAZMAZ (one-shot task).
+- **daemon.ts:** `agent.start.ok`'a sessionId eklendi (motordan).
+- **Test +4 (233→237):** engine — 2-tur persist (transcript doğru) · araç turu geçmişe girmez ·
+  sessionId ile resume (model eski bağlamı görür + aynı oturuma eklenir) · one-shot yazmaz.
+  daemon-agent: agents.list asistan'ı da doğruluyor (salt-okur araçlar). build/test/lint temiz.
+- **⚠️ Canlı test DAEMON RESTART ister** (core değişti). Doğrulama: `symphony` → asistan/coder ile
+  konuş → `symphony history` konuşmayı göstermeli. (TUI'de agent konuşmasını "önceki sohbete devam
+  et" ile sürdürme UX'i = 2.3c, aşağıda.)
+
+### 📋 Dilim 2.3c (SIRADAKİ, opsiyonel): TUI agent-konuşması resume UX
+
+Backend hazır (agent.start `sessionId` kabul ediyor, agent.start.ok döndürüyor). Kalan: PersonaPicker'da
+agent seçince de "önceki konuşmaya devam et" sunmak (ChatFlow'un ResumePicker deseni agent'a
+uyarlanır: AgentRun'a `initialSessionId`/`initialHistory` tohumu → agent.start'a sessionId geçer).
+Şu an "Sohbet" personası chat.start-resume'a sahip; agent personaları kaydediliyor ama TUI'den
+sürdürme akışı henüz yok. Bu dilim bitince "Sohbet" personası da (istenirse) konuşmalı asistan'a
+taşınıp chat.start yalnız curl/compat ucu olarak kalabilir (ADR-012'nin son adımı).
+
+## Dilim 2.3a (2026-07-09, Opus): Birleşik giriş — BİTTİ ve testli (233 test)
 
 ## Dilim 2.3a (2026-07-09, Opus): Birleşik giriş — BİTTİ ve testli (233 test)
 
@@ -30,27 +67,9 @@ kalıcılık. **2.3a bitti:**
   açılışında yazar; ŞU AN çalışan daemon (PID 2476) bu değişiklikten önce başladı → asistan
   personası ancak restart sonrası listede görünür. (CLI değişikliği build'le `symphony`'ye yansır.)
 
-### 📋 Dilim 2.3b (SIRADAKİ): konuşmalı agent koşularına oturum kalıcılığı + resume
-
-**Hedef:** araçlı/araçsız TÜM konuşmalar sessions/messages'a yazılsın ve "önceki sohbete devam"
-kazanılsın → asistan/coder konuşmaları da sürdürülebilir olur; "Sohbet" personası da (istenirse)
-konuşmalı asistan'a taşınabilir. **Plan (Kural 1 sırası):**
-1. **Protokol (ADDITIVE):** `agent.start`'a opsiyonel `sessionId?` (uuid) — verilirse o oturuma
-   devam. `agent.start.ok`/`agent.run.started`'a `sessionId` ekle (istemci hangi oturuma
-   yazıldığını bilsin). PROTOKOL.md → shared şeması → kullanım.
-2. **engine.ts:** konuşmalı koşu bir `sessionId` taşır (payload.sessionId ?? yeni uuid).
-   `sessionId` verildiyse `store.sessionDetail`'den user/assistant metinlerini `messages`'a tohumla
-   (task'ten ÖNCE). Her tur asistan metni üretince (awaiting_user park + completed) `store`'a
-   yaz: user/assistant metin turlarını topla (tool-role mesajları ATLA — sessions yalnız
-   system/user/assistant taşır), `saveChatTurn`-benzeri REPLACE. TUZAK: araçlı turda mesaj dizisi
-   tool mesajları içerir → yalnız metin turlarını süz.
-3. **TUI:** AgentRun'a resume tohumu (initialSessionId/initialHistory); PersonaPicker'da agent
-   seçince de "önceki sohbete devam" sunulabilir (v2). İlk 2.3b: en azından agent koşusu kaydolsun
-   + `symphony` yeniden açılınca son agent oturumu sürdürülebilsin.
-4. **Test:** engine — konuşmalı koşu 2 tur → sessions'a yazıldı (sessionDetail doğrular); sessionId
-   ile başlatınca eski bağlam tohumlandı. TUI resume.
-
-## Rapor §5 küçük iyileştirme paketi (2026-07-09, Sonnet): BİTTİ ve testli (232 test)
+> **Not:** Bu bölümdeki "2.3b ertelendi" ifadesi ARTIK GEÇERSİZ — 2.3b aynı oturumda uygulandı
+> (üstteki "Dilim 2.3b" bölümü). Konuşmalı agent koşuları artık kalıcı; kalan yalnız TUI resume
+> UX'i (2.3c). ADR-012'ye eklenen uygulama notu da 2.3a/2.3b bölünmesini yansıtır.
 
 ## Rapor §5 küçük iyileştirme paketi (2026-07-09, Sonnet): BİTTİ ve testli (232 test)
 

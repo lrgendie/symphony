@@ -30,7 +30,10 @@ export const StateSyncOkPayloadSchema = z.object({ snapshot: SnapshotSchema }).s
 
 export const ChatStartOkPayloadSchema = z.object({ sessionId: z.string().uuid() }).strip();
 export const AckPayloadSchema = z.object({}).strip();
-export const AgentStartOkPayloadSchema = z.object({ runId: z.string().uuid() }).strip();
+export const AgentStartOkPayloadSchema = z
+  // sessionId (Dilim 2.3b): konuşmalı koşunun yazdığı oturum; istemci resume için saklar.
+  .object({ runId: z.string().uuid(), sessionId: z.string().uuid() })
+  .strip();
 
 export const ModelsListOkPayloadSchema = z.object({ models: z.array(ModelInfoSchema) }).strip();
 

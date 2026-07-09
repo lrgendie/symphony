@@ -46,6 +46,9 @@ export const AgentStartPayloadSchema = z
     extraDirs: z.array(z.string().min(1)).optional(),
     // ADR-012: true → tur araçsız bitince completed yerine awaiting_user'a park, agent.say ile sürer.
     conversational: z.boolean().optional(),
+    // Dilim 2.3b: verilirse konuşmalı koşu o oturuma DEVAM eder (geçmiş bağlama tohumlanır) ve
+    // aynı sessionId'ye yazar; yalnız `conversational` ile anlamlıdır.
+    sessionId: z.string().uuid().optional(),
   })
   .strip();
 

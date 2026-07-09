@@ -7,6 +7,7 @@ import {
   type ActiveRun,
   type AgentRunState,
   type AgentSummary,
+  type ChatMessage,
   type PendingPermission,
   type RequestPayload,
   type RiskClass,
@@ -85,6 +86,12 @@ interface ActiveRunRecord {
   conversational: boolean;
   /** awaiting_user park kapısı: agent.say gelince sonraki kullanıcı metniyle çözülür. */
   nextUser: ((text: string) => void) | null;
+  /** Dilim 2.3b: konuşmanın yazıldığı oturum (istekte verilmezse üretilir). */
+  sessionId: string;
+  /** Resume: istekte sessionId verildiyse (o oturuma devam) — geçmiş buradan tohumlanır; yoksa null. */
+  resumeFrom: string | null;
+  /** Kalıcılığa giden TEMİZ transcript (yalnız user/assistant metin turları; araç mesajları HARİÇ). */
+  transcript: ChatMessage[];
 }
 
 /** AI SDK v7 araç çağrısının motorun kullandığı kesiti (invalid = şemadan geçmedi). */
@@ -137,7 +144,7 @@ export class AgentEngine {
     );
   }
 
-  async start(payload: RequestPayload<"agent.start">): Promise<{ runId: string }> {
+  async start(payload: RequestPayload<"agent.start">): Promise<{ runId: string; sessionId: string }> {
     const definition = loadAgentDefinition(this.deps.agentsDir, payload.agentId);
     // SPEC §3: extraDirs agent.start'ta İNSANIN açıkça verdiği dizinlerdir —
     // istekte yer almaları açık onaydır; jail bunları köklere ekler.
@@ -193,6 +200,10 @@ export class AgentEngine {
       trustedForRun: new Set(),
       conversational: payload.conversational ?? false,
       nextUser: null,
+      // Konuşma kalıcılığı (2.3b): sessionId istekte verilirse o oturuma devam; yoksa yeni üret.
+      sessionId: payload.sessionId ?? randomUUID(),
+      resumeFrom: payload.sessionId ?? null,
+      transcript: [],
     };
     this.runs.set(run.runId, run);
     this.deps.store.createAgentRun({
@@ -220,7 +231,7 @@ export class AgentEngine {
         message: error instanceof Error ? error.message : String(error),
       });
     });
-    return { runId: run.runId };
+    return { runId: run.runId, sessionId: run.sessionId };
   }
 
   cancel(runId: string): void {
@@ -314,7 +325,22 @@ export class AgentEngine {
       const languageModel = await adapter.languageModel(run.model);
       // AI SDK v7: system mesajı messages içinde YASAK — instructions seçeneğiyle verilir.
       const instructions = buildSystemPrompt(definition, jail);
-      const messages: ModelMessage[] = [{ role: "user", content: run.task }];
+      // Resume (2.3b): sessionId istekte verildiyse önceki user/assistant metinlerini bağlama
+      // tohumla. Yalnız metin turları (system daemon'ın talimatıdır; araç mesajları geçmişte yok).
+      const seeded: ChatMessage[] =
+        run.resumeFrom !== null
+          ? (this.deps.store
+              .sessionDetail(run.resumeFrom)
+              ?.messages.filter((m) => m.role === "user" || m.role === "assistant")
+              .map((m) => ({ role: m.role, content: m.content })) ?? [])
+          : [];
+      run.transcript = [...seeded, { role: "user", content: run.task }];
+      // transcript yalnız user/assistant taşır; her elemanı somut rol literaliyle ModelMessage'a çevir.
+      const messages: ModelMessage[] = run.transcript.map((m): ModelMessage =>
+        m.role === "assistant"
+          ? { role: "assistant", content: m.content }
+          : { role: "user", content: m.content },
+      );
 
       for (;;) {
         this.transition(run, "thinking");
@@ -366,8 +392,13 @@ export class AgentEngine {
 
         const calls = (await result.toolCalls) as unknown as RawToolCall[];
         if (calls.length === 0) {
+          // Araçsız tur bitti = asistanın bu turdaki NİHAİ metni. Temiz transcript'e yaz ve
+          // (konuşmalıysa) oturuma kalıcılaştır (2.3b) — araç turları geçmişe girmez.
+          const finalText = await result.text;
+          run.transcript.push({ role: "assistant", content: finalText });
+          if (run.conversational) this.persistConversation(run);
           if (!run.conversational) {
-            this.finish(run, "completed", { result: await result.text });
+            this.finish(run, "completed", { result: finalText });
             return;
           }
           // Konuşmalı koşu (ADR-012): finish YERİNE kullanıcıya park. Döngüden ÇIKILMAZ →
@@ -375,6 +406,7 @@ export class AgentEngine {
           // v1'de turlar arasında açık tut, agent.cancel/daemon kapanışı kapatır).
           this.transition(run, "awaiting_user");
           const nextText = await this.waitForUser(run);
+          run.transcript.push({ role: "user", content: nextText });
           messages.push({ role: "user", content: nextText });
           continue;
         }
@@ -602,6 +634,26 @@ export class AgentEngine {
             )
           : error;
       return this.toolFailed(run, spec.name, summary, wrapped, Date.now() - startedAt);
+    }
+  }
+
+  /**
+   * Konuşmayı sessions/messages'a REPLACE eder (2.3b) — chat.start ile aynı kalıcılık modeli.
+   * DB hatası konuşmayı ÖLDÜRMEZ: canlı koşu bellekte sürer; hata loglanır (telemetri buna bağlı).
+   */
+  private persistConversation(run: ActiveRunRecord): void {
+    try {
+      this.deps.store.saveConversation({
+        sessionId: run.sessionId,
+        provider: run.provider,
+        model: run.model,
+        messages: run.transcript,
+      });
+    } catch (error) {
+      this.deps.log.error(
+        { runId: run.runId, sessionId: run.sessionId, err: error },
+        "konuşma kalıcılaştırılamadı (koşu devam ediyor)",
+      );
     }
   }
 

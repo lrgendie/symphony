@@ -575,3 +575,95 @@ describe("AgentEngine — rapor §5.4: akış ortasında sağlayıcı hatası", 
     expect(engine.activeRuns()).toHaveLength(0);
   });
 });
+
+// ---- Dilim 2.3b: konuşma kalıcılığı (sessions/messages) + resume ----
+
+const transcript = (store: DataStore, sessionId: string): string[] =>
+  store.sessionDetail(sessionId)?.messages.map((m) => `${m.role}:${m.content}`) ?? [];
+
+describe("AgentEngine — konuşma kalıcılığı (Dilim 2.3b)", () => {
+  it("konuşmalı koşu her asistan turunu sessions'a REPLACE eder; agent.start.ok sessionId döner", async () => {
+    const { engine, bus, store } = makeEngine([
+      turn([text("İlk cevap")]),
+      turn([text("İkinci cevap")]),
+    ]);
+    const { runId, sessionId } = await engine.start({ ...START, conversational: true });
+    expect(sessionId).toMatch(/^[0-9a-f-]{36}$/);
+
+    await waitState(bus, "awaiting_user", 1);
+    expect(transcript(store, sessionId)).toEqual(["user:test görevi", "assistant:İlk cevap"]);
+
+    engine.say({ runId, text: "peki ya bu?" });
+    await waitState(bus, "awaiting_user", 2);
+    expect(transcript(store, sessionId)).toEqual([
+      "user:test görevi",
+      "assistant:İlk cevap",
+      "user:peki ya bu?",
+      "assistant:İkinci cevap",
+    ]);
+
+    engine.cancel(runId);
+    await waitState(bus, "cancelled", 1);
+  });
+
+  it("araç turu geçmişe GİRMEZ: transcript yalnız user görev + asistanın NİHAİ metni", async () => {
+    const { engine, bus, store } = makeEngine([
+      turn([toolCall("read_file", { path: "mevcut.txt" })]), // safe araç — izin yok, transcript'e girmez
+      turn([text("dosyayı okudum")]),
+    ]);
+    const { runId, sessionId } = await engine.start({ ...START, conversational: true });
+    await waitState(bus, "awaiting_user", 1);
+
+    // read_file çağrısı/sonucu KAYITTA YOK — yalnız konuşma turları (PROTOKOL §3 notu).
+    expect(transcript(store, sessionId)).toEqual(["user:test görevi", "assistant:dosyayı okudum"]);
+
+    engine.cancel(runId);
+    await waitState(bus, "cancelled", 1);
+  });
+
+  it("sessionId ile başlatınca eski bağlam modele tohumlanır ve AYNI oturuma eklenir (resume)", async () => {
+    const { engine, bus, store, adapter } = makeEngine([turn([text("Evet, Deniz")])]);
+    const priorSessionId = crypto.randomUUID();
+    store.saveConversation({
+      sessionId: priorSessionId,
+      provider: "fake",
+      model: "fake-1",
+      messages: [
+        { role: "user", content: "adım Deniz" },
+        { role: "assistant", content: "memnun oldum" },
+      ],
+    });
+
+    const { runId, sessionId } = await engine.start({
+      ...START,
+      conversational: true,
+      sessionId: priorSessionId,
+      task: "adımı hatırlıyor musun?",
+    });
+    expect(sessionId).toBe(priorSessionId); // resume: aynı oturuma yazılır
+
+    await waitState(bus, "awaiting_user", 1);
+    // Model bu turda eski bağlamı GÖRDÜ (prompt'a tohumlandı).
+    const prompt = JSON.stringify(adapter.prompts[0]);
+    expect(prompt).toContain("adım Deniz");
+    expect(prompt).toContain("memnun oldum");
+    // Oturum: eski 2 + yeni 2 mesaj, tek dizide.
+    expect(transcript(store, priorSessionId)).toEqual([
+      "user:adım Deniz",
+      "assistant:memnun oldum",
+      "user:adımı hatırlıyor musun?",
+      "assistant:Evet, Deniz",
+    ]);
+
+    engine.cancel(runId);
+    await waitState(bus, "cancelled", 1);
+  });
+
+  it("tek-seferlik (conversational olmayan) koşu sessions'a YAZMAZ — eski davranış korunur", async () => {
+    const { engine, bus, store } = makeEngine([turn([text("tek seferlik cevap")])]);
+    const { sessionId } = await engine.start(START);
+    await bus.waitFor("agent.run.completed");
+    // Konuşmalı değil → oturum kaydı yok (one-shot task, yalnız agent_runs'ta).
+    expect(store.sessionDetail(sessionId)).toBeNull();
+  });
+});

@@ -55,7 +55,7 @@ Tüm WS mesajları tek zarf tipindedir:
 | `state.sync` | `{}` | Tam durum anlık görüntüsü iste (yeniden bağlanmada) |
 | `chat.start` | `{ sessionId?, provider, model, messages[], options? }` | Sohbet başlat. `options: { temperature? (vars. 0), maxTokens? }` |
 | `chat.cancel` | `{ sessionId }` | Akışı durdur |
-| `agent.start` | `{ agentId, task, cwd, model?, provider?, conversational? }` | Agent görevi başlat (agentId = `~/.symphony/agents/` tanımı). `conversational: true` (ADR-012) → koşu tur bitince `completed` yerine `awaiting_user`'a park olur, `agent.say` ile sürer |
+| `agent.start` | `{ agentId, task, cwd, model?, provider?, conversational?, sessionId? }` | Agent görevi başlat (agentId = `~/.symphony/agents/` tanımı). `conversational: true` (ADR-012) → koşu tur bitince `completed` yerine `awaiting_user`'a park olur, `agent.say` ile sürer. `sessionId` (Dilim 2.3b, yalnız `conversational` ile anlamlı) → o oturuma DEVAM: daemon geçmiş user/assistant mesajlarını bağlama tohumlar, konuşma aynı oturuma yazılır. Cevap: `agent.start.ok { runId, sessionId }` (konuşmalı koşunun yazdığı oturum; verilmezse daemon üretir) |
 | `agent.say` | `{ runId, text }` | Konuşmalı koşuya (ADR-012) sonraki kullanıcı turunu ekle — koşu `awaiting_user`'dayken; `thinking`'e geçip devam eder. Koşu `awaiting_user` değilse `AGENT_NOT_AWAITING_USER`, tanınmıyorsa `AGENT_UNKNOWN_RUN` hatası döner |
 | `agent.cancel` | `{ runId }` | Koşan agent'ı iptal et (konuşmalı koşuyu da kapatır) |
 | `permission.respond` | `{ requestId, decision: "allow"\|"deny"\|"always_allow"\|"allow_for_run" }` | Bekleyen izin isteğine cevap — `allow_for_run`: bu koşu boyunca aynı araç için tekrar sormaz, diske YAZILMAZ (SPEC-AGENT §5) |
@@ -71,6 +71,14 @@ oturum üretir. Çok turlu bir sohbeti TEK oturum olarak kaydettirmek isteyen is
 `sessionId`'yi turlar boyunca sabit tutar ve her turda TAM mesaj geçmişini gönderir. Daemon,
 başarıyla biten her turda oturumun mesajlarını bu tam geçmiş + asistan cevabıyla DEĞİŞTİRİR
 (replace — idempotent). Başlık ilk kullanıcı mesajından türetilir. İptal/hata turu geçmişi değiştirmez.
+
+**Konuşmalı agent koşusu ve geçmiş (Dilim 2.3b):** `conversational` agent koşusu da aynı
+`sessions`/`messages` tablosuna yazılır — böylece asistan/coder konuşmaları da `symphony history`'de
+görünür ve sürdürülebilir. Daemon, koşunun `sessionId`'sini (istekte verilmezse ürettiği) taşır ve
+her ASİSTAN metin turu tamamlandığında (araçsız tur → `awaiting_user` park ya da `completed`) o ana
+dek biriken **yalnız user/assistant metin** turlarını REPLACE eder (araç çağrısı/sonucu mesajları
+geçmişe GİRMEZ — `messages` yalnız system/user/assistant metni taşır). Başlık ilk kullanıcı
+mesajından türetilir. Böylece chat.start ve konuşmalı-agent aynı kalıcılık modelini paylaşır.
 
 ## 4. Daemon → İstemci (olaylar)
 

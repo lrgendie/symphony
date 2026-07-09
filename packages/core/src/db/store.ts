@@ -416,11 +416,16 @@ export class DataStore {
   }
 
   /**
-   * Başarıyla biten bir sohbet turunu kaydeder (PROTOKOL §3): oturum upsert
-   * edilir, mesajlar TAM geçmiş + asistan cevabıyla DEĞİŞTİRİLİR. Değişmeyen
-   * satırların `at` zamanı korunur (mesajın ilk yazıldığı tur).
+   * Bir oturumun TÜM mesajlarını verilen tam listeyle DEĞİŞTİRİR (PROTOKOL §3, replace —
+   * idempotent). Oturum upsert edilir; değişmeyen satırların `at` zamanı korunur (mesajın ilk
+   * yazıldığı tur). Hem chat.start (saveChatTurn) hem konuşmalı-agent (Dilim 2.3b) bunu kullanır.
    */
-  saveChatTurn(turn: ChatTurnRecord): void {
+  saveConversation(record: {
+    sessionId: string;
+    provider: string;
+    model: string;
+    messages: ChatMessage[];
+  }): void {
     const now = Date.now();
     this.db.transaction(() => {
       this.db
@@ -431,31 +436,40 @@ export class DataStore {
              provider = @provider, model = @model, title = @title, updated_at = @now`,
         )
         .run({
-          id: turn.sessionId,
-          provider: turn.provider,
-          model: turn.model,
-          title: deriveTitle(turn.messages),
+          id: record.sessionId,
+          provider: record.provider,
+          model: record.model,
+          title: deriveTitle(record.messages),
           now,
         });
 
       const previous = this.db
         .prepare(`SELECT idx, at FROM messages WHERE session_id = ?`)
-        .all(turn.sessionId) as Array<{ idx: number; at: number }>;
+        .all(record.sessionId) as Array<{ idx: number; at: number }>;
       const previousAt = new Map(previous.map((row) => [row.idx, row.at]));
-      this.db.prepare(`DELETE FROM messages WHERE session_id = ?`).run(turn.sessionId);
+      this.db.prepare(`DELETE FROM messages WHERE session_id = ?`).run(record.sessionId);
 
       const insert = this.db.prepare(
         `INSERT INTO messages (session_id, idx, role, content, at)
          VALUES (?, ?, ?, ?, ?)`,
       );
-      const all: ChatMessage[] = [
-        ...turn.messages,
-        { role: "assistant", content: turn.assistantText },
-      ];
-      all.forEach((message, idx) => {
-        insert.run(turn.sessionId, idx, message.role, message.content, previousAt.get(idx) ?? now);
+      record.messages.forEach((message, idx) => {
+        insert.run(record.sessionId, idx, message.role, message.content, previousAt.get(idx) ?? now);
       });
     })();
+  }
+
+  /**
+   * Başarıyla biten bir sohbet turunu kaydeder (PROTOKOL §3): tam geçmiş + asistan cevabı
+   * `saveConversation` ile REPLACE edilir.
+   */
+  saveChatTurn(turn: ChatTurnRecord): void {
+    this.saveConversation({
+      sessionId: turn.sessionId,
+      provider: turn.provider,
+      model: turn.model,
+      messages: [...turn.messages, { role: "assistant", content: turn.assistantText }],
+    });
   }
 
   /** Son sohbet oturumları (yeniden eskiye) — REST /api/history/sessions. */
