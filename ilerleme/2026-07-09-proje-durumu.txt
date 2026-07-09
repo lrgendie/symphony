@@ -1,0 +1,84 @@
+SYMPHONY — PROJE İLERLEME DURUMU
+Not tarihi: 2026-07-09
+Genel tahmin: ~%50 (aşağıda gerekçesi var — fazlar arası çok eşitsiz dağılıyor)
+
+============================================================
+BİTMİŞ OLANLAR (sağlam, testli)
+============================================================
+
+Faz 0 — Temel altyapı                                  : %100
+Faz 1 — Provider katmanı (Anthropic/OpenAI/Google/Ollama): ~%95
+  (yalnız OpenAI/Google canlı anahtar testi bekliyor, kod hazır)
+Faz 2 — CLI (`symphony` komutu)                         : %100
+Faz 2.5 — Karşılama ekranı                              : %100
+Faz 3 — Kod Agent'ı (izin sistemi/jail/MCP/araçlar) ⭐   : %100
+  Projenin "kalbi" — en zor/riskli teknik kısım tamamen bitti.
+
+============================================================
+KISMEN BİTMİŞ
+============================================================
+
+Faz 4 — Masaüstü (Tauri dashboard)                      : ~%65
+  NOT: ROADMAP.md'deki işaretler eski kalmış — dosyada "model panosu:
+  sonraki dilim" yazıyor ama gerçekte token/maliyet + GPU/donanım
+  vitalleri + API rate-limit paneli çoktan bitti. "Living Interface"
+  basit parçacık küresinden tam sinematik Yaşayan Tesseract'a
+  (bloom, GLSL shader, converge animasyonu) evrildi.
+  Eksik kalanlar:
+    - Yol haritası görselleştirme (ROADMAP'ten otomatik faz-adım grafiği)
+    - "Hangi projede hangi agent çalışıyor" proje görünümü
+    - CLI → masaüstü otomatik açılış
+
+Faz 6 — Zeka katmanı                                    : ~%10
+  Yalnız "kullanıcı hafızası" parçası başladı:
+    - ADR-013 (tasarım) + Dilim M1 (çekirdek enjeksiyon) BİTTİ (2026-07-09)
+    - Dilim M2 (REST + CLI + TUI göstergesi) SIRADA
+    - Dilim M3 (arşiv damıtıcı agent) sırada
+  Henüz başlamayanlar:
+    - Router v2 (öğrenen model yönlendirici)
+    - Bağlam Haritası (yaşayan bilgi grafiği)
+    - Geri bildirim sinyalleri
+    - Kendini geliştirme döngüsü (haftalık öneri)
+
+============================================================
+HİÇ BAŞLAMAMIŞ
+============================================================
+
+Faz 5 — Çoklu Agent Orkestrasyonu
+  (görev kuyruğu, "şef" agent, paralel çalışma, maliyet stratejisi)
+
+Faz 7 — Paketleme ve Taşınabilirlik
+  (Windows/macOS installer, `symphony sync`, otomatik güncelleme,
+  mimari+kullanım PDF rehberi)
+
+Faz 8 — Kendini Geliştiren Symphony ⭐ NİHAİ HEDEF
+  (Doktor agent, kendine yama döngüsü, güven merdiveni, bekçi modu)
+  Bu faz tanım gereği "sürekli" — hiçbir zaman %100 olmayacak bir ufuk.
+
+============================================================
+SIRADAKİ SOMUT ADIMLAR
+============================================================
+
+1. Hemen: Dilim M2 (hafıza REST ucu + `symphony memory` CLI komutu +
+   TUI göstergesi) → sonra Dilim M3 (arşiv damıtıcı agent).
+   Talimat memo/DURUM.md'de adım adım hazır.
+
+2. M3 bitince "kullanıcı önceliği" listesindeki 4 madde de kapanmış
+   olacak: oturum sürekliliği ✅, birleşik sohbet-agent ✅, hafıza
+   (M1/M2/M3), token güvenilirliği ✅.
+
+3. Ondan sonra üç bağımsız seçenek var (sıra kullanıcı kararına kalıyor):
+   a) Faz 4'ün kalan görsel eksiklerini kapatmak (yol haritası
+      görselleştirme, proje görünümü, otomatik açılış)
+   b) Faz 5'e geçmek (çoklu agent orkestrasyonu)
+   c) Faz 6'nın geri kalanına devam etmek (router v2, bağlam haritası)
+
+============================================================
+%50 TAHMİNİNİN GEREKÇESİ
+============================================================
+
+Fazlar haftalara göre ağırlıklandırıldı (Faz 8 sınırsız/sürekli
+olduğu için paydadan büyük ölçüde çıkarıldı). En zor/temel parça
+(Faz 0-3) tamamen bitti; orta-büyük parça (Faz 4-6) kısmen; en büyük
+iki parça (Faz 5, Faz 7-8'in "v1"i) henüz başlamadı. Sayı kesin
+değil — yönelim göstergesi olarak okunmalı.
