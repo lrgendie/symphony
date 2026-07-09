@@ -106,12 +106,12 @@ symphony/
 - **Çıktı:** Terminalde `symphony` → model seç → sohbet et.
 - **Kabul testi:** Temiz terminalde `symphony` daemon'ı otomatik başlatıyor ✅; model seçici tüm sağlayıcıları listeliyor ✅; streaming sohbet akıyor ✅ (canlı, 2026-07-03); aynı anda açık ikinci istemci aynı olayları görüyor ✅ (concurrency.test.ts + `symphony watch`).
 
-### Faz 2.5 — CLI Kimliği: Karşılama Ekranı (küçük dilim)
-- [ ] `symphony` açılışında karşılama ekranı: marka logosu (ASCII/Unicode), sürüm + protokol,
+### Faz 2.5 — CLI Kimliği: Karşılama Ekranı (küçük dilim) ✅ 2026-07-03
+- [x] `symphony` açılışında karşılama ekranı: marka logosu (ASCII/Unicode), sürüm + protokol,
   tarih, daemon/sağlayıcı durum özeti, toplam kullanım (SQLite'tan), kısayol ipuçları —
-  Claude Code'un oturum başlangıcı karşılaması gibi
-- [ ] Logo tek modülde yaşar (`packages/cli/src/tui/logo.ts`): kullanıcının kendi logosu
-  gelince yalnız o dosya değişir; renk paleti markayla uyumlu
+  Claude Code'un oturum başlangıcı karşılaması gibi ✅ 2026-07-03 (`tui/welcome.tsx`, testli)
+- [x] Logo tek modülde yaşar (`packages/cli/src/tui/logo.ts`): kullanıcının kendi logosu
+  gelince yalnız o dosya değişir; renk paleti markayla uyumlu ✅ 2026-07-03
 - **Çıktı:** `symphony` yazınca sistem "merhaba" diyor — kimliği olan bir açılış.
 - **Kabul testi:** Karşılama ekranı logo + tarih + gerçek sağlayıcı durumu + gerçek kullanım
   toplamını gösteriyor; model seçici akışı bozulmuyor; bileşen testli.
@@ -176,15 +176,15 @@ symphony/
 > Kullanıcı geri bildiriminden doğdu (sohbet/agent ayrımı sürtünmesi + hafıza yokluğu). Her biri
 > ayrı dikey dilim; bittiğinde `memo/DURUM.md` güncellenir. Fazlara dağılır ama sıra bu.
 
-1. **Oturum sürekliliği** — Sohbet geçmişi zaten SQLite'ta (`sessions`+`messages`, Faz 2) ama TUI
-   her açılışta yeni `sessionId` üretiyor (`cli/src/tui/chat.tsx`) → önceki bağlam taşınmıyor.
-   TUI'ye "önceki sohbete devam et" (son/seçilen oturumu yükle, mesajları bağlama koy). Veri hazır,
-   küçük dilim. Protokol: history REST uçları mevcut; gerekirse `chat.start`'a `resumeSessionId?`
-   (önce PROTOKOL.md → shared şeması → kullanım).
-2. **Birleşik sohbet-agent modu** — Sohbet ederken araç kullanımına geçebilme (Claude Code gibi):
-   tek modda konuş + gerektiğinde izin kapısı arkasında araç çağır. `chat.start` (araçsız) ile
-   `agent.start` (agentId/cwd/izin) ayrımını köprüler → **ADR gerektirir** (güvenlik: araç gelince
-   izin kapısı + jail/cwd sohbete de uygulanmalı). Protokol dokunuşu olası. En büyük kazanım.
+1. ✅ **Oturum sürekliliği** (2026-07-08, worktree; 2026-07-09 main'e merge) — TUI "önceki sohbete
+   devam et": `DaemonClient.listSessions/sessionDetail` (REST) + `ChatFlow` + `resume-picker.tsx` +
+   `chat.tsx` prop tohumu. Sıfır protokol/daemon değişikliği (REPLACE semantiği yetti). v2 adayları
+   DURUM.md'de (tam oturum tarayıcısı, model-değişince-devam).
+2. **Birleşik sohbet-agent modu** — BÜYÜK KISMI BİTTİ: ADR-012 (konuşmalı motor) ✅ · Dilim 2.1
+   akış (streamText + `agent.delta`) ✅ · 2.1b masaüstü akış paritesi ✅ (2026-07-08, worktree) ·
+   **2.2 çok-tur (`awaiting_user` + `agent.say` + `conversational`; TUI agent modu konuşmalı) ✅
+   2026-07-09.** KALAN: **Dilim 2.3 birleşik TUI** — varsayılan araçsız "asistan" agent'ı +
+   Sohbet/Agent'ın tek konuşma yüzeyinde birleşmesi + ChatFlow harmanı.
 3. **Uzun-dönem hafıza (= aşağıdaki Faz 6 "Kullanıcı hafızası")** — `~/.symphony/memory/` kalıcı
    profil, her oturumda bağlama enjekte. Kapsam kararı Faz 6'da (agent kendi yazamaz).
    **+ Konuşma arşivinden kişiselleşme (kullanıcı isteği 2026-07-07):** kullanıcı tüm geçmiş Claude
@@ -197,10 +197,8 @@ symphony/
    - **(c) LoRA ince-ayar** — arşivle qwen'e LoRA eğitimi → tarz ağırlıklara işlenir; Ollama'ya
      Modelfile/GGUF ile içe aktarılır. En güçlü ama en ağır (veri hazırlığı + eğitim); RTX 4060
      8GB'da küçük modelde mümkün. Profil+RAG yetmezse.
-4. **Token güvenilirlik hatası** — daemon her açılışta YENİ token üretiyor (`core/src/server/token.ts`)
-   → yeniden başlayınca bağlı istemciler (masaüstü/CLI) AUTH_TOKEN_INVALID ile kopuyor. Düzeltme:
-   dinleme başarılıysa diskteki geçerli token'ı yeniden kullan, ya da istemci reconnect'te token
-   dosyasını yeniden okusun. 2026-07-07'deki masaüstü kopmasının kök nedeni buydu.
+4. ✅ **Token güvenilirlik hatası** (2026-07-07) — `token.ts loadExistingToken`: daemon restart'ında
+   diskteki geçerli 64-hex token yeniden kullanılır; masaüstü/CLI artık kopmuyor (+5 test).
 
 ### Faz 5 — Orkestrasyon: Çoklu Agent (12–14. hafta)
 - [ ] Görev kuyruğu: birden çok agent'ı paralel çalıştırma, birbirine iş devretme
