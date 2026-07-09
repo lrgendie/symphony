@@ -68,6 +68,26 @@ Sistem prompt'u burada.`,
     expect(coder.temperature).toBe(0);
   });
 
+  it("varsayılan asistan tanımı (Dilim 2.3): salt-OKUR araçlar, yazma/komut YOK", () => {
+    ensureDefaultAgent(agentsDir);
+    const asistan = loadAgentDefinition(agentsDir, "asistan");
+    expect(asistan.tools).toEqual(["read_file", "glob", "grep"]);
+    // Yazma/komut araçları KESİNLİKLE yok (izinsiz değişiklik yapamaz — güvenli sohbet personası).
+    expect(asistan.tools).not.toContain("write_file");
+    expect(asistan.tools).not.toContain("edit");
+    expect(asistan.tools).not.toContain("run_command");
+    expect(asistan.temperature).toBe(0);
+  });
+
+  it("eksik varsayılan bağımsız tamamlanır: coder silinse bile asistan korunur", () => {
+    ensureDefaultAgent(agentsDir);
+    const asistanBefore = readFileSync(join(agentsDir, "asistan.md"), "utf8");
+    rmSync(join(agentsDir, "coder.md"), { force: true });
+    ensureDefaultAgent(agentsDir); // yalnız eksik olanı (coder) yeniden yazar
+    expect(readFileSync(join(agentsDir, "coder.md"), "utf8")).toContain("name: coder");
+    expect(readFileSync(join(agentsDir, "asistan.md"), "utf8")).toBe(asistanBefore); // dokunulmadı
+  });
+
   it("liste bozuk tanımı atlar, geçerlileri sıralı verir", () => {
     writeFileSync(join(agentsDir, "bozuk.md"), "frontmatter yok", "utf8");
     const ids = listAgentDefinitions(agentsDir).map((d) => d.id);

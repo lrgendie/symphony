@@ -69,7 +69,8 @@ protokol WS/REST üzerinden konuşulur.
   - `errors.ts` — `AgentError` (error.name = protokol hata kodu)
   - `jail.ts` — `WorkspaceJail`: path.resolve+realpath+kök kapsama; kaçış = PERMISSION_JAIL
   - `permissions.ts` — `PermissionEngine`: deny > allow > risk varsayılanı; always_allow kalıcılaştırma
-  - `definition.ts` — `~/.symphony/agents/*.md` frontmatter ayrıştırma + varsayılan coder
+  - `definition.ts` — `~/.symphony/agents/*.md` frontmatter ayrıştırma + varsayılan agent'lar
+    (`ensureDefaultAgent` → coder [tam araç] + asistan [salt-okur: read_file/glob/grep]; her biri bağımsız)
   - `tools.ts` — 6 araç (read_file/write_file/edit/glob/grep/run_command) + diff/hash + maskeleme
   - `mcp.ts` — MCP istemcisi (ADR-007): `~/.symphony/mcp-servers.json` kayıt defteri
     (stdio), sunucu araçlarını `AgentToolSpec`'e sarar (`mcp__<sunucu>__<araç>`, hep `mutating`)
@@ -87,15 +88,16 @@ protokol WS/REST üzerinden konuşulur.
   REST geçmiş sorguları (`listSessions`/`sessionDetail` — Bearer token, shared şema, 404→null)
 - `commands/` — status/models/watch/history/agents/agent/add (her komut tek dosya)
   - `add.ts` — `symphony add <npm-paketi>`: eklenti sistemi, `mcp.addServer` isteği atar
-- `tui/` — Ink: app.tsx (akış: karşılama→mod seçici→sohbet|agent), welcome.tsx, logo.ts
-  - `app.tsx` içinde `ChatFlow` — sohbet dalı orkestrasyonu: (kayıtlı sohbet varsa) yeni/devam
+- `tui/` — Ink: app.tsx (akış: karşılama→PERSONA seçici→konuşma), welcome.tsx, logo.ts
+  - `persona-picker.tsx` — **birleşik giriş (Dilim 2.3a)**: "kiminle konuşmak istersin?" — Sohbet
+    (chat.start, resume) + kayıtlı agent'lar TEK listede. `Persona = {kind:"chat"} | {kind:"agent",agent}`.
+    (mode-picker + agent-picker'ın YERİNE — ikisi de silindi.)
+  - `app.tsx` içinde `ChatFlow` — "Sohbet" personası orkestrasyonu: (kayıtlı sohbet varsa) yeni/devam
     seçimi → model seç → Chat. Devam: `sessionDetail` REST'ten tohum + model sabitlenir (v1: son sohbet)
-  - `model-picker.tsx` / `chat.tsx` — sohbet dalı (`chat.tsx`: opsiyonel `initialSessionId`/`initialHistory`
+  - `model-picker.tsx` / `chat.tsx` — Sohbet dalı (`chat.tsx`: opsiyonel `initialSessionId`/`initialHistory`
     tohumu → önceki oturuma devam; `HistoryEntry` dışa aktarılır)
   - `resume-picker.tsx` — "Yeni sohbet / Önceki sohbete devam et" seçici (↑/↓+Enter; picker deseni)
-  - `mode-picker.tsx` — Sohbet/Agent seçici (↑/↓+Enter)
-  - `agent-picker.tsx` — kayıtlı agent listesinden seçim
-  - `agent-run.tsx` — görev girişi + canlı koşu (izin kutusu tek tuş e/d/h, renkli diff,
+  - `agent-run.tsx` — asistan/coder personası: görev girişi + canlı koşu (izin kutusu tek tuş e/d/h, renkli diff,
     araç günlüğü, Esc iptal) — `cli/commands/agent.ts` ile aynı olaylara abone, Ink sunumu.
     Dilim 2.2: koşular `conversational: true` başlar; awaiting_user'da "devam yaz" girişi
     (`agent.say`, aynı runId), biten turlar `exchange` dökümünde kalır

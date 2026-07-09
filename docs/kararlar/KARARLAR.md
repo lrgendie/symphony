@@ -122,6 +122,19 @@ asistan agent'ına taşınır.
   kullanıcı mesajıyla devam; TUI agent koşusu çok-turlu olur.
 - **2.3** Birleşik TUI — varsayılan "asistan" agent'ı (araçsız); Sohbet/Agent mod ayrımı tek konuşmalı
   yüzeyde birleşir; araç modele göre isteğe bağlı, izin kapısı arkasında.
+  **Uygulama notu (2026-07-09, Opus — icra a/b'ye bölündü, Kural 7):**
+  - **2.3a (BİTTİ):** "Sohbet/Agent modu" ikilisi kaldırıldı; tek `PersonaPicker` ("kiminle
+    konuşmak istersin?") — Sohbet + kayıtlı agent'lar tek listede. Salt-OKUR "asistan" agent'ı
+    (read_file/glob/grep, hepsi `safe` → izin sürtünmesi yok) varsayılan olarak eklendi (ADR'nin
+    "araçsız ya da salt-okur" izniyle). `ModePicker`+`AgentPicker` silindi (ölü kod).
+  - **2.3b (SIRADA):** ADR'nin "TUI sohbet dalı konuşmalı asistan agent'ına taşınır" maddesi
+    2.3b'ye ERTELENDİ çünkü konuşmalı-agent koşuları henüz sessions/messages'a YAZILMIYOR →
+    taşımak Dilim 1'in "önceki sohbete devam" özelliğini bozardı (regresyon). 2.3a'da "Sohbet"
+    personası bilinçli olarak `chat.start` yolunda tutuldu (resume korunur). **Güvenlik gerekçesi
+    ihlal EDİLMEDİ:** araçsız `chat.start` yolu SIFIR güvenlik kodu (izin/jail) çoğaltır — ADR'nin
+    B'yi reddetme nedeni araç yolunun çatallanmasıydı, o yol tek (engine). 2.3b: konuşmalı agent
+    koşularına oturum kalıcılığı + resume → tüm konuşmalar sürdürülebilir olunca "Sohbet" personası
+    da konuşmalı asistan'a taşınabilir (ya da chat.start yalnız curl/compat ucu olarak kalır).
 **Geri dönüş koşulu:** streamText göçü mevcut agent kabul testlerini (izin/jail/deny) kırarsa ya da
 konuşma yaşam döngüsü koşu semantiğini bulanıklaştırırsa dilim geri alınır ve C (ayrı `converse.*`)
 yeniden değerlendirilir. Değişmezler dokunulmaz: izin kapısı, jail, anahtar yönetimi.

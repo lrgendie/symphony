@@ -8,11 +8,10 @@ import type {
   Usage,
 } from "@symphony/shared";
 import { connectToDaemon, type DaemonClient } from "../client/daemon-client.js";
-import { AgentPicker } from "./agent-picker.js";
 import { AgentRun } from "./agent-run.js";
 import { Chat, type HistoryEntry } from "./chat.js";
 import { ModelPicker } from "./model-picker.js";
-import { ModePicker, type TuiMode } from "./mode-picker.js";
+import { PersonaPicker, type Persona } from "./persona-picker.js";
 import { ResumePicker } from "./resume-picker.js";
 import { Welcome } from "./welcome.js";
 
@@ -110,7 +109,11 @@ export function ChatFlow(props: {
   return <Text dimColor>yükleniyor…</Text>;
 }
 
-/** `symphony` (argümansız): karşılama → mod seçici → sohbet YA DA agent akışı. */
+/**
+ * `symphony` (argümansız): karşılama → persona seçici → konuşma.
+ * Birleşik giriş (ADR-012, Dilim 2.3): tek "kiminle konuşmak istersin?" adımı — Sohbet
+ * (araçsız, geçmiş korunur) YA DA bir agent personası (asistan/coder, araçlar izin kapısında).
+ */
 export function App(props: {
   client: DaemonClient;
   models: ModelInfo[];
@@ -120,31 +123,25 @@ export function App(props: {
   cwd: string;
   lastSession: HistorySessionSummary | null;
 }): JSX.Element {
-  const [mode, setMode] = useState<TuiMode | null>(null);
-  const [agent, setAgent] = useState<AgentSummary | null>(null);
+  const [persona, setPersona] = useState<Persona | null>(null);
 
   return (
     <Box flexDirection="column" padding={1}>
       <Welcome providers={props.providers} totals={props.totals} />
-      {mode === null && <ModePicker onPick={setMode} />}
-      {mode === "chat" && (
+      {persona === null && <PersonaPicker agents={props.agents} onPick={setPersona} />}
+      {persona?.kind === "chat" && (
         <ChatFlow client={props.client} models={props.models} lastSession={props.lastSession} />
       )}
-      {mode === "agent" &&
-        (agent === null ? (
-          <AgentPicker agents={props.agents} onPick={setAgent} />
-        ) : (
-          <AgentRun
-            client={props.client}
-            agentId={agent.id}
-            cwd={props.cwd}
-            models={props.models}
-            onExit={() => {
-              setAgent(null);
-              setMode(null);
-            }}
-          />
-        ))}
+      {persona?.kind === "agent" && (
+        <AgentRun
+          client={props.client}
+          agentId={persona.agent.id}
+          cwd={props.cwd}
+          models={props.models}
+          // Konuşma bitince Esc → persona seçimine dön (TUI kapanmaz).
+          onExit={() => setPersona(null)}
+        />
+      )}
     </Box>
   );
 }

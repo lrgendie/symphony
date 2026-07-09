@@ -3,7 +3,54 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-09 (Oturum 15 devamı, Sonnet — rapor §5 küçük iyileştirme paketi BİTTİ)
+**Son güncelleme:** 2026-07-09 (Oturum 15 devamı, Opus — Dilim 2.3a: birleşik giriş (PersonaPicker) BİTTİ)
+
+## Dilim 2.3a (2026-07-09, Opus): Birleşik giriş — BİTTİ ve testli (233 test)
+
+ADR-012'nin son parçası ikiye bölündü (Kural 7): 2.3a giriş birleştirme (non-regression), 2.3b
+kalıcılık. **2.3a bitti:**
+- **"Sohbet/Agent modu" ikilisi KALKTI.** Tek `PersonaPicker` ("kiminle konuşmak istersin?"):
+  Sohbet + kayıtlı agent'lar TEK listede. `ModePicker`+`AgentPicker` SİLİNDİ (ölü kod;
+  `app.tsx` iki adımı tek adıma indirdi).
+- **Salt-OKUR "asistan" agent'ı** eklendi (`definition.ts ensureDefaultAgent` artık iki
+  varsayılan yazar: coder + asistan; her biri bağımsız kontrol). Araçlar: read_file/glob/grep
+  (hepsi `safe` → izin kutusu ÇIKMAZ). Asistan sohbet ederken dosyalara bakabilir ama
+  yazamaz/komut çalıştıramaz — Claude Code deneyiminin risksiz tadı, ADR'nin "araçsız ya da
+  salt-okur" izniyle.
+- **Personalar:** Sohbet (chat.start, resume korunur) · asistan (salt-okur konuşmalı agent) ·
+  coder (tam araç, izinle). Hepsi AgentRun/ChatFlow'a route edilir; asistan+coder aynı konuşmalı
+  agent yolunu (2.2) paylaşır.
+- **ADR-012'ye uygulama notu düşüldü** (KARARLAR.md): "sohbet dalını agent'a taşı" maddesi 2.3b'ye
+  ertelendi çünkü konuşmalı-agent koşuları henüz sessions/messages'a yazmıyor → taşımak resume'u
+  bozardı. "Sohbet" bilinçli olarak chat.start'ta tutuldu. Güvenlik ihlali YOK (araçsız yol sıfır
+  izin/jail kodu çoğaltır).
+- **Test:** +6 (persona-picker 4, definition 2), −silinen mode/agent-picker testleri. 232→**233**.
+  build/test/lint temiz.
+- **⚠️ Canlı test için DAEMON RESTART gerekir:** `ensureDefaultAgent` asistan.md'yi daemon
+  açılışında yazar; ŞU AN çalışan daemon (PID 2476) bu değişiklikten önce başladı → asistan
+  personası ancak restart sonrası listede görünür. (CLI değişikliği build'le `symphony`'ye yansır.)
+
+### 📋 Dilim 2.3b (SIRADAKİ): konuşmalı agent koşularına oturum kalıcılığı + resume
+
+**Hedef:** araçlı/araçsız TÜM konuşmalar sessions/messages'a yazılsın ve "önceki sohbete devam"
+kazanılsın → asistan/coder konuşmaları da sürdürülebilir olur; "Sohbet" personası da (istenirse)
+konuşmalı asistan'a taşınabilir. **Plan (Kural 1 sırası):**
+1. **Protokol (ADDITIVE):** `agent.start`'a opsiyonel `sessionId?` (uuid) — verilirse o oturuma
+   devam. `agent.start.ok`/`agent.run.started`'a `sessionId` ekle (istemci hangi oturuma
+   yazıldığını bilsin). PROTOKOL.md → shared şeması → kullanım.
+2. **engine.ts:** konuşmalı koşu bir `sessionId` taşır (payload.sessionId ?? yeni uuid).
+   `sessionId` verildiyse `store.sessionDetail`'den user/assistant metinlerini `messages`'a tohumla
+   (task'ten ÖNCE). Her tur asistan metni üretince (awaiting_user park + completed) `store`'a
+   yaz: user/assistant metin turlarını topla (tool-role mesajları ATLA — sessions yalnız
+   system/user/assistant taşır), `saveChatTurn`-benzeri REPLACE. TUZAK: araçlı turda mesaj dizisi
+   tool mesajları içerir → yalnız metin turlarını süz.
+3. **TUI:** AgentRun'a resume tohumu (initialSessionId/initialHistory); PersonaPicker'da agent
+   seçince de "önceki sohbete devam" sunulabilir (v2). İlk 2.3b: en azından agent koşusu kaydolsun
+   + `symphony` yeniden açılınca son agent oturumu sürdürülebilsin.
+4. **Test:** engine — konuşmalı koşu 2 tur → sessions'a yazıldı (sessionDetail doğrular); sessionId
+   ile başlatınca eski bağlam tohumlandı. TUI resume.
+
+## Rapor §5 küçük iyileştirme paketi (2026-07-09, Sonnet): BİTTİ ve testli (232 test)
 
 ## Rapor §5 küçük iyileştirme paketi (2026-07-09, Sonnet): BİTTİ ve testli (232 test)
 

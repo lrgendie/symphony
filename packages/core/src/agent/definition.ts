@@ -144,9 +144,44 @@ Kurallar:
 - İş bittiğinde son cevabını araç çağrısı OLMADAN, yaptıklarının kısa özeti olarak yaz.
 `;
 
-/** Daemon açılışında bir kez: hiç tanım yoksa varsayılan coder yazılır (agent DEĞİL, daemon yazar). */
+// Birleşik TUI (ADR-012, Dilim 2.3): araçlı personaların arasına salt-OKUR bir "asistan"
+// eklenir. read_file/glob/grep hepsi `safe` risk sınıfında → izin kutusu ÇIKMAZ; asistan
+// sohbet ederken dosyalara bakabilir ama hiçbir şeyi değiştiremez/çalıştıramaz (yazma/komut
+// için coder). Böylece kullanıcı, izin sürtünmesi olmadan "dosyalarını gören" bir sohbet alır.
+const DEFAULT_ASISTAN_DEFINITION = `---
+name: asistan
+description: Genel sohbet asistanı — dosyalarını okuyabilir, ama değiştiremez/çalıştıramaz
+# model/provider boş → istekte verilmezse router seçer
+temperature: 0
+tools: [read_file, glob, grep]
+maxSteps: 50
+---
+Sen Symphony'nin genel yardımcı asistanısın. Kullanıcıyla Türkçe, açık ve öz konuşursun.
+Gerektiğinde çalışma dizinindeki dosyaları OKUYABİLİR (read_file), bulabilir (glob) ve
+içinde arayabilirsin (grep); yanıtını bulduğun içeriğe dayandırırsın. Hiçbir şeyi
+DEĞİŞTİREMEZSİN ve komut çalıştıramazsın — bunlara ihtiyaç varsa kullanıcıya "coder"
+agent'ını öner.
+
+Kurallar:
+- Soruyu dosyalara bakmadan yanıtlayabiliyorsan gereksiz yere araç çağırma.
+- Bir dosyanın içeriğine ihtiyacın varsa önce glob/grep ile yerini bul, sonra read_file ile oku.
+- Bilmediğini uydurma; emin değilsen açıkça söyle.
+`;
+
+const DEFAULT_AGENT_DEFINITIONS: ReadonlyArray<{ id: string; body: string }> = [
+  { id: "coder", body: DEFAULT_CODER_DEFINITION },
+  { id: "asistan", body: DEFAULT_ASISTAN_DEFINITION },
+];
+
+/**
+ * Daemon açılışında bir kez: eksik olan varsayılan agent tanımları yazılır (agent DEĞİL,
+ * daemon yazar — SPEC-AGENT §1). Her tanım bağımsız kontrol edilir; kullanıcı birini silip
+ * özelleştirmişse ötekini yeniden yaratmak onu bozmaz.
+ */
 export function ensureDefaultAgent(agentsDir: string): void {
-  const file = join(agentsDir, "coder.md");
-  if (existsSync(file)) return;
-  writeFileSync(file, DEFAULT_CODER_DEFINITION, "utf8");
+  for (const { id, body } of DEFAULT_AGENT_DEFINITIONS) {
+    const file = join(agentsDir, `${id}.md`);
+    if (existsSync(file)) continue;
+    writeFileSync(file, body, "utf8");
+  }
 }
