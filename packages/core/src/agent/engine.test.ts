@@ -85,6 +85,8 @@ function scriptToStream(result: GenerateResult): ReadableStream<unknown> {
 class FakeAdapter implements ProviderAdapter {
   readonly name = "fake";
   readonly forwardsTemperature = true;
+  /** Her model turunun çağrı seçenekleri (konuşmalı test: sonraki tur user mesajını görüyor mu). */
+  readonly prompts: unknown[] = [];
 
   constructor(private readonly script: GenerateResult[]) {}
 
@@ -98,10 +100,12 @@ class FakeAdapter implements ProviderAdapter {
 
   languageModel(): Promise<MockLanguageModelV3> {
     const script = this.script;
+    const prompts = this.prompts;
     // Motor artık streamText kullanıyor → doStream (ADR-012). Config'i cast'liyoruz:
     // doStream'in tam dönüş tipi @ai-sdk/provider'da (transitive; core'dan içe aktarılmaz).
     const config = {
-      doStream: () => {
+      doStream: (options: unknown) => {
+        prompts.push(options);
         const next = script.shift();
         if (next === undefined) throw new Error("senaryo bitti ama model yine çağrıldı");
         return Promise.resolve({ stream: scriptToStream(next) });
@@ -165,9 +169,13 @@ class CaptureBus extends EventBus {
 
 const openStores: DataStore[] = [];
 
-function makeEngine(
-  script: GenerateResult[],
-): { engine: AgentEngine; bus: CaptureBus; store: DataStore; permissionsFile: string } {
+function makeEngine(script: GenerateResult[]): {
+  engine: AgentEngine;
+  bus: CaptureBus;
+  store: DataStore;
+  permissionsFile: string;
+  adapter: FakeAdapter;
+} {
   const bus = new CaptureBus();
   const store = new DataStore(join(home, "data", `test-${Date.now()}-${Math.random()}.db`));
   openStores.push(store);
@@ -183,7 +191,7 @@ function makeEngine(
     mcpServersFile: join(home, `mcp-servers-${Date.now()}-${Math.random()}.json`),
     pickModel: () => Promise.resolve(null),
   });
-  return { engine, bus, store, permissionsFile };
+  return { engine, bus, store, permissionsFile, adapter };
 }
 
 const START = { agentId: "testci", cwd: "", task: "test görevi" };
@@ -405,5 +413,99 @@ describe("AgentEngine (SPEC-AGENT §4-§6)", () => {
     await engine.start({ ...START, agentId: "mcpli" });
     const failed = await bus.waitFor("agent.run.failed");
     expect(failed.error.code).toBe("AGENT_MCP_SERVER_UNKNOWN");
+  });
+});
+
+// ---- Dilim 2.2: konuşmalı koşu (ADR-012 — awaiting_user + agent.say + conversational) ----
+
+/** Belirli bir agent.run.state değerinin en az `count` kez yayınlanmasını bekler. */
+async function waitState(
+  bus: CaptureBus,
+  state: string,
+  count = 1,
+  timeoutMs = 4000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const seen = bus.emitted.filter(
+      (e) => e.type === "agent.run.state" && (e.payload as { state: string }).state === state,
+    ).length;
+    if (seen >= count) return;
+    if (Date.now() > deadline) throw new Error(`'${state}' durumu (${count}.) zamanında gelmedi`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+describe("AgentEngine — konuşmalı koşu (ADR-012, dilim 2.2)", () => {
+  it("tur araçsız bitince completed YERİNE awaiting_user; agent.say AYNI koşuda ikinci turu sürer", async () => {
+    const { engine, bus, adapter } = makeEngine([
+      turn([text("İlk cevap")]),
+      turn([text("İkinci cevap")]),
+    ]);
+    const { runId } = await engine.start({ ...START, conversational: true });
+
+    await waitState(bus, "awaiting_user", 1);
+    // Koşu KAPANMADI: haritada canlı, completed yayınlanmadı.
+    expect(engine.activeRuns()).toMatchObject([{ runId, state: "awaiting_user" }]);
+    expect(bus.emitted.some((e) => e.type === "agent.run.completed")).toBe(false);
+
+    engine.say({ runId, text: "devam et lütfen" });
+    await waitState(bus, "awaiting_user", 2); // ikinci tur da bitti, yine park
+
+    // Her iki turun metni AYNI runId ile agent.delta'dan aktı.
+    const deltas = bus.emitted
+      .filter((e) => e.type === "agent.delta")
+      .map((e) => e.payload as { runId: string; text: string });
+    expect(deltas.every((d) => d.runId === runId)).toBe(true);
+    const streamed = deltas.map((d) => d.text).join("");
+    expect(streamed).toContain("İlk cevap");
+    expect(streamed).toContain("İkinci cevap");
+    // İkinci model turu, araya eklenen kullanıcı mesajını GÖRDÜ (bağlam canlı).
+    expect(JSON.stringify(adapter.prompts[1])).toContain("devam et lütfen");
+    expect(engine.activeRuns()).toHaveLength(1); // hâlâ tek ve aynı koşu
+
+    engine.cancel(runId);
+    await waitState(bus, "cancelled", 1);
+    expect(engine.activeRuns()).toHaveLength(0);
+  });
+
+  it("cancelAll park etmiş (awaiting_user) koşuyu da kapatır — daemon kapanışı sızıntı bırakmaz (rapor §4.2)", async () => {
+    const { engine, bus } = makeEngine([turn([text("cevap")])]);
+    await engine.start({ ...START, conversational: true });
+    await waitState(bus, "awaiting_user", 1);
+
+    engine.cancelAll();
+    await waitState(bus, "cancelled", 1);
+    expect(engine.activeRuns()).toHaveLength(0);
+  });
+
+  it("agent.say korumaları: bilinmeyen koşu AGENT_UNKNOWN_RUN, beklemeyen koşu AGENT_NOT_AWAITING_USER", async () => {
+    const { engine, bus } = makeEngine([
+      turn([toolCall("write_file", { path: "say-koruma.txt", content: "x" })]),
+    ]);
+    const { runId } = await engine.start({ ...START, conversational: true });
+    await bus.waitFor("agent.tool.requested"); // koşu awaiting_permission'da, awaiting_user DEĞİL
+
+    expect(() => engine.say({ runId: crypto.randomUUID(), text: "x" })).toThrowError(
+      "Aktif koşu bulunamadı",
+    );
+    expect(() => engine.say({ runId, text: "x" })).toThrowError("kullanıcı turu beklemiyor");
+
+    engine.cancel(runId);
+    await waitState(bus, "cancelled", 1);
+  });
+
+  it("conversational verilmeyen koşu ESKİ davranışını korur: araçsız tur → completed", async () => {
+    const { engine, bus } = makeEngine([turn([text("tek seferlik cevap")])]);
+    await engine.start(START);
+    const completed = await bus.waitFor("agent.run.completed");
+    expect(completed.result).toBe("tek seferlik cevap");
+    expect(
+      bus.emitted.some(
+        (e) =>
+          e.type === "agent.run.state" &&
+          (e.payload as { state: string }).state === "awaiting_user",
+      ),
+    ).toBe(false);
   });
 });

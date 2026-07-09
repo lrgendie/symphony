@@ -27,6 +27,9 @@ type ModelChoice = ModelInfo | "router";
  * sonuç/hata. `symphony agent <ad> <görev>` (cli/src/commands/agent.ts) ile AYNI
  * olaylara abone olur — yalnız sunum katmanı Ink.
  *
+ * Dilim 2.2 (ADR-012): koşu KONUŞMALI başlatılır — görev bitince kapanmaz, awaiting_user'da
+ * devam girişi gösterilir (agent.say, aynı runId/bağlam/MCP). Esc koşuyu bitirir (cancel).
+ *
  * Çalışma dizini ve model ADIM OLARAK sorulur (varsayılan: bulunduğun dizin / router
  * seçimi) — sessizce "neredeysen orası" almak kullanıcıyı şaşırtabiliyor: yanlış dizinde
  * başlatılan bir koşu, agent'ın alakasız/devasa bir ağaçta (ör. ev dizini) gezinip
@@ -52,6 +55,11 @@ export function AgentRun(props: {
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
   const [streaming, setStreaming] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
+  // Konuşmalı koşu (ADR-012, dilim 2.2): tur bitince awaiting_user → devam girişi.
+  const [awaiting, setAwaiting] = useState(false);
+  const [sayDraft, setSayDraft] = useState("");
+  /** Biten turların dökümü (agent cevabı + kullanıcı devamı) — ekranda kalır. */
+  const [exchange, setExchange] = useState<string[]>([]);
   const runIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -62,6 +70,7 @@ export function AgentRun(props: {
       props.client.on("agent.run.state", (payload) => {
         if (!mine(payload.runId)) return;
         setThinking(payload.state === "thinking");
+        setAwaiting(payload.state === "awaiting_user");
         if (payload.state === "cancelled") setOutcome({ kind: "cancelled" });
       }),
       // Akışlı asistan metni (ADR-012): tur boyunca birikir, araç başlayınca sıfırlanır.
@@ -102,7 +111,8 @@ export function AgentRun(props: {
         ? { provider: modelChoice.provider, model: modelChoice.id }
         : {};
     props.client
-      .request("agent.start", { agentId: props.agentId, task, cwd, ...modelFields })
+      // conversational (ADR-012): görev bitince koşu kapanmaz, awaiting_user'da devam beklenir.
+      .request("agent.start", { agentId: props.agentId, task, cwd, conversational: true, ...modelFields })
       .then((ok) => {
         runIdRef.current = ok.runId;
         setRunId(ok.runId);
@@ -128,6 +138,23 @@ export function AgentRun(props: {
     setOutcome(null);
     setStreaming("");
     setStartError(null);
+    setAwaiting(false);
+    setSayDraft("");
+    setExchange([]);
+  };
+
+  /** awaiting_user'daki koşuya sonraki kullanıcı turunu gönderir (agent.say, aynı runId). */
+  const submitSay = (value: string): void => {
+    const trimmed = value.trim();
+    if (trimmed.length === 0 || runId === null) return;
+    setSayDraft("");
+    // Biten turu döküme taşı; yeni turun delta'ları temiz akar.
+    setExchange((e) => [...e, ...(streaming.length > 0 ? [`🤖 ${streaming}`] : []), `> ${trimmed}`]);
+    setStreaming("");
+    setAwaiting(false);
+    void props.client.request("agent.say", { runId, text: trimmed }).catch((error: unknown) => {
+      setStartError(error instanceof Error ? error.message : String(error));
+    });
   };
 
   useInput((input, key) => {
@@ -218,6 +245,11 @@ export function AgentRun(props: {
         {runId !== null ? ` · koşu ${runId.slice(0, 8)}` : ""} — Esc: iptal
       </Text>
       {startError !== null && <Text color="red">⚠ {startError}</Text>}
+      {exchange.map((line, i) => (
+        <Text key={`x${i}`} dimColor={line.startsWith(">")} color={line.startsWith(">") ? "cyan" : undefined}>
+          {line}
+        </Text>
+      ))}
       {log.map((entry, i) => (
         <Text key={i} color={entry.kind === "completed" ? (entry.ok === true ? "green" : "red") : "cyan"}>
           {entry.kind === "started" ? "▶ " : entry.ok === true ? "✔ " : "✘ "}
@@ -229,6 +261,15 @@ export function AgentRun(props: {
         <Text dimColor>· düşünüyor…</Text>
       )}
       {pending !== null && <PermissionBox permission={pending} />}
+      {awaiting && pending === null && outcome === null && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text dimColor>↵ devam yaz (aynı koşu sürer) · Esc: koşuyu bitir</Text>
+          <Box>
+            <Text color="cyan">{"> "}</Text>
+            <TextInput value={sayDraft} onChange={setSayDraft} onSubmit={submitSay} />
+          </Box>
+        </Box>
+      )}
       {outcome !== null && (
         <>
           <Outcome outcome={outcome} />

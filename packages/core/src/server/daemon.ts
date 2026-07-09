@@ -497,6 +497,17 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             }
             return;
           }
+          case "agent.say": {
+            // Konuşmalı koşunun sonraki turu (ADR-012) — motor awaiting_user dışında reddeder.
+            const payload = message.payload as RequestPayload<"agent.say">;
+            try {
+              engine.say(payload);
+              bus.sendTo(ws, "agent.say.ok", {}, message.id);
+            } catch (error) {
+              sendError(toErrorPayload(error), message.id);
+            }
+            return;
+          }
           case "permission.respond": {
             const payload = message.payload as RequestPayload<"permission.respond">;
             try {

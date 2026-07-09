@@ -80,6 +80,10 @@ interface ActiveRunRecord {
   startedAt: number;
   /** `allow_for_run` ile onaylanan araç adları — yalnız bu koşu için, diske YAZILMAZ (SPEC §5). */
   trustedForRun: Set<string>;
+  /** ADR-012: true → tur araçsız bitince completed yerine awaiting_user'a park eder. */
+  conversational: boolean;
+  /** awaiting_user park kapısı: agent.say gelince sonraki kullanıcı metniyle çözülür. */
+  nextUser: ((text: string) => void) | null;
 }
 
 /** AI SDK v7 araç çağrısının motorun kullandığı kesiti (invalid = şemadan geçmedi). */
@@ -182,6 +186,8 @@ export class AgentEngine {
       pending: null,
       startedAt: Date.now(),
       trustedForRun: new Set(),
+      conversational: payload.conversational ?? false,
+      nextUser: null,
     };
     this.runs.set(run.runId, run);
     this.deps.store.createAgentRun({
@@ -223,6 +229,26 @@ export class AgentEngine {
   /** Daemon kapanışı: koşan her şey iptal edilir (araç süreçleri cancelSignal ile ölür). */
   cancelAll(): void {
     for (const run of this.runs.values()) run.abort.abort();
+  }
+
+  /**
+   * Konuşmalı koşuya sonraki kullanıcı turu (ADR-012): yalnız awaiting_user'da park etmiş
+   * koşu kabul eder. Metin runLoop'un bekleyen kapısına teslim edilir → thinking'e döner.
+   */
+  say(payload: RequestPayload<"agent.say">): void {
+    const run = this.runs.get(payload.runId);
+    if (run === undefined) {
+      throw new AgentError("AGENT_UNKNOWN_RUN", `Aktif koşu bulunamadı: ${payload.runId}`);
+    }
+    if (run.state !== "awaiting_user" || run.nextUser === null) {
+      throw new AgentError(
+        "AGENT_NOT_AWAITING_USER",
+        `Koşu kullanıcı turu beklemiyor (durum: ${run.state})`,
+      );
+    }
+    const deliver = run.nextUser;
+    run.nextUser = null;
+    deliver(payload.text);
   }
 
   /** İlk cevap kazanır; karar tüm istemcilere permission.resolved ile duyurulur (SPEC §5). */
@@ -320,8 +346,17 @@ export class AgentEngine {
 
         const calls = (await result.toolCalls) as unknown as RawToolCall[];
         if (calls.length === 0) {
-          this.finish(run, "completed", { result: await result.text });
-          return;
+          if (!run.conversational) {
+            this.finish(run, "completed", { result: await result.text });
+            return;
+          }
+          // Konuşmalı koşu (ADR-012): finish YERİNE kullanıcıya park. Döngüden ÇIKILMAZ →
+          // messages ve MCP bağlantıları canlı kalır (finally'ye inilmez; rapor §4.2 kararı:
+          // v1'de turlar arasında açık tut, agent.cancel/daemon kapanışı kapatır).
+          this.transition(run, "awaiting_user");
+          const nextText = await this.waitForUser(run);
+          messages.push({ role: "user", content: nextText });
+          continue;
         }
         run.steps += 1;
         if (run.steps > definition.maxSteps) {
@@ -547,6 +582,21 @@ export class AgentEngine {
     }
   }
 
+  /** awaiting_user kapısı: agent.say çözer, iptal reddeder (insan turu zaman aşımına uğramaz). */
+  private waitForUser(run: ActiveRunRecord): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const onAbort = (): void => {
+        run.nextUser = null;
+        reject(new AgentError("AGENT_CANCELLED", "Kullanıcı turu beklenirken koşu iptal edildi"));
+      };
+      run.abort.signal.addEventListener("abort", onAbort, { once: true });
+      run.nextUser = (text) => {
+        run.abort.signal.removeEventListener("abort", onAbort);
+        resolve(text);
+      };
+    });
+  }
+
   private requestPermission(
     run: ActiveRunRecord,
     spec: AgentToolSpec,
@@ -645,6 +695,7 @@ export class AgentEngine {
   ): void {
     if (!this.runs.has(run.runId)) return; // çifte kapanış koruması
     run.pending = null;
+    run.nextUser = null;
     this.transition(run, state);
     this.runs.delete(run.runId);
     this.deps.store.finishAgentRun(run.runId, {

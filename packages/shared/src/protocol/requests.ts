@@ -44,10 +44,17 @@ export const AgentStartPayloadSchema = z
     provider: z.string().min(1).optional(),
     // Workspace hapsine ek dizinler — her biri açık onay ister (SPEC-AGENT.md §3).
     extraDirs: z.array(z.string().min(1)).optional(),
+    // ADR-012: true → tur araçsız bitince completed yerine awaiting_user'a park, agent.say ile sürer.
+    conversational: z.boolean().optional(),
   })
   .strip();
 
 export const AgentCancelPayloadSchema = z.object({ runId: z.string().uuid() }).strip();
+
+/** Konuşmalı koşuya sonraki kullanıcı turu (ADR-012) — yalnız awaiting_user'dayken geçerli. */
+export const AgentSayPayloadSchema = z
+  .object({ runId: z.string().uuid(), text: z.string().min(1) })
+  .strip();
 
 export const PermissionRespondPayloadSchema = z
   .object({
@@ -99,6 +106,7 @@ export const REQUEST_PAYLOAD_SCHEMAS = {
   "chat.cancel": ChatCancelPayloadSchema,
   "agent.start": AgentStartPayloadSchema,
   "agent.cancel": AgentCancelPayloadSchema,
+  "agent.say": AgentSayPayloadSchema,
   "permission.respond": PermissionRespondPayloadSchema,
   "models.list": ModelsListPayloadSchema,
   "agents.list": AgentsListPayloadSchema,

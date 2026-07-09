@@ -107,6 +107,35 @@ const MIGRATIONS: readonly string[] = [
   );
   CREATE INDEX idx_agent_steps_run_id ON agent_steps (run_id);
   `,
+  // v4 — konuşmalı koşu (ADR-012, dilim 2.2): agent_runs.state CHECK'ine 'awaiting_user'
+  // eklendi. SQLite CHECK'i değiştiremez → tablo yeniden kurulur (kopyala-taşı; agent_steps'in
+  // FK'sı tablo ADI üzerinden çalıştığı için rename sonrası aynen geçerli kalır).
+  `
+  CREATE TABLE agent_runs_v4 (
+    id            TEXT PRIMARY KEY,
+    agent_id      TEXT NOT NULL,
+    task          TEXT NOT NULL,
+    provider      TEXT NOT NULL,
+    model         TEXT NOT NULL,
+    cwd           TEXT NOT NULL,
+    state         TEXT NOT NULL CHECK (state IN
+      ('queued','thinking','awaiting_permission','awaiting_user','executing_tool',
+       'completed','failed','cancelled')),
+    result        TEXT,
+    error_code    TEXT,
+    steps         INTEGER NOT NULL DEFAULT 0,
+    input_tokens  INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd      REAL NOT NULL DEFAULT 0,
+    started_at    INTEGER NOT NULL,
+    finished_at   INTEGER
+  );
+  INSERT INTO agent_runs_v4 SELECT * FROM agent_runs;
+  DROP INDEX idx_agent_runs_started_at;
+  DROP TABLE agent_runs;
+  ALTER TABLE agent_runs_v4 RENAME TO agent_runs;
+  CREATE INDEX idx_agent_runs_started_at ON agent_runs (started_at);
+  `,
 ];
 
 export type RequestStatus = "ok" | "error" | "cancelled";
@@ -250,13 +279,27 @@ export class DataStore {
 
   private migrate(): void {
     const version = this.db.pragma("user_version", { simple: true }) as number;
-    for (let next = version; next < MIGRATIONS.length; next++) {
-      const sql = MIGRATIONS[next];
-      if (sql === undefined) continue;
-      this.db.transaction(() => {
-        this.db.exec(sql);
-        this.db.pragma(`user_version = ${next + 1}`);
-      })();
+    if (version >= MIGRATIONS.length) return;
+    // Tablo-yeniden-kurma göçleri (ör. v4) FK zorlaması AÇIKKEN parent DROP'unda ON DELETE
+    // CASCADE ile çocuk satırları da silerdi — standart SQLite reçetesi: göç boyunca FK'yı
+    // kapat, bitince foreign_key_check ile doğrula, sonra yeniden aç (pragma transaction
+    // içinde no-op olduğundan burada, dışarıda yapılır).
+    this.db.pragma("foreign_keys = OFF");
+    try {
+      for (let next = version; next < MIGRATIONS.length; next++) {
+        const sql = MIGRATIONS[next];
+        if (sql === undefined) continue;
+        this.db.transaction(() => {
+          this.db.exec(sql);
+          this.db.pragma(`user_version = ${next + 1}`);
+        })();
+      }
+      const violations = this.db.pragma("foreign_key_check") as unknown[];
+      if (violations.length > 0) {
+        throw new Error(`Göç sonrası FK ihlali: ${JSON.stringify(violations.slice(0, 3))}`);
+      }
+    } finally {
+      this.db.pragma("foreign_keys = ON");
     }
   }
 

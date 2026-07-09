@@ -57,7 +57,8 @@ protokol WS/REST üzerinden konuşulur.
   testli) → GPU vitalleri (util/VRAM/ısı). Daemon 2sn poll → `hardware.updated` yayını
   (`DaemonOptions.sampleHardware`, testte kapalı)
 - `db/store.ts` — SQLite (better-sqlite3, WAL); göçler `MIGRATIONS` dizisinde
-  (v1 requests+telemetry, v2 sessions+messages, v3 agent_runs+agent_steps)
+  (v1 requests+telemetry, v2 sessions+messages, v3 agent_runs+agent_steps, v4 agent_runs
+  CHECK'ine awaiting_user — tablo yeniden kurma; migrate() göç sırasında FK'yı kapatır)
 - `secrets/secret-store.ts` — OS keychain + env yedek; anahtar DİSKE YAZILMAZ
 - `config/paths.ts` — `~/.symphony` yol haritası (SYMPHONY_HOME ile taşınır)
 - `config/config.ts` — config.json yükleme
@@ -69,8 +70,10 @@ protokol WS/REST üzerinden konuşulur.
   - `tools.ts` — 6 araç (read_file/write_file/edit/glob/grep/run_command) + diff/hash + maskeleme
   - `mcp.ts` — MCP istemcisi (ADR-007): `~/.symphony/mcp-servers.json` kayıt defteri
     (stdio), sunucu araçlarını `AgentToolSpec`'e sarar (`mcp__<sunucu>__<araç>`, hep `mutating`)
-  - `engine.ts` — koşu döngüsü (AI SDK tool-calling), izin kapısı, durum makinesi, iptal,
-    MCP bağlan/kapat (koşu ömrüyle eşleşir). **Akışlı** (`streamText`, ADR-012): asistan metni
+  - `engine.ts` — koşu döngüsü (AI SDK tool-calling, streamText+agent.delta), izin kapısı,
+    durum makinesi, iptal, MCP bağlan/kapat (koşu ömrüyle eşleşir). Dilim 2.2: konuşmalı koşu —
+    araçsız tur bitince `awaiting_user`'a runLoop İÇİNDE park (`waitForUser` promise-gate;
+    MCP/bağlam canlı kalır), `say()` sonraki kullanıcı turunu teslim eder. **Akışlı** (`streamText`, ADR-012): asistan metni
     `agent.delta {runId,text}` ile token-token yayılır. Test mock'ları `doStream` kullanır
     (`scriptToStream`; AI SDK v3 stream part'ları). Birleşik sohbet-agent modu buradan büyüyecek
     (2.2 awaiting_user+agent.say çok-tur, 2.3 birleşik TUI — bkz. ADR-012 + DURUM Dilim 2)
@@ -90,7 +93,9 @@ protokol WS/REST üzerinden konuşulur.
   - `mode-picker.tsx` — Sohbet/Agent seçici (↑/↓+Enter)
   - `agent-picker.tsx` — kayıtlı agent listesinden seçim
   - `agent-run.tsx` — görev girişi + canlı koşu (izin kutusu tek tuş e/d/h, renkli diff,
-    araç günlüğü, Esc iptal) — `cli/commands/agent.ts` ile aynı olaylara abone, Ink sunumu
+    araç günlüğü, Esc iptal) — `cli/commands/agent.ts` ile aynı olaylara abone, Ink sunumu.
+    Dilim 2.2: koşular `conversational: true` başlar; awaiting_user'da "devam yaz" girişi
+    (`agent.say`, aynı runId), biten turlar `exchange` dökümünde kalır
 
 ### packages/ui/src — masaüstü dashboard (React+Vite, Faz 4) — hem tarayıcı hem Tauri
 - `config.ts` — `getBootstrap()`: token+port'u `window.__SYMPHONY__` (Tauri enjekte eder) ya

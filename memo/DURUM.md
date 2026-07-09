@@ -3,7 +3,35 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-09 (Oturum 15, Fable — inceleme raporu İCRA edildi: worktree main'e MERGE, tek gerçeklik)
+**Son güncelleme:** 2026-07-09 (Oturum 15, Fable — merge SONRASI Dilim 2.2 de BİTTİ: çok-tur konuşmalı koşu)
+
+## Dilim 2.2 (2026-07-09): Çok-tur konuşmalı koşu — BİTTİ ve testli (224 test)
+
+ADR-012'nin kalbi: `awaiting_user` + `agent.say` + `conversational` artık UYGULANDI (PROTOKOL'deki
+⏳ işaretleri kaldırıldı). Kural 1 sırası izlendi: shared → core → daemon → TUI.
+- **shared:** `agent-state.ts` enum + geçişler (thinking→awaiting_user→thinking/cancelled);
+  `requests.ts` `AgentSayPayloadSchema` + `agent.start.conversational?`; `events.ts` `agent.say.ok`.
+- **engine.ts:** park runLoop'un İÇİNDE (promise-gate `waitForUser`) → messages VE MCP bağlantıları
+  turlar arasında CANLI kalır (raporun §4.2 en-kritik uyarısı yapısal olarak çözüldü; `finally`
+  yalnız koşu sonlanınca çalışır). `say()` yalnız awaiting_user'da kabul eder
+  (`AGENT_NOT_AWAITING_USER` / `AGENT_UNKNOWN_RUN`). İptal parkta da çalışır (abort → cancelled).
+- **db/store.ts v4 GÖÇÜ:** `agent_runs.state` CHECK'i `awaiting_user` içermiyordu (ilk test
+  koşusunda yakalandı — update fırlatıp koşuyu failed'a düşürüyordu). SQLite CHECK değişmez →
+  tablo yeniden kuruldu. **Kritik ayrıntı:** göç sırasında `foreign_keys = OFF` (migrate()
+  artık göç bloğunu FK-kapalı çalıştırıp `foreign_key_check` ile doğrular) — yoksa DROP TABLE,
+  agent_steps'i CASCADE ile SİLERDİ.
+- **daemon.ts:** `agent.say` handler'ı (switch'e 1 case; motor reddi error olarak döner).
+- **TUI agent-run.tsx:** koşular artık `conversational: true` başlar — görev bitince kapanmak
+  yerine "devam yaz" girişi (aynı runId/bağlam/MCP; biten turlar `exchange` dökümünde ekranda
+  kalır); Esc koşuyu bitirir (cancel). Tek-seferlik davranış API/`symphony agent` komutunda sürer.
+- **Test +5 (219→224):** motor: 2-tur aynı-runId (ikinci turun prompt'unda kullanıcı mesajı
+  DOĞRULANIR) · cancelAll park etmiş koşuyu kapatır (rapor §4.2.2) · say korumaları ·
+  conversational'sız eski davranış değişmedi · TUI: awaiting_user→devam girişi→agent.say.
+  Test tuzağı notu: dış olayla mount edilen ink TextInput'un input aboneliği 1 tick'te oturmuyor
+  (test 3 tick bekler).
+- **Canlı doğrulama KULLANICIYA:** `symphony` → Agent → görev ver → cevap sonrası "devam yaz"
+  ile ikinci tur (bağlamı hatırlamalı). **Daemon RESTART GEREKİR** (core değişti; kalıcı not
+  bölümündeki talimat). Masaüstünde koşu satırı awaiting_user'da bekler.
 
 ## Oturum 15 (2026-07-09): Rapor icrası — `worktree-oturum-surekliligi` → main MERGE — BİTTİ
 
@@ -20,9 +48,9 @@
   "planlandı — Dilim 2.2, henüz uygulanmadı" işaretleri kondu (belge artık uygulama durumunu söylüyor).
 - **Birleşik doğrulama:** build ✓ · test **37 dosya / 219 test, tümü geçti** (raporun ~219 tahmini
   birebir tuttu; welcome.test dahil) ✓ · lint ✓.
-- **Sıradaki:** kullanıcı görsel onayları (tesseract 8b · TUI "devam et" · masaüstü agent akışı) →
-  **Dilim 2.2** (rapor §4.2'nin İKİ ek dikkatiyle: `awaiting_user`'da MCP bağlantı yaşam döngüsü
-  kararı + `cancelAll`'un park etmiş koşuları kapsadığının testi).
+- **Sıradaki:** ✅ Dilim 2.2 aynı oturumda bitti (üstteki bölüm). Kalan: kullanıcı görsel onayları
+  (tesseract 8b · TUI "devam et" · masaüstü agent akışı · YENİ: TUI konuşmalı agent) →
+  **Dilim 2.3 (birleşik TUI)** → küçük iyileştirme paketi (rapor §5).
 
 > Aşağıdaki Dilim 8b / 8 bölümleri Fable'ın Oturum 14 anlatısıdır (main, 2026-07-08 akşam).
 

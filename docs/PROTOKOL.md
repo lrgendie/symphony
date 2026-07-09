@@ -55,8 +55,8 @@ Tüm WS mesajları tek zarf tipindedir:
 | `state.sync` | `{}` | Tam durum anlık görüntüsü iste (yeniden bağlanmada) |
 | `chat.start` | `{ sessionId?, provider, model, messages[], options? }` | Sohbet başlat. `options: { temperature? (vars. 0), maxTokens? }` |
 | `chat.cancel` | `{ sessionId }` | Akışı durdur |
-| `agent.start` | `{ agentId, task, cwd, model?, provider?, conversational? }` | Agent görevi başlat (agentId = `~/.symphony/agents/` tanımı). `conversational: true` (ADR-012) → koşu tur bitince `completed` yerine `awaiting_user`'a park olur, `agent.say` ile sürer. ⏳ **`conversational` alanı PLANLANDI (Dilim 2.2'de gelecek) — henüz uygulanmadı, shared şemasında yok** |
-| `agent.say` | `{ runId, text }` | Konuşmalı koşuya (ADR-012) sonraki kullanıcı turunu ekle — koşu `awaiting_user`'dayken; `thinking`'e geçip devam eder. ⏳ **PLANLANDI (Dilim 2.2'de gelecek) — henüz uygulanmadı; bugün gönderilirse daemon `UNKNOWN_TYPE` döner** |
+| `agent.start` | `{ agentId, task, cwd, model?, provider?, conversational? }` | Agent görevi başlat (agentId = `~/.symphony/agents/` tanımı). `conversational: true` (ADR-012) → koşu tur bitince `completed` yerine `awaiting_user`'a park olur, `agent.say` ile sürer |
+| `agent.say` | `{ runId, text }` | Konuşmalı koşuya (ADR-012) sonraki kullanıcı turunu ekle — koşu `awaiting_user`'dayken; `thinking`'e geçip devam eder. Koşu `awaiting_user` değilse `AGENT_NOT_AWAITING_USER`, tanınmıyorsa `AGENT_UNKNOWN_RUN` hatası döner |
 | `agent.cancel` | `{ runId }` | Koşan agent'ı iptal et (konuşmalı koşuyu da kapatır) |
 | `permission.respond` | `{ requestId, decision: "allow"\|"deny"\|"always_allow"\|"allow_for_run" }` | Bekleyen izin isteğine cevap — `allow_for_run`: bu koşu boyunca aynı araç için tekrar sormaz, diske YAZILMAZ (SPEC-AGENT §5) |
 | `models.list` | `{}` | Tüm sağlayıcıların kullanılabilir modelleri |
@@ -110,9 +110,9 @@ Geçerli geçişler yalnız bunlardır; `agent.run.state` başka değer taşıya
 bitince `completed` yerine `awaiting_user`'a geçer ve sonraki `agent.say`'i bekler (thinking'e döner).
 Koşu yalnız `agent.cancel` (ya da daemon kapanışı) ile sonlanır. Tek-seferlik koşularda davranış
 değişmez (`thinking → completed`).
-⏳ **`awaiting_user` durumu PLANLANDI (Dilim 2.2'de gelecek) — henüz uygulanmadı:**
-`shared/agent-state.ts` enum'unda yok, daemon bu durumu YAYAMAZ; bekleyen istemci bugün asla göremez.
-2.2 bitince bu işaret (ve yukarıdaki iki ⏳ işareti) kaldırılır.
+**MCP yaşam döngüsü (Dilim 2.2 kararı):** konuşmalı koşunun MCP bağlantıları `awaiting_user`
+turları ARASINDA açık kalır (koşu runLoop içinde park eder, kaynaklar canlı); bağlantılar yalnız
+koşu sonlanınca (cancel/hata/daemon kapanışı) kapatılır.
 
 ## 6. Yeniden bağlanma
 

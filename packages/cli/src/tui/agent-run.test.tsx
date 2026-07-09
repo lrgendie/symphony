@@ -124,8 +124,44 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
     expect(fake.requests).toHaveLength(1);
     expect(fake.requests[0]).toEqual({
       type: "agent.start",
-      payload: { agentId: "coder", task: "bug'ı düzelt", cwd: "/ws" },
+      // conversational (ADR-012, dilim 2.2): TUI koşuları konuşmalı başlar.
+      payload: { agentId: "coder", task: "bug'ı düzelt", cwd: "/ws", conversational: true },
     });
+  });
+
+  it("awaiting_user'da devam girişi gösterir; gönderim agent.say'i AYNI runId ile atar", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
+    );
+    await skipCwdAndModel(stdin);
+    stdin.write("dosyaları listele");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    // İlk tur: akış metni gelir, sonra koşu kullanıcıya park eder.
+    fake.emit("agent.delta", { runId: RUN_ID, text: "5 dosya buldum" });
+    fake.emit("agent.run.state", { runId: RUN_ID, state: "awaiting_user" });
+    // Dış olayla (stdin dışı) tetiklenen render'da yeni TextInput'un input aboneliği
+    // tek tick'te oturmuyor — ek tick'ler effect'lerin bağlanmasını garantiler.
+    await tick();
+    await tick();
+    await tick();
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("5 dosya buldum"); // agent cevabı ekranda kalır
+    expect(frame).toContain("devam yaz"); // devam girişi açık
+
+    stdin.write("ilkini oku");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    const say = fake.requests.find((r) => r.type === "agent.say");
+    expect(say?.payload).toEqual({ runId: RUN_ID, text: "ilkini oku" });
+    // Biten tur dökümde kalır; koşu bitmediği için outcome yok.
+    expect(lastFrame()).toContain("🤖 5 dosya buldum");
+    expect(lastFrame()).not.toContain("koşu tamamlandı");
   });
 
   it("agent.tool.requested → izin kutusu render eder (risk sınıfı + diff renkli)", async () => {

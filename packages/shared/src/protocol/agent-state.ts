@@ -5,12 +5,14 @@ import { z } from "zod";
  *
  *   queued → thinking → executing_tool → thinking → ... → completed
  *                 ↘ awaiting_permission ↗                ↘ failed
+ *                 ↘ awaiting_user ↗ (konuşmalı koşu, ADR-012)
  *      (her durumdan) → cancelled
  */
 export const AGENT_RUN_STATES = [
   "queued",
   "thinking",
   "awaiting_permission",
+  "awaiting_user",
   "executing_tool",
   "completed",
   "failed",
@@ -23,8 +25,17 @@ export type AgentRunState = z.infer<typeof AgentRunStateSchema>;
 /** Geçerli geçişler — bunların dışındaki her geçiş protokol ihlalidir. */
 export const VALID_TRANSITIONS: Readonly<Record<AgentRunState, readonly AgentRunState[]>> = {
   queued: ["thinking", "cancelled"],
-  thinking: ["executing_tool", "awaiting_permission", "completed", "failed", "cancelled"],
+  thinking: [
+    "executing_tool",
+    "awaiting_permission",
+    "awaiting_user",
+    "completed",
+    "failed",
+    "cancelled",
+  ],
   awaiting_permission: ["executing_tool", "thinking", "cancelled"],
+  // Konuşmalı koşu (ADR-012): tur araçsız bitince park; agent.say → thinking, iptal → cancelled.
+  awaiting_user: ["thinking", "cancelled"],
   executing_tool: ["thinking", "failed", "cancelled"],
   completed: [],
   failed: [],

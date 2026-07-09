@@ -226,6 +226,7 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   "chat.cancel.ok": AckPayloadSchema,
   "agent.start.ok": AgentStartOkPayloadSchema,
   "agent.cancel.ok": AckPayloadSchema,
+  "agent.say.ok": AckPayloadSchema,
   "permission.respond.ok": AckPayloadSchema,
   "models.list.ok": ModelsListOkPayloadSchema,
   "agents.list.ok": AgentsListOkPayloadSchema,
