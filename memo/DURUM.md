@@ -513,18 +513,25 @@ daemon çalışıyor olmalı** (token dosyası ancak daemon dinlerken yazılır)
 ## ⭐ SIRADAKİ İŞ — kullanıcıyla anlaşılan öncelik sırası (2026-07-07, Oturum 13 sonu)
 
 Kullanıcı onayladı, SIRAYLA yapılacak (ayrıntı: `ROADMAP.md` → "Sıradaki dilimler — kullanıcı önceliği"):
-1. ✅ **Oturum sürekliliği BİTTİ** (Oturum 14, 2026-07-08) — ayrıntı yukarıda "Dilim 1" bölümünde.
-   TUI'de "önceki sohbete devam et" çalışıyor (kod+test); kullanıcının canlı TTY doğrulaması bekleniyor.
-2. **Birleşik sohbet-agent modu** ← SIRADAKİ. (ADR gerektirir — chat↔agent köprüsü + izin kapısı sohbete de).
-3. **Uzun-dönem hafıza** (Faz 6) + **konuşma arşivinden kişiselleşme** (kullanıcı tüm Claude sohbetlerini
-   arşivledi; yerel LLM tarzını benimsesin → önce stil profili, sonra RAG, gerekirse LoRA ince-ayar).
+1. ✅ **Oturum sürekliliği BİTTİ** (Oturum 14-15) — TUI "önceki sohbete devam et" (canlı doğrulandı 07-09).
+2. ✅ **Birleşik sohbet-agent modu BİTTİ** (Oturum 15, 2026-07-09) — ADR-012: 2.1 akış · 2.1b masaüstü ·
+   2.2 çok-tur (awaiting_user+agent.say) · 2.3a birleşik giriş (PersonaPicker + salt-okur asistan) ·
+   2.3b konuşma kalıcılığı · 2.3c agent-resume. Canlı doğrulandı (asistan dosya okudu, awaiting_user).
+   Kalan opsiyonel kırıntı: "Sohbet personasını da agent'a taşıyıp chat.start'ı curl-ucuna indir".
+3. **Uzun-dönem hafıza** (Faz 6) + **konuşma arşivinden kişiselleşme** ← **SIRADAKİ (Fable ile).**
+   Kullanıcı tüm Claude sohbetlerini arşivledi; yerel LLM tarzını benimsesin. FİZİBIL, 3 katman
+   (ROADMAP §"Sıradaki dilimler" #3): (a) stil/tercih profili → system prompt (en ucuz, ilk hamle);
+   (b) RAG (arşiv embedding, ilgili geçmişi bağlama çek); (c) LoRA ince-ayar (en güçlü, en ağır).
+   **Tasarım-ağır → Fable saati.** İlk adım: ADR (memory formatı + profil boru hattı) + `~/.symphony/
+   memory/` kapsam kararı (Faz 6 notu: agent'lar kendi yazamaz, yalnız okur). Veri çoğu MEVCUT
+   (sessions/messages/agent_runs SQLite'ta + kullanıcının Claude arşivi).
 4. ✅ **Token güvenilirlik hatası BİTTİ** (Oturum 13, 2026-07-07): `token.ts` `loadExistingToken`
    (diskteki 64-hex token'ı doğrulayıp yeniden kullanır) + `daemon.ts` satır 80 `loadExistingToken ??
    generateDaemonToken`. Artık daemon restart'ında token korunur → masaüstü/CLI kopmaz. +5 test
    (`token.test.ts`, 198→203). "Dinleme sonrası yaz" değişmezi korundu. **Not:** hâlihazırda ÇALIŞAN
    daemon eski kodda; etki bir sonraki daemon başlatmasında geçerli (restart'ta token 2decedef… korunur).
 
-Kalan sıra: ~~1 (oturum sürekliliği ✅)~~ → **2 (birleşik sohbet-agent) ← SIRADAKİ** → 3 (hafıza/arşiv).
+Kalan sıra: ~~1 (oturum sürekliliği ✅)~~ → ~~2 (birleşik sohbet-agent ✅)~~ → **3 (hafıza/arşiv) ← SIRADAKİ, Fable ile.**
 
 ### 📋 Dilim 1 — Oturum sürekliliği: ✅ UYGULANDI (Oturum 14) — plan arşivi
 

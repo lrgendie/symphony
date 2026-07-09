@@ -180,11 +180,11 @@ symphony/
    devam et": `DaemonClient.listSessions/sessionDetail` (REST) + `ChatFlow` + `resume-picker.tsx` +
    `chat.tsx` prop tohumu. Sıfır protokol/daemon değişikliği (REPLACE semantiği yetti). v2 adayları
    DURUM.md'de (tam oturum tarayıcısı, model-değişince-devam).
-2. **Birleşik sohbet-agent modu** — BÜYÜK KISMI BİTTİ: ADR-012 (konuşmalı motor) ✅ · Dilim 2.1
-   akış (streamText + `agent.delta`) ✅ · 2.1b masaüstü akış paritesi ✅ (2026-07-08, worktree) ·
-   **2.2 çok-tur (`awaiting_user` + `agent.say` + `conversational`; TUI agent modu konuşmalı) ✅
-   2026-07-09.** KALAN: **Dilim 2.3 birleşik TUI** — varsayılan araçsız "asistan" agent'ı +
-   Sohbet/Agent'ın tek konuşma yüzeyinde birleşmesi + ChatFlow harmanı.
+2. ✅ **Birleşik sohbet-agent modu BİTTİ** (2026-07-09) — ADR-012: 2.1 akış (streamText+`agent.delta`) ·
+   2.1b masaüstü paritesi · 2.2 çok-tur (`awaiting_user`+`agent.say`+`conversational`) · 2.3a birleşik
+   giriş (`PersonaPicker` + salt-okur asistan agent'ı; ModePicker/AgentPicker silindi) · 2.3b konuşma
+   kalıcılığı (konuşmalı agent koşuları sessions/messages'a yazar, `agent.start.sessionId` resume) ·
+   2.3c TUI agent-resume (`AgentFlow`). Canlı doğrulandı. Opsiyonel kırıntı: "Sohbet"i de agent'a taşı.
 3. **Uzun-dönem hafıza (= aşağıdaki Faz 6 "Kullanıcı hafızası")** — `~/.symphony/memory/` kalıcı
    profil, her oturumda bağlama enjekte. Kapsam kararı Faz 6'da (agent kendi yazamaz).
    **+ Konuşma arşivinden kişiselleşme (kullanıcı isteği 2026-07-07):** kullanıcı tüm geçmiş Claude
