@@ -3,51 +3,37 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-09 gece (Fable — öncelik #3 hafıza TASARIMI tamam: ADR-013 + M1/M2/M3 dilim planı)
+**Son güncelleme:** 2026-07-09 gece (Sonnet — Dilim M1 BİTTİ ve testli, 255 test)
 
-## Öncelik #3 — Uzun-dönem hafıza: TASARIM BİTTİ (2026-07-09, Fable); uygulama Sonnet'e
+## Öncelik #3 — Uzun-dönem hafıza: Dilim M1 (çekirdek enjeksiyon) BİTTİ (2026-07-09, Sonnet)
 
-**Kararlar `docs/kararlar/KARARLAR.md` ADR-013'te** (oku!): (a) stil/tercih profili ile
-başlanıyor; RAG (b) Bağlam Haritası'na, LoRA (c) süresiz ertelendi. Yazma kısıtı KORUNDU:
-canlı `~/.symphony/memory/profil.md`'yi yalnız İNSAN yazar; damıtma yalnız TASLAK üretir.
-Dosya-tabanlı (DB değil); enjeksiyon sunucu tarafında tek boru; `memory.enabled` anahtarı.
-PROTOKOL.md §1.1'e M2 REST uçları "planlandı" işaretiyle kondu. Kod YAZILMADI — dilimler:
+Tasarım ADR-013'te (`docs/kararlar/KARARLAR.md`, Fable). M1 uygulandı:
+- `paths.ts`: `profileFile` (`~/.symphony/memory/profil.md`) eklendi (`memoryDir` zaten Faz
+  3'ten beri vardı, kullanılmıyordu).
+- YENİ `core/src/memory/profile.ts` (SAF, 8 test): `loadProfile` (yok/boş/yalnız-iskelet→null;
+  `MAX_PROFILE_CHARS=8000` aşımında `truncated:true`), `ensureProfileScaffold` (dosya YOKSA
+  yalnız başlıklardan iskelet yazar, VARSA dokunmaz).
+- `config.ts`: `memory.enabled` (vars. true) — acil kapatma anahtarı.
+- `engine.ts`: `AgentEngineDeps.loadMemoryProfile`; `buildSystemPrompt` üçüncü parametre alır.
+- `daemon.ts`: açılışta `ensureProfileScaffold`; gerçek loader (`enabled=false`→null,
+  `truncated`→pino warn); engine'e geçirilir.
+- **Chat yolu — ADR-013'ten SAPMA (uygulama sırasında düzeltildi, ADR'ye işlendi):** ilk tasarım
+  "provider mesaj kopyasına system-önek ekle" idi; canlı testte AI SDK v7'nin `messages`/`prompt`
+  içinde `system` rolünü REDDETTİĞİ ortaya çıktı (`InvalidPromptError` — engine.ts'in zaten
+  bildiği kısıt, chat yoluna UYGULANMAMIŞTI). Doğru çözüm: `ChatStreamRequest.instructions?`
+  eklendi, 4 adapter da (`anthropic`/`openai`/`google`/`ollama`) `streamText`e `instructions`
+  iletir — agent yoluyla AYNI desen. `payload.messages`/`saveChatTurn` HİÇ DOKUNULMADI.
+- **Test:** 244→**255** (profile 8, engine +2, daemon +1 — daemon testi GERÇEK daemon +
+  fake-Ollama HTTP gövdesini denetler: profil sağlayıcıya giden istekte VAR, `sessionDetail`
+  dökümünde YOK). `pnpm build && pnpm test && pnpm lint` temiz (39 dosya/255 test).
+- **Canlı doğrulama (kabul testi):** ADR-013 daemon.test.ts senaryosu GERÇEK bir daemon
+  başlatıp WS üzerinden chat.start yapıyor ve fake-Ollama'nın aldığı HTTP gövdesini
+  doğruluyor — ROADMAP Faz 6 kabul testinin (profil bağlamda görünüyor) otomatik karşılığı.
+  Gerçek kullanıcı ürünüyle (symphony CLI/masaüstü) elle doğrulama henüz YAPILMADI: kullanıcı
+  isterse `~/.symphony/memory/profil.md`'yi doldurup **daemon restart** sonrası `symphony`
+  ile bir sohbet/agent koşusu başlatarak deneyebilir.
 
-### 📋 Dilim M1 — çekirdek enjeksiyon (core-only, SIFIR protokol değişikliği) ← SIRADAKİ
-
-**Önce oku (yalnız bunlar):** ADR-013 · `core/src/config/paths.ts` · `core/src/config/config.ts` ·
-`core/src/agent/engine.ts` (buildSystemPrompt + AgentEngineDeps) · `core/src/server/daemon.ts`
-(runChat + engine kurulumu) · `core/src/agent/engine.test.ts` (FakeAdapter.prompts deseni).
-
-1. `paths.ts`: `memoryDir` (`~/.symphony/memory`) + `profileFile` (`.../profil.md`) ekle;
-   `ensureSymphonyHome` dizini oluştursun.
-2. YENİ `core/src/memory/profile.ts` (SAF, testli):
-   - `MAX_PROFILE_CHARS = 8000`.
-   - `loadProfile(file): { text: string; truncated: boolean } | null` — dosya yok/boş/yalnız
-     iskelet-başlıklar → null; varsa trim + cap (aşımı `truncated:true` ile bildir; loglama
-     ÇAĞIRANDA, pino warn).
-   - `ensureProfileScaffold(file): void` — dosya YOKSA yalnız başlıklardan iskelet yaz:
-     `# Kullanıcı Profili` + `## Kimlik` + `## Üslup ve dil tercihleri` + `## Teknik tercihler`
-     + `## Projeler` + `## Düzeltmeler ve öğrenimler` (+ tepeye 1 satır yorum: "Bu dosyayı sen
-     doldurursun; agent'lar yalnız OKUR — ADR-013").
-3. `config.ts`: `memory?: { enabled?: boolean }` (vars. true) config şemasına.
-4. `engine.ts`: `AgentEngineDeps`e `loadMemoryProfile: () => string | null` ekle;
-   `buildSystemPrompt`e üçüncü parametre `profile: string | null` — null değilse sona:
-   `"\n\n## Kullanıcı profili (salt-okunur bağlam)\n" + profile`. runLoop çağrısında
-   `this.deps.loadMemoryProfile()` geç.
-5. `daemon.ts`: açılışta `ensureProfileScaffold`; engine kurulumuna gerçek loader
-   (enabled=false → hep null döndüren fonksiyon; truncated'ta pino warn). `runChat`:
-   provider'a giden mesajların KOPYASINA profil system-önek olarak eklenir — ilk mesaj
-   zaten system ise İÇİNE birleştir (sonuna ekle), değilse başa `{role:"system"}` ekle.
-   ⚠️ `saveChatTurn`'a giden `payload.messages` DEĞİŞMEDEN kalmalı (kalıcılığa system girmez).
-6. **Testler (+~5):** profile.test (yok→null · cap/truncated · iskelet-yalnız→null) ·
-   engine.test: profil verildiğinde FakeAdapter.prompts[0] profil metnini İÇERİR (deps'e sahte
-   loader) ve loader null iken prompt değişmez · daemon.test: chat yolunda provider'a giden
-   mesajlarda profil VAR ama `sessionDetail` dökümünde YOK.
-7. Kabul (ROADMAP Faz 6 maddesiyle birebir): profil.md'ye bir tercih yaz → yeni agent koşusu
-   VE chat, bağlamında görüyor. **Daemon restart gerekir** (core değişti).
-
-### 📋 Dilim M2 — yüzey (REST + CLI + TUI göstergesi)
+### 📋 Dilim M2 — yüzey (REST + CLI + TUI göstergesi) ← SIRADAKİ
 
 Kural 1 sırası: ÖNCE PROTOKOL.md'deki iki `(planlandı — M2)` işaretini kaldır → `shared/rest.ts`e
 `MemoryGetResponseSchema {content, chars, truncated, updatedAt}` + `MemoryPutRequestSchema

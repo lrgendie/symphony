@@ -53,6 +53,8 @@ export class GoogleAdapter implements ProviderAdapter {
       model: await this.languageModel(request.model),
       messages: request.messages,
       temperature: request.temperature,
+      // ADR-013: profil `instructions` üzerinden — v7 `messages` içinde system KABUL ETMEZ.
+      ...(request.instructions !== undefined ? { instructions: request.instructions } : {}),
       ...(request.maxTokens !== undefined ? { maxOutputTokens: request.maxTokens } : {}),
       ...(request.abortSignal !== undefined ? { abortSignal: request.abortSignal } : {}),
     });

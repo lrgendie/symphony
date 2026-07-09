@@ -16,6 +16,8 @@ export interface SymphonyPaths {
   providersFile: string;
   agentsDir: string;
   memoryDir: string;
+  /** Kullanıcı profili (ADR-013) — yalnız insan eliyle yazılır, agent'lar salt-okur. */
+  profileFile: string;
   dataDir: string;
   databaseFile: string;
   logsDir: string;
@@ -31,6 +33,7 @@ export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPath
     providersFile: join(home, "providers.json"),
     agentsDir: join(home, "agents"),
     memoryDir: join(home, "memory"),
+    profileFile: join(home, "memory", "profil.md"),
     dataDir: join(home, "data"),
     databaseFile: join(home, "data", "symphony.db"),
     logsDir: join(home, "logs"),

@@ -30,6 +30,7 @@ import { suggestModels } from "../router/router.js";
 import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent } from "../agent/definition.js";
 import { registerMcpServer } from "../agent/mcp.js";
+import { ensureProfileScaffold, loadProfile } from "../memory/profile.js";
 import { EventBus } from "./bus.js";
 import { DeltaBatcher } from "./delta-batcher.js";
 import { generateDaemonToken, loadExistingToken, persistDaemonToken } from "./token.js";
@@ -88,6 +89,19 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const interrupted = store.markInterruptedAgentRuns();
   if (interrupted > 0) log.warn({ interrupted }, "yarım kalmış agent koşuları failed işaretlendi");
   ensureDefaultAgent(paths.agentsDir);
+  // ADR-013: dosya yoksa yalnız boş iskelet (başlıklar) yazılır — gerçek içerik hep kullanıcıdan.
+  ensureProfileScaffold(paths.profileFile);
+
+  /** Taze okur (µs-ölçek, cache gereksiz); `memory.enabled=false` acil kapatma anahtarıdır. */
+  const loadMemoryProfile = (): string | null => {
+    if (!config.memory.enabled) return null;
+    const loaded = loadProfile(paths.profileFile);
+    if (loaded === null) return null;
+    if (loaded.truncated) {
+      log.warn({ file: paths.profileFile }, "kullanıcı profili MAX_PROFILE_CHARS'ı aştı, kesildi");
+    }
+    return loaded.text;
+  };
 
   const providers = new Map<string, ProviderAdapter>();
   for (const adapter of options.testProviders ?? [
@@ -164,6 +178,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       const first = suggestions[0];
       return first === undefined ? null : { provider: first.provider, model: first.model };
     },
+    loadMemoryProfile,
   });
 
   async function buildSnapshot(): Promise<Snapshot> {
@@ -192,12 +207,19 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       if (!provider) {
         throw makeError("PROVIDER_UNKNOWN", `Bilinmeyen sağlayıcı: ${payload.provider}`);
       }
+      // ADR-013: profil `instructions` ile taşınır (AI SDK v7 `messages` içinde system KABUL
+      // ETMEZ — engine.ts'teki agent yoluyla aynı desen). `payload.messages` DEĞİŞMEZ; aşağıda
+      // `saveChatTurn`'a giden de budur (kalıcı geçmişe profil asla girmez).
+      const profile = loadMemoryProfile();
       const stream = provider.streamChat({
         model: payload.model,
         messages: payload.messages,
         temperature: payload.options.temperature,
         ...(payload.options.maxTokens !== undefined
           ? { maxTokens: payload.options.maxTokens }
+          : {}),
+        ...(profile !== null
+          ? { instructions: `## Kullanıcı profili (salt-okunur bağlam)\n${profile}` }
           : {}),
         abortSignal: abort.signal,
       });

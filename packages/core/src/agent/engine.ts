@@ -57,6 +57,8 @@ export interface AgentEngineDeps {
   mcpServersFile: string;
   /** model/provider verilmediyse router'a sorulur ("boşsa router seçer", SPEC §1). */
   pickModel(task: string): Promise<{ provider: string; model: string } | null>;
+  /** ADR-013: kullanıcı profilini taze okur (null = yok/kapalı) — agent'lar buradan YAZAMAZ. */
+  loadMemoryProfile(): string | null;
 }
 
 interface PendingPermissionInternal {
@@ -330,7 +332,7 @@ export class AgentEngine {
       );
       const languageModel = await adapter.languageModel(run.model);
       // AI SDK v7: system mesajı messages içinde YASAK — instructions seçeneğiyle verilir.
-      const instructions = buildSystemPrompt(definition, jail);
+      const instructions = buildSystemPrompt(definition, jail, this.deps.loadMemoryProfile());
       // Resume (2.3b): sessionId istekte verildiyse önceki user/assistant metinlerini bağlama
       // tohumla. Yalnız metin turları (system daemon'ın talimatıdır; araç mesajları geçmişte yok).
       const seeded: ChatMessage[] =
@@ -860,12 +862,18 @@ export class AgentEngine {
   }
 }
 
-function buildSystemPrompt(definition: AgentDefinition, jail: WorkspaceJail): string {
+function buildSystemPrompt(
+  definition: AgentDefinition,
+  jail: WorkspaceJail,
+  profile: string | null,
+): string {
   return (
     `${definition.systemPrompt}\n\n` +
     `Çalışma dizini: ${jail.cwd}\n` +
     "Yalnız bu dizin ağacında çalışabilirsin; dışına çıkma girişimleri reddedilir.\n" +
-    "Görev bittiğinde son cevabını araç çağrısı OLMADAN, kısa bir özet olarak yaz."
+    "Görev bittiğinde son cevabını araç çağrısı OLMADAN, kısa bir özet olarak yaz." +
+    // ADR-013: kullanıcı profili yalnız bağlam — agent'lar bu dosyayı asla yazamaz.
+    (profile !== null ? `\n\n## Kullanıcı profili (salt-okunur bağlam)\n${profile}` : "")
   );
 }
 

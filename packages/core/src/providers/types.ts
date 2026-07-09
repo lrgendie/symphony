@@ -13,6 +13,12 @@ export interface ChatStreamRequest {
   temperature: number;
   maxTokens?: number;
   abortSignal?: AbortSignal;
+  /**
+   * ADR-013: kullanıcı profili buradan geçer — AI SDK v7 `messages` içinde `system`
+   * rolünü KABUL ETMEZ (`streamText`'in kendi `instructions` seçeneği kullanılmalı,
+   * engine.ts'teki agent yoluyla aynı desen). `payload.messages` bu yüzden DEĞİŞMEZ.
+   */
+  instructions?: string;
 }
 
 export interface ChatUsageResult {

@@ -173,13 +173,18 @@ Boyut sınırı: MAX_PROFILE_CHARS ≈ 8000 (≈2K token); aşan kısım kesilir
 Dosya yoksa daemon açılışta BOŞ İSKELET yazar (yalnız başlıklar — ensureDefaultAgent deseni);
 içerik hep kullanıcıdan.
 
-**Karar 4 — Enjeksiyon noktası TEK ve sunucu tarafında (iki yol, tek kaynak):**
+**Karar 4 — Enjeksiyon noktası TEK ve sunucu tarafında (iki yol, tek kaynak, `instructions`):**
 - Agent yolu: `engine.ts buildSystemPrompt` sonuna "Kullanıcı profili" bölümü. Engine'e dep
   olarak `loadMemoryProfile: () => string | null` verilir (testte sahtelenir).
-- Chat yolu: `daemon.ts runChat` provider çağrısına giden mesaj KOPYASINA system-önek olarak
-  eklenir; `saveChatTurn`'a giden `payload.messages` DEĞİŞMEZ (kalıcı geçmişe system girmez —
-  mevcut temizlik korunur). İstemcinin ilk mesajı zaten system ise profil o mesajın sonuna
-  BİRLEŞTİRİLİR (iki system mesajı riski yok).
+- Chat yolu: `ChatStreamRequest`'e `instructions?: string` eklendi; `daemon.ts runChat` profili
+  buradan geçirir, provider'lar `streamText({..., instructions})`e iletir. **Uygulama sırasında
+  düzeltildi (2026-07-09):** ilk tasarımda "mesaj kopyasına system-önek" planlanmıştı ama AI SDK
+  v7 `messages`/`prompt` alanında `system` rolünü KABUL ETMEZ (`InvalidPromptError` — engine.ts'in
+  zaten bildiği kısıt, chat yoluna da UYGULANMASI gerekiyordu). Doğru yol `instructions` — agent
+  yoluyla AYNI desen, dört adapter'ın (anthropic/openai/google/ollama) `streamText` çağrısına
+  `instructions` iletimi eklendi. `saveChatTurn`'a giden `payload.messages` HİÇ DOKUNULMADI
+  (kalıcı geçmişe system/profil asla girmez) — canlı testle doğrulandı (fake Ollama istek
+  gövdesi profili İÇERİR, `sessionDetail` dökümü İÇERMEZ).
 - Her koşu/istek başında dosyadan taze okunur (µs-ölçek; cache karmaşıklığı gereksiz). Profil
   stabil kaldığı sürece system-önek değişmez → Anthropic prompt-cache prefix'i bozulmaz (maliyet
   endişesi düşük). `config.json → memory.enabled` (vars. true) tek anahtarla kapatılabilir

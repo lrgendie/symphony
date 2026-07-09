@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -20,6 +20,9 @@ const SSE_CHUNKS = [
   `{"id":"c1","object":"chat.completion.chunk","created":1,"model":"qwen3:8b","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":2,"total_tokens":9}}`,
 ];
 
+// ADR-013 testi: sağlayıcıya GERÇEKTEN giden istek gövdesini denetlemek için son body'yi tutar.
+let lastOllamaRequestBody = "";
+
 beforeAll(async () => {
   fakeOllama = createServer((req, res) => {
     if (req.method === "GET" && req.url === "/api/tags") {
@@ -28,8 +31,10 @@ beforeAll(async () => {
       return;
     }
     if (req.method === "POST" && req.url === "/v1/chat/completions") {
-      req.resume();
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk: Buffer) => chunks.push(chunk));
       req.on("end", () => {
+        lastOllamaRequestBody = Buffer.concat(chunks).toString("utf8");
         res.writeHead(200, { "content-type": "text/event-stream" });
         for (const chunk of SSE_CHUNKS) res.write(`data: ${chunk}\n\n`);
         res.write("data: [DONE]\n\n");
@@ -311,6 +316,56 @@ describe("symphonyd", () => {
     } finally {
       db.close();
     }
+    ws.close();
+  });
+
+  it("ADR-013: kullanıcı profili sağlayıcıya giden isteğe eklenir ama kalıcı geçmişe GİRMEZ", async () => {
+    const profileFile = join(testHome, "memory", "profil.md");
+    writeFileSync(profileFile, "## Kimlik\nKullanıcının adı Deniz, TypeScript tercih eder.\n", "utf8");
+
+    const { reply, ws } = await roundTrip(
+      createMessage("hello", {
+        token: daemon.token,
+        client: "cli",
+        protocolVersion: PROTOCOL_VERSION,
+      }),
+    );
+    expect(reply.type).toBe("hello.ok");
+
+    const sessionId = crypto.randomUUID();
+    const completed = waitFor(
+      ws,
+      (env) =>
+        env.type === "chat.completed" &&
+        (env.payload as { sessionId: string }).sessionId === sessionId,
+    );
+    const ack = await request(
+      ws,
+      createMessage("chat.start", {
+        sessionId,
+        provider: "ollama",
+        model: "qwen3:8b",
+        messages: [{ role: "user", content: "beni tanıyor musun?" }],
+      }),
+    );
+    expect(ack.type).toBe("chat.start.ok");
+    await completed;
+
+    // Sağlayıcıya giden GERÇEK istekte profil VAR.
+    expect(lastOllamaRequestBody).toContain("Kullanıcının adı Deniz");
+
+    // Kalıcı geçmişte (REST) profil YOK — yalnız kullanıcı/asistan metni.
+    const auth = { headers: { authorization: `Bearer ${daemon.token}` } };
+    const detailRes = await fetch(
+      `http://127.0.0.1:${daemon.port}/api/history/sessions/${sessionId}`,
+      auth,
+    );
+    const detail = (await detailRes.json()) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(detail.messages.map((m) => m.role)).toEqual(["user", "assistant"]);
+    expect(JSON.stringify(detail.messages)).not.toContain("Kullanıcının adı Deniz");
+
     ws.close();
   });
 });

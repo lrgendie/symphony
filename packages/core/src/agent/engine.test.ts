@@ -271,7 +271,10 @@ class CaptureBus extends EventBus {
 
 const openStores: DataStore[] = [];
 
-function makeEngine(script: Array<GenerateResult | ErrorTurnEntry | DeferredTurnEntry>): {
+function makeEngine(
+  script: Array<GenerateResult | ErrorTurnEntry | DeferredTurnEntry>,
+  memoryProfile: string | null = null,
+): {
   engine: AgentEngine;
   bus: CaptureBus;
   store: DataStore;
@@ -292,6 +295,7 @@ function makeEngine(script: Array<GenerateResult | ErrorTurnEntry | DeferredTurn
     permissionsFile,
     mcpServersFile: join(home, `mcp-servers-${Date.now()}-${Math.random()}.json`),
     pickModel: () => Promise.resolve(null),
+    loadMemoryProfile: () => memoryProfile,
   });
   return { engine, bus, store, permissionsFile, adapter };
 }
@@ -515,6 +519,23 @@ describe("AgentEngine (SPEC-AGENT §4-§6)", () => {
     await engine.start({ ...START, agentId: "mcpli" });
     const failed = await bus.waitFor("agent.run.failed");
     expect(failed.error.code).toBe("AGENT_MCP_SERVER_UNKNOWN");
+  });
+
+  it("ADR-013: loadMemoryProfile() null olmayan dönerse model turuna enjekte edilir", async () => {
+    const { engine, bus, adapter } = makeEngine(
+      [turn([text("cevap")])],
+      "Kullanıcının adı Deniz, TypeScript tercih eder.",
+    );
+    await engine.start(START);
+    await bus.waitFor("agent.run.completed");
+    expect(JSON.stringify(adapter.prompts[0])).toContain("Kullanıcının adı Deniz");
+  });
+
+  it("ADR-013: loadMemoryProfile() null dönerse prompt'ta profil bölümü YOKTUR", async () => {
+    const { engine, bus, adapter } = makeEngine([turn([text("cevap")])], null);
+    await engine.start(START);
+    await bus.waitFor("agent.run.completed");
+    expect(JSON.stringify(adapter.prompts[0])).not.toContain("Kullanıcı profili");
   });
 
   it("rapor2 §3.3: MCP bağlantı hatasında agent.run.state:'failed' de yayınlanır (queued→thinking→failed geçerli)", async () => {

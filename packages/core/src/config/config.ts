@@ -19,6 +19,13 @@ export const ConfigSchema = z
       })
       .strip()
       .default({}),
+    // ADR-013: kullanıcı profili enjeksiyonu — kirlenmiş/istenmeyen profilde hızlı kapatma.
+    memory: z
+      .object({
+        enabled: z.boolean().default(true),
+      })
+      .strip()
+      .default({}),
   })
   .strip();
 
