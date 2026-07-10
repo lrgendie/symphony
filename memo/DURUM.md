@@ -3,7 +3,37 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Fable — ADR-015: proje görünümü + yol haritası tasarımı TAMAM; dilimler P1/P2/P3 Sonnet'e hazır)
+**Son güncelleme:** 2026-07-10 (Sonnet — Dilim P1 BİTTİ ve testli, 301 test; P2 sırada)
+
+## Faz 4 — Dilim P1 (canlı proje gruplaması) BİTTİ (2026-07-10, Sonnet)
+
+ADR-015 Karar 1/2 uygulandı. Kural 1 sırası: PROTOKOL → shared → core → ui.
+- **PROTOKOL.md:** `ActiveRun`a `cwd?` notu (parentRunId notunun hemen altında, "ADR-015" andaçlı).
+- **`shared/common.ts`:** `ActiveRunSchema.cwd?` (ADDITIVE, PROTOCOL_VERSION korunur).
+- **`engine.ts`:** `activeRuns()` artık `cwd: run.cwd` döner (kayıtta zaten vardı, yalnız dışa
+  açılmamıştı) — `parentRunId` gibi opsiyonel spread değil, DAİMA dolu (her koşunun jail cwd'si var).
+- **`ui/store.ts`:** `agent.run.started` handler'ı `cwd`'yi `upsertRun`'a geçiriyor. YENİ SAF
+  export `groupRunsByProject(runs)`: cwd'ye göre gruplar, ad = basename (`split(/[\\/]/)` —
+  hem Windows hem POSIX ayracı), grup içi sıra yine `orderRunsForDisplay`. **Çocuk koşular için
+  AYRI eşleme GEREKMEDİ** — `run_agent` zaten ebeveynin cwd'sini birebir devraldığından (ADR-014
+  Karar 3) `r.cwd` doğrudan aynı gruba düşürüyor, tasarım basitleşti.
+- **`App.tsx`:** Aktif koşular paneli artık proje başlığı altında gruplu (`project-head`: ad +
+  soluk tam yol); satır render'ı `RunRow` bileşenine çıkarıldı (okunabilirlik, iki seviyeli
+  map). Tek grup olsa da başlık gösterilir (ADR-015 Karar 2, tutarlılık).
+- **Test:** 297→**301** (store +4: cwd geçişi · basename iki ayraçla · çocuk ebeveyninin
+  grubunda + grup içi girinti korunur · aynı cwd'li iki üst-düzey koşu tek grupta).
+  `pnpm build && pnpm test && pnpm lint` temiz (41 dosya/301 test).
+- **Görsel doğrulama KULLANICIYA** (`desktop:dev`, Bash'ten görülemez — birden fazla farklı
+  cwd'de agent koşusu başlatıp proje başlıklarının ayrıştığını görmek yeterli).
+
+### 📋 Dilim P2 — roadmap parser + REST ← SIRADAKİ (Sonnet)
+
+DURUM.md'nin ADR-015 sonrası eklenen "Dilim P2" talimatı (yukarıda arşivlenmiş hâliyle) geçerli:
+1. PROTOKOL.md §1.1: `GET /api/roadmap?dir=...` satırı.
+2. `shared/rest.ts`: `RoadmapPhaseSchema` + `RoadmapResponseSchema`.
+3. YENİ `core/src/roadmap/parse.ts` (SAF, testli) — `### başlık` + checkbox kalıbı.
+4. `daemon.ts`: REST ucu (Bearer, dir paramı, dosya oku, yoksa 404).
+5. Test: parser (bu deponun gerçek ROADMAP.md'sinden küçük fixture) + daemon REST (200/404/401).
 
 ## Faz 4 — "Hangi dosya" zengin görünümü BİTTİ (2026-07-10, Sonnet)
 
@@ -34,21 +64,9 @@
   spekülatif). **Görsel: mütevazı panel** (Model panosu diliyle çubuklar) — Obsidian-graph işi
   Faz 6 Bağlam Haritası'nındır, ön alınmaz.
 
-### 📋 Dilim P1 — canlı proje gruplaması ← SIRADAKİ (Sonnet)
+### ✅ Dilim P1 — canlı proje gruplaması — BİTTİ (yukarıda "Faz 4 — Dilim P1" bölümünde ayrıntı)
 
-1. PROTOKOL.md: `ActiveRun`a `cwd?` notu (§5 civarı, parentRunId notunun yanına; "ADR-015" andaç).
-2. `shared/common.ts` `ActiveRunSchema.cwd?` → `engine.ts activeRuns()`'a `cwd` ekle (kayıtta
-   zaten var: `run.cwd`).
-3. `ui/store.ts`: `agent.run.started` handler'ı `cwd`'yi de `upsertRun`'a geçirsin (olay zaten
-   taşıyor); YENİ SAF export `groupRunsByProject(runs)` — cwd'ye göre grupla (cwd'siz koşu
-   "diğer" grubuna), grup içi sıra `orderRunsForDisplay` (çocuk girintisi grup İÇİNDE sürer),
-   grup adı = basename (path ayracı hem `/` hem `\` — `split(/[\\/]/)`).
-4. `App.tsx`: Aktif koşular paneli gruplu render (grup başlığı: ad + soluk tam yol); tek grup
-   varsa başlık yine gösterilir (tutarlılık). Küçük CSS (`.project-head`).
-5. Test: store +2-3 (cwd geçişi · gruplama/basename [`C:\a\b` ve `/x/y` iki ayracı] · çocuk
-   koşu ebeveyninin grubunda). `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
-
-### 📋 Dilim P2 — roadmap parser + REST
+### 📋 Dilim P2 — roadmap parser + REST ← SIRADAKİ (Sonnet)
 
 1. PROTOKOL.md §1.1'e satır: `GET /api/roadmap?dir=...` → `{ phases: [{ title, done, total,
    state }] }`; `<dir>/ROADMAP.md` yoksa 404 (`VALIDATION_ROADMAP_NOT_FOUND`).

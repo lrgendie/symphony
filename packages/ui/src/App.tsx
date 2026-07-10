@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import {
   PROTOCOL_VERSION,
+  type ActiveRun,
   type PendingPermission,
   type ProviderLimitsPayload,
   type Usage,
@@ -8,7 +9,7 @@ import {
 import { daemon, type PermissionDecision } from "./daemon/client";
 import { LivingScene } from "./scene/LivingScene";
 import {
-  orderRunsForDisplay,
+  groupRunsByProject,
   useStore,
   type ConnStatus,
   type LogTone,
@@ -123,23 +124,20 @@ export function App(): React.JSX.Element {
         {runs.length === 0 ? (
           <p className="dim empty">Şu an çalışan agent yok. Terminalde `symphony agent …` başlat.</p>
         ) : (
-          <ul className="runs">
-            {orderRunsForDisplay(runs).map((r) => {
-              const stream = runStreams[r.runId];
-              const file = runFiles[r.runId];
-              return (
-                <li key={r.runId} className={r.parentRunId !== undefined ? "run run-child" : "run"}>
-                  {r.parentRunId !== undefined && <span className="run-child-arrow">↳</span>}
-                  <span className={`state state-${r.state}`}>{r.state}</span>
-                  <span className="run-agent">{r.agentId}</span>
-                  {r.model !== undefined && <span className="dim">{r.model}</span>}
-                  <span className="run-task">{r.task}</span>
-                  {stream !== undefined && stream !== "" && <p className="run-stream">{stream}</p>}
-                  {file !== undefined && <RunFile file={file} />}
-                </li>
-              );
-            })}
-          </ul>
+          // Faz 4 (ADR-015): "proje" = cwd'nin kendisi, kayıt defteri YOK — grup adı basename.
+          groupRunsByProject(runs).map((group) => (
+            <div key={group.cwd} className="project-group">
+              <div className="project-head">
+                <span className="project-name">{group.name}</span>
+                <span className="dim project-path">{group.cwd}</span>
+              </div>
+              <ul className="runs">
+                {group.runs.map((r) => (
+                  <RunRow key={r.runId} run={r} stream={runStreams[r.runId]} file={runFiles[r.runId]} />
+                ))}
+              </ul>
+            </div>
+          ))
         )}
       </section>
 
@@ -186,6 +184,29 @@ function PermissionCard({ permission }: { permission: PendingPermission }): Reac
         </button>
       </div>
     </div>
+  );
+}
+
+/** Bir koşu satırı: durum + agent + model + görev + (varsa) akış metni/dosya önizlemesi. */
+function RunRow({
+  run,
+  stream,
+  file,
+}: {
+  run: ActiveRun;
+  stream: string | undefined;
+  file: RunFilePreview | undefined;
+}): React.JSX.Element {
+  return (
+    <li className={run.parentRunId !== undefined ? "run run-child" : "run"}>
+      {run.parentRunId !== undefined && <span className="run-child-arrow">↳</span>}
+      <span className={`state state-${run.state}`}>{run.state}</span>
+      <span className="run-agent">{run.agentId}</span>
+      {run.model !== undefined && <span className="dim">{run.model}</span>}
+      <span className="run-task">{run.task}</span>
+      {stream !== undefined && stream !== "" && <p className="run-stream">{stream}</p>}
+      {file !== undefined && <RunFile file={file} />}
+    </li>
   );
 }
 

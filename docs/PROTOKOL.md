@@ -124,6 +124,9 @@ Geçerli geçişler yalnız bunlardır; `agent.run.state` başka değer taşıya
 bulunur; devretme (`run_agent` aracı) tamamen motor içindedir, İSTEMCİDEN devretme başlatan yeni bir
 mesaj YOKTUR. Çocuk koşunun izin istekleri normal `agent.tool.requested` olarak (çocuğun runId'siyle)
 yayınlanır ve her istemciden cevaplanabilir.
+**Proje görünümü (Faz 4, ADR-015):** Snapshot'taki `ActiveRun` kaydında opsiyonel `cwd` bulunur —
+`agent.run.started` olayı bunu zaten taşıyordu, burada yalnız snapshot'a da eklendi. "Proje" ayrı
+bir kayıt defteri DEĞİLDİR — istemciler koşuları `cwd`'ye göre gruplar (ADR-015 Karar 1).
 `awaiting_permission` süresiz bekler (timeout yok — insan kararı beklenir); iptal edilebilir.
 **Konuşmalı koşu (ADR-012):** `conversational: true` başlatılan koşu, tur araç çağrısı OLMADAN
 bitince `completed` yerine `awaiting_user`'a geçer ve sonraki `agent.say`'i bekler (thinking'e döner).

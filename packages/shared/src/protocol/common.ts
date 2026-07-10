@@ -65,6 +65,8 @@ export const ActiveRunSchema = z
     model: z.string().optional(),
     /** Faz 5 (ADR-014): koşu bir `run_agent` devretmesiyle başlatıldıysa ebeveynin runId'si. */
     parentRunId: z.string().uuid().optional(),
+    /** Faz 4 (ADR-015): koşunun çalışma dizini — istemciler "proje" gruplamasını bununla kurar. */
+    cwd: z.string().min(1).optional(),
   })
   .strip();
 export type ActiveRun = z.infer<typeof ActiveRunSchema>;

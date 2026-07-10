@@ -186,6 +186,7 @@ export class AgentEngine {
       task: run.task,
       state: run.state,
       model: run.model,
+      cwd: run.cwd,
       ...(run.parentRunId !== undefined ? { parentRunId: run.parentRunId } : {}),
     }));
   }

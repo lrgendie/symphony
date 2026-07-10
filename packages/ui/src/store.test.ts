@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ActiveRun, Snapshot } from "@symphony/shared";
-import { orderRunsForDisplay, useStore } from "./store.js";
+import { groupRunsByProject, orderRunsForDisplay, useStore } from "./store.js";
 
 /**
  * Store, WS olaylarını UI durumuna çeviren tek mantık noktası; burada saf olarak
@@ -79,6 +79,18 @@ describe("ui store", () => {
     const runs = useStore.getState().runs;
     expect(runs.find((r) => r.runId === RUN)?.parentRunId).toBeUndefined();
     expect(runs.find((r) => r.runId === CHILD)?.parentRunId).toBe(RUN);
+  });
+
+  it("Faz 4 (ADR-015): agent.run.started cwd'yi runs'a taşır (proje gruplaması bunu okur)", () => {
+    const store = useStore.getState();
+    store.handleEvent("agent.run.started", {
+      runId: RUN,
+      agentId: "coder",
+      task: "iş",
+      model: "m",
+      cwd: "C:\\Users\\brkn2\\Desktop\\proje-a",
+    });
+    expect(useStore.getState().runs[0]?.cwd).toBe("C:\\Users\\brkn2\\Desktop\\proje-a");
   });
 
   it("görev sonuçlanması converge sinyalini (lastCompletedAt) günceller — agent VE sohbet", () => {
@@ -407,5 +419,40 @@ describe("orderRunsForDisplay (Faz 5, ADR-014)", () => {
   it("sahipsiz çocuk (ebeveyni listede yok) kaybolmaz, sona düşer", () => {
     const ordered = orderRunsForDisplay([run(CHILD, { parentRunId: "yok-boyle-runid" })]);
     expect(ordered.map((r) => r.runId)).toEqual([CHILD]);
+  });
+});
+
+describe("groupRunsByProject (Faz 4, ADR-015)", () => {
+  const CHILD = "88888888-8888-4888-8888-888888888888";
+  const OTHER_TOP = "99999999-9999-4999-8999-999999999999";
+
+  function run(runId: string, overrides: Partial<ActiveRun> = {}): ActiveRun {
+    return { runId, agentId: "a", task: "t", state: "thinking", ...overrides };
+  }
+
+  it("cwd'nin basename'ine göre gruplar — hem Windows (\\) hem POSIX (/) ayracı", () => {
+    const groups = groupRunsByProject([
+      run(RUN, { cwd: "C:\\Users\\brkn2\\Desktop\\symphony" }),
+      run(OTHER_TOP, { cwd: "/home/brkn/other-repo" }),
+    ]);
+    expect(groups.map((g) => g.name).sort()).toEqual(["other-repo", "symphony"]);
+    expect(groups.find((g) => g.name === "symphony")?.cwd).toBe("C:\\Users\\brkn2\\Desktop\\symphony");
+  });
+
+  it("çocuk koşu (Faz 5), ebeveynin cwd'sini birebir devraldığı için AYNI grupta kalır", () => {
+    const cwd = "C:\\ws\\proje";
+    const groups = groupRunsByProject([
+      run(RUN, { cwd }),
+      run(CHILD, { cwd, parentRunId: RUN }), // run_agent: çocuk cwd'yi ebeveynden birebir alır
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.runs.map((r) => r.runId)).toEqual([RUN, CHILD]); // grup İÇİNDE de girintili sıra
+  });
+
+  it("aynı cwd'li iki üst-düzey koşu TEK grupta toplanır", () => {
+    const cwd = "C:\\ws\\proje";
+    const groups = groupRunsByProject([run(RUN, { cwd }), run(OTHER_TOP, { cwd })]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.runs).toHaveLength(2);
   });
 });

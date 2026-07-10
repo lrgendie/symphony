@@ -122,6 +122,44 @@ export function orderRunsForDisplay(runs: ReadonlyArray<ActiveRun>): ActiveRun[]
   return ordered;
 }
 
+/** Faz 4 (ADR-015 Karar 1/2): "proje" görünümünde bir grup — kayıt defteri YOK, ad cwd'nin son bileşeni. */
+export interface ProjectGroup {
+  /** Gruplama anahtarı — tam cwd; hiç koşunun cwd'si yoksa "" ("diğer" grubu, teoride oluşmaz). */
+  cwd: string;
+  /** Görünen ad — cwd'nin basename'i (path ayracı hem `/` hem `\`). */
+  name: string;
+  runs: ActiveRun[];
+}
+
+/**
+ * Koşuları cwd'ye göre gruplar. ÇOCUK koşular (Faz 5, `parentRunId`) İÇİN AYRI bir eşleme
+ * GEREKMEZ — `run_agent` çocuğa ebeveynin cwd'sini BİREBİR devralır (ADR-014 Karar 3: "çocuk
+ * jail = ebeveyn cwd birebir"), yani `r.cwd` zaten aynı gruba düşürür. Grup içi sıralama yine
+ * `orderRunsForDisplay` (çocuk girintisi grup İÇİNDE korunur). Gruplar ada göre alfabetik.
+ */
+export function groupRunsByProject(runs: ReadonlyArray<ActiveRun>): ProjectGroup[] {
+  const groups = new Map<string, ActiveRun[]>();
+  for (const run of runs) {
+    const cwd = run.cwd ?? "";
+    const list = groups.get(cwd);
+    if (list === undefined) groups.set(cwd, [run]);
+    else list.push(run);
+  }
+  return [...groups.entries()]
+    .map(([cwd, groupRuns]) => ({
+      cwd,
+      name: cwd === "" ? "diğer" : basename(cwd),
+      runs: orderRunsForDisplay(groupRuns),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** `path.basename`in bağımsız/hafif karşılığı — hem `/` hem `\` ayracını kabul eder (Win+POSIX cwd). */
+function basename(path: string): string {
+  const parts = path.split(/[\\/]/).filter((p) => p.length > 0);
+  return parts[parts.length - 1] ?? path;
+}
+
 const EMPTY_USAGE: Usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
 
 function sumUsage(items: ReadonlyArray<ModelUsage>): Usage {
@@ -268,6 +306,7 @@ export const useStore = create<UiState>((set) => {
             agentId: string;
             task: string;
             model: string;
+            cwd: string;
             parentRunId?: string;
           };
           upsertRun({
@@ -276,6 +315,7 @@ export const useStore = create<UiState>((set) => {
             task: p.task,
             state: "queued",
             model: p.model,
+            cwd: p.cwd,
             ...(p.parentRunId !== undefined ? { parentRunId: p.parentRunId } : {}),
           });
           pushLog(
