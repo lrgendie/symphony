@@ -8,7 +8,12 @@ on:
 
 jobs:
   build-test:
-    runs-on: ubuntu-latest
+    # Windows: proje bugüne dek yalnız Windows'ta geliştirildi/canlı doğrulandı; testler ve
+    # kod Windows yol biçimini (C:\...) varsayıyor. ubuntu-latest'te node:path POSIX davranır
+    # (basename "C:\proj\symphony"'yi ayıramaz, join "\" yerine "/" üretir) — CI günlerdir bu
+    # yüzden kırıktı (context-map/build.test.ts Z4'ten beri, desktop-launch.test.ts F3'ten beri).
+    # ADR-017 Karar 2 zaten Windows'u ilk doğrulanan platform sayıyor; CI'yi gerçeğe eşitliyoruz.
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
