@@ -116,7 +116,7 @@ symphony/
 - **Kabul testi:** Karşılama ekranı logo + tarih + gerçek sağlayıcı durumu + gerçek kullanım
   toplamını gösteriyor; model seçici akışı bozulmuyor; bileşen testli.
 
-### Faz 3 — Kod Agent'ı: Sisteme Müdahale (6–8. hafta) ⭐ kalbi burası
+### Faz 3 — Kod Agent'ı: Sisteme Müdahale (6–8. hafta) ✅ 2026-07-05 ⭐ kalbi burası
 - [x] Araç seti: `read_file`, `write_file`, `edit`, `glob`, `grep`, `run_command` (PowerShell/bash) ✅ 2026-07-04 — workspace jail + sır maskeleme + temiz env dâhil (`core/src/agent/tools.ts`, testli)
 - [x] Agent döngüsü: model → tool call → sonuç → model... (Vercel AI SDK tool-calling ile, her modelde aynı) ✅ 2026-07-04 — maxSteps sigortası, AGENT_TOOL_LOOP, iptal, durum makinesi (`engine.ts`)
 - [x] **İzin sistemi:** her dosya yazma / komut çalıştırma öncesi onay (Claude Code'daki gibi), "her zaman izin ver" listesi ✅ 2026-07-04 — deny>allow>risk varsayılanı; destructive'de always_allow yok
@@ -157,8 +157,10 @@ symphony/
   cyan iç=LLM/mood, violet derin çekirdek kafesi), gerçek bloom (UnrealBloomPass), GLSL akış
   shader'ı, atım sistemi (synapse/energy/converge), sinematik kamera. `ui/src/scene/
   TesseractScene.tsx` + `scene/tesseract/{geometry,pulses}.ts` (saf+testli). Görsel dil artık
-  `docs/TASARIM.md §2`'de tesseract olarak güncel. Kalan: her agent'ın kendi "yaşam formu"
-  (birden çok eşzamanlı koşuyu ayrı ayrı görselleştirme) — küçük bir sonraki dilim adayı.
+  `docs/TASARIM.md §2`'de tesseract olarak güncel. **"Yaşam formu" ✅ 2026-07-10:** her aktif
+  koşu artık tesseract'ın etrafında kendi yörüngeli uydusuyla temsil ediliyor — mood rengi
+  (thinking=cyan/executing=magenta/awaiting=amber), doğuş/ölüm (patla-sön) animasyonu, çocuk
+  koşular (ADR-014 devretme) daha küçük render edilir. `scene/tesseract/satellites.ts` (saf+testli).
 - [x] **Şef Paneli:** aktif agent'lar + canlı log akışı ✅ · izin istekleri masaüstünden
   CEVAPLANABİLİYOR ✅ (dilim 2, kart + renkli diff + Evet/Bu koşu/Daima/Hayır, SPEC §5) ·
   çocuk koşular (Faz 5, `run_agent`) ebeveyninin altında girintili görünüyor ✅ (2026-07-10,
@@ -242,7 +244,7 @@ symphony/
 - **Çıktı:** Tek komutla çok-agent'lı iş akışı, dashboard'da orkestra gibi izlenir. ✅ masaüstünde çocuk koşular `↳` ile ebeveyninin altında girintili (O3, `orderRunsForDisplay`)
 - **Kabul testi:** İki agent aynı anda farklı görevlerde koşup dashboard'da ayrı izlenebiliyor ✅ (O1-f + O3 store testleri) · şef agent bir görevi en az iki alt göreve bölüp farklı modellere dağıtıyor ✅ (O1-a testi + BUGÜNKÜ canlı `symphony agent sef` koşusu, Claude Haiku→qwen3:8b karışımı) · agent tanımı dosyası yeni makineye kopyalanınca aynen çalışıyor ✅ (Faz 3'ten beri, davranış değişmedi).
 
-### Faz 6 — Zeka Katmanı: Seni Tanıyan Symphony (15–17. hafta) — tasarım ✅ ADR-016 (2026-07-10); Z1-Z3 ✅ 2026-07-10, Z4-Z5 kaldı
+### Faz 6 — Zeka Katmanı: Seni Tanıyan Symphony (15–17. hafta) ✅ 2026-07-10 (ADR-016, dilimler Z1-Z5 tamamı)
 - [x] **Model yönlendirici v2 (öğrenen):** Faz 1'den beri biriken kayıtlardan (hangi model hangi görevde başarılı/hızlı/ucuz oldu) skor tablosu; "bu işi kime verelim?" sorusuna veriyle cevap
       **✅ Dilim Z1 (2026-07-10):** sorgu-zamanı agregasyon (fiziksel tablo yok) + kural iskeleti/skor
       düzeltmesi karışımı (`router.ts`↔`stats.ts`), `MIN_SAMPLES=3` altında v1 birebir korunur.
@@ -267,13 +269,15 @@ symphony/
       **✅ Dilim Z2 (2026-07-10):** `feedback.submit` + TUI tek tuş + `symphony feedback`, router v2
       skorunu gerçekten etkiliyor (canlı doğrulandı). "Çıktıyı geri alma" sinyali BİLİNÇLE HARİÇ —
       geri-alma mekanizması yok, vekil sinyal yanıltıcı olurdu (ADR-016 Karar 4, reddedilen kısım).
-- [ ] **Bağlam Haritası (yaşayan bilgi grafiği):** kullanıcının konuşmaları/projeleri/geliştirmeleri
+- [x] **Bağlam Haritası (yaşayan bilgi grafiği):** kullanıcının konuşmaları/projeleri/geliştirmeleri
       zamanla *compound* eden, keşfedilebilir bir nöral graf olarak görünür (Obsidian graph benzeri,
       zamansal). Verisi çoğunlukla MEVCUT SQLite'ta (sessions/messages/agent_runs). Görsel yön:
       `docs/TASARIM.md §3` (kullanıcının referans görseli `Tasarım/`). Faz 4 dashboard + bu hafıza
-      birleşince "seni tanıyan yaşayan arayüz" tamamlanır. Ayrı büyük dilim (protokol eki gerekebilir).
-      *(ADR-016 Karar 6 — REST `GET /api/context-map`, deterministik kenarlar (proje/aynı-gün),
-      embedding YOK, d3-force ile 2D ayrı görünüm; dilimler Z4 veri + Z5 masaüstü görünümü)*
+      birleşince "seni tanıyan yaşayan arayüz" tamamlanır.
+      **✅ Dilim Z4+Z5 (2026-07-10):** REST `GET /api/context-map` (deterministik kenarlar:
+      proje/aynı-gün, embedding YOK) + masaüstünde AYRI sekme, d3-force ile 2D yerleşim, düğüm
+      rengi=tür, tıkla→detay. Canlı doğrulandı — bu dilim ayrıca daemon'da eksik olan CORS
+      desteğini de ortaya çıkarıp düzeltti (Canlı bulgu #4, `@fastify/cors`).
 - **Çıktı:** "Şu PDF'leri özetleyecek bir şey lazım" dediğinde donanımına, geçmişine ve bütçene göre doğru modeli öneren; seni tanıdıkça isabeti artan sistem.
 - **Kabul testi:** Router v2 önerileri gerçek kullanım skorlarına dayanıyor ve gerekçesini gösteriyor; kullanıcı hafızasına yazılan bir tercih yeni oturumda agent bağlamında görülüyor; haftalık rapor üretiliyor; tüm öğrenme verisi lokalde kalıyor (dışarı istek testle doğrulanmış şekilde yok).
 

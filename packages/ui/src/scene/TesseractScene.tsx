@@ -5,10 +5,12 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import type { ActiveRun } from "@symphony/shared";
 import { MOOD_STYLE, type SphereMood } from "./mood";
 import type { GpuVitals } from "./hardware-vitals";
 import { buildTesseract, projectNodes, type TesseractEdge } from "./tesseract/geometry";
 import { advancePulses, createPulseSystem, fireConverge, HARD_CAP } from "./tesseract/pulses";
+import { advanceSatellites, createSatelliteSystem, MAX_SATELLITES, syncSatellites } from "./tesseract/satellites";
 
 /**
  * Yaşayan Tesseract (TASARIM.md §2, 2026-07-08 sinematik revizyon): markanın kendisi canlı
@@ -29,6 +31,7 @@ const CYAN = "#22d3ee";
 const MAGENTA = "#e879f9";
 const VIOLET = "#a78bfa";
 const RED = "#ef4444";
+const AMBER = "#fbbf24";
 const CONVERGE_GLOW = "#ff7a5c";
 
 // —— Yumuşatma (ham veri sert, görsel yumuşak — TASARIM ilkesi) ——
@@ -55,6 +58,13 @@ const CORE_RADIUS = 0.1;
 // —— Atmosfer ——
 const MOTE_COUNT = 220;
 const STAR_COUNT = 380;
+
+// —— Ajan uyduları (Faz 4 "yaşam formu"): her aktif koşu kendi yörüngeli ışığıyla temsil edilir ——
+// Gyro halkaları 2.1-2.6, motes 1.95-3.1 yarıçapında — bu bandın hemen dışında ayrı, okunur katman.
+const SATELLITE_ORBIT_RADIUS = 3.05;
+const SATELLITE_ORBIT_SPEED = 0.22; // rad/sn (üst-düzey koşu); çocuk koşu biraz daha hızlı yörüngeler
+const SATELLITE_TOP_SIZE = 0.15;
+const SATELLITE_CHILD_SIZE = 0.095;
 
 function smoothToward(current: number, target: number, delta: number): number {
   const tau = target > current ? RISE_TAU : FALL_TAU;
@@ -193,9 +203,11 @@ export interface TesseractProps {
   vitals: GpuVitals | null;
   /** Son "görev sonuçlandı / kritik an" zaman damgası — değişince converge salvosu ateşlenir. */
   convergeSignal: number | null;
+  /** Faz 4 "yaşam formu": aktif koşular — her biri kendi uydusuyla temsil edilir. */
+  runs: readonly ActiveRun[];
 }
 
-export function Tesseract({ mood, vitals, convergeSignal }: TesseractProps): React.JSX.Element {
+export function Tesseract({ mood, vitals, convergeSignal, runs }: TesseractProps): React.JSX.Element {
   const groupRef = useRef<THREE.Group>(null);
   const moteGroupRef = useRef<THREE.Group>(null);
   const copperStrutsRef = useRef<THREE.InstancedMesh>(null);
@@ -445,6 +457,50 @@ export function Tesseract({ mood, vitals, convergeSignal }: TesseractProps): Rea
       new THREE.SpriteMaterial({ map: glowTex, color: COPPER_GLOW, transparent: true, opacity: 0.035, depthWrite: false, blending: THREE.AdditiveBlending }),
     ] as const;
 
+    // —— Ajan uyduları: her aktif koşu (üst-düzey/çocuk) AYRI bir Points katmanında —
+    // boyut farkı (size) tek materyal üzerinden veremediğimiz için iki kademe iki ayrı katman.
+    const satelliteSystem = createSatelliteSystem();
+    const satTopPos = new Float32Array(MAX_SATELLITES * 3);
+    const satTopCol = new Float32Array(MAX_SATELLITES * 3);
+    const satTopGeo = new THREE.BufferGeometry();
+    const satTopPosAttr = new THREE.BufferAttribute(satTopPos, 3);
+    const satTopColAttr = new THREE.BufferAttribute(satTopCol, 3);
+    satTopPosAttr.setUsage(THREE.DynamicDrawUsage);
+    satTopColAttr.setUsage(THREE.DynamicDrawUsage);
+    satTopGeo.setAttribute("position", satTopPosAttr);
+    satTopGeo.setAttribute("color", satTopColAttr);
+    satTopGeo.setDrawRange(0, 0);
+    const satTopMat = new THREE.PointsMaterial({
+      size: SATELLITE_TOP_SIZE,
+      map: glowTex,
+      sizeAttenuation: true,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending,
+      vertexColors: true,
+    });
+    const satChildPos = new Float32Array(MAX_SATELLITES * 3);
+    const satChildCol = new Float32Array(MAX_SATELLITES * 3);
+    const satChildGeo = new THREE.BufferGeometry();
+    const satChildPosAttr = new THREE.BufferAttribute(satChildPos, 3);
+    const satChildColAttr = new THREE.BufferAttribute(satChildCol, 3);
+    satChildPosAttr.setUsage(THREE.DynamicDrawUsage);
+    satChildColAttr.setUsage(THREE.DynamicDrawUsage);
+    satChildGeo.setAttribute("position", satChildPosAttr);
+    satChildGeo.setAttribute("color", satChildColAttr);
+    satChildGeo.setDrawRange(0, 0);
+    const satChildMat = new THREE.PointsMaterial({
+      size: SATELLITE_CHILD_SIZE,
+      map: glowTex,
+      sizeAttenuation: true,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending,
+      vertexColors: true,
+    });
+
     return {
       topo,
       nodePos,
@@ -496,6 +552,19 @@ export function Tesseract({ mood, vitals, convergeSignal }: TesseractProps): Rea
       starMat,
       starParam,
       nebulaMats,
+      satelliteSystem,
+      satTopPos,
+      satTopCol,
+      satTopPosAttr,
+      satTopColAttr,
+      satTopGeo,
+      satTopMat,
+      satChildPos,
+      satChildCol,
+      satChildPosAttr,
+      satChildColAttr,
+      satChildGeo,
+      satChildMat,
       // Kare döngüsünde GC üretmemek için kalıcı yardımcılar.
       dummy: new THREE.Object3D(),
       up: new THREE.Vector3(0, 1, 0),
@@ -506,6 +575,8 @@ export function Tesseract({ mood, vitals, convergeSignal }: TesseractProps): Rea
       hotColor: new THREE.Color(HOT),
       copperGlowColor: new THREE.Color(COPPER_GLOW),
       cyanColor: new THREE.Color(CYAN),
+      magentaColor: new THREE.Color(MAGENTA),
+      amberColor: new THREE.Color(AMBER),
       violetColor: new THREE.Color(VIOLET),
       redColor: new THREE.Color(RED),
       convergeColor: new THREE.Color(CONVERGE_GLOW),
@@ -832,6 +903,64 @@ export function Tesseract({ mood, vitals, convergeSignal }: TesseractProps): Rea
       }
     }
     s.starColAttr.needsUpdate = true;
+
+    // 16) Ajan uyduları (Faz 4 "yaşam formu"): her aktif koşu kendi yörüngeli ışığıyla temsil
+    // edilir. syncSatellites/advanceSatellites SAF (tesseract/satellites.ts, testli) — burada
+    // yalnız yörünge trigonometrisi + renk (motes ile AYNI desen: sistem mantığı ayrı, sahne
+    // matematiği burada). Ölüm (dieT≠null) mood'dan BAĞIMSIZ nötr bir patla-sön (CONVERGE_GLOW) —
+    // ana tesseract'ın converge şelalesiyle AYNI ilke: "bitti" tek bir görsel dil, başarı/hata
+    // ayrımı zaten mood'un kendi rengiyle (ör. hata anında tüm sahne kızarır) taşınıyor.
+    syncSatellites(
+      s.satelliteSystem,
+      runs.map((r) => ({ runId: r.runId, isChild: r.parentRunId !== undefined, state: r.state })),
+      Math.random,
+    );
+    advanceSatellites(s.satelliteSystem, delta);
+    let topCursor = 0;
+    let childCursor = 0;
+    for (const entry of s.satelliteSystem.entries.values()) {
+      const isChild = entry.kind === "child";
+      const speed = SATELLITE_ORBIT_SPEED * (isChild ? 1.35 : 1);
+      const theta = entry.angleSeed + t * speed;
+      // angleSeed'ten türetilen SABİT eğim (motes'un rastgele incl'iyle aynı fikir, ama
+      // uydunun kimliği boyunca değişmeyen deterministik bir değer olmalı).
+      const tilt = Math.sin(entry.angleSeed * 3.7) * 0.3;
+      const radius = SATELLITE_ORBIT_RADIUS * (isChild ? 0.82 : 1);
+      const px = radius * Math.cos(theta);
+      const pz0 = radius * Math.sin(theta);
+
+      const spawnEase = entry.spawnT * entry.spawnT * (3 - 2 * entry.spawnT); // smoothstep
+      let envelope = spawnEase;
+      let color =
+        entry.mood === "executing" ? s.magentaColor : entry.mood === "awaiting" ? s.amberColor : s.cyanColor;
+      if (entry.dieT !== null) {
+        const d = entry.dieT;
+        envelope = d < 0.2 ? 1 + (1 - d / 0.2) * 0.8 : ((1 - (d - 0.2) / 0.8) ** 2);
+        color = s.convergeColor;
+      }
+      const b = envelope * pres;
+
+      const cursor = isChild ? childCursor : topCursor;
+      if (cursor < MAX_SATELLITES) {
+        const buf = isChild ? s.satChildPos : s.satTopPos;
+        const col = isChild ? s.satChildCol : s.satTopCol;
+        const o = cursor * 3;
+        buf[o] = px;
+        buf[o + 1] = -pz0 * Math.sin(tilt);
+        buf[o + 2] = pz0 * Math.cos(tilt);
+        col[o] = color.r * b;
+        col[o + 1] = color.g * b;
+        col[o + 2] = color.b * b;
+        if (isChild) childCursor++;
+        else topCursor++;
+      }
+    }
+    s.satTopGeo.setDrawRange(0, topCursor);
+    s.satTopPosAttr.needsUpdate = true;
+    s.satTopColAttr.needsUpdate = true;
+    s.satChildGeo.setDrawRange(0, childCursor);
+    s.satChildPosAttr.needsUpdate = true;
+    s.satChildColAttr.needsUpdate = true;
   });
 
   return (
@@ -906,6 +1035,9 @@ export function Tesseract({ mood, vitals, convergeSignal }: TesseractProps): Rea
       <group ref={moteGroupRef}>
         <points geometry={s.moteGeo} material={s.moteMat} frustumCulled={false} renderOrder={7} />
       </group>
+      {/* Ajan uyduları (Faz 4 "yaşam formu"): her aktif koşu kendi yörüngeli ışığı */}
+      <points geometry={s.satTopGeo} material={s.satTopMat} frustumCulled={false} renderOrder={12} />
+      <points geometry={s.satChildGeo} material={s.satChildMat} frustumCulled={false} renderOrder={12} />
       {/* Fiziksel ışıklar (three r155+): bakırın metalik parlaması için sıcak anahtar + cyan kontra */}
       <ambientLight intensity={0.5} />
       <pointLight position={[4, 3, 5]} intensity={90} color="#ffd9b3" />

@@ -195,7 +195,14 @@ protokol WS/REST üzerinden konuşulur.
   kırmızı çekirdek (içinde point-light; 3 kademeli converge şelalesi → patlama + şok halkası).
   GERÇEK bloom (UnrealBloomPass, three addons — paket yok), GLSL akış shader tüpleri,
   jiroskop halkaları ×3, veri zerreleri (220), yıldız+nebula atmosferi, sinematik kamera,
-  parallax. Ayar sabitleri dosya başında (BLOOM_*, NODE_RADIUS, STRUT_RADIUS, TRAIL…)
+  parallax. Ayar sabitleri dosya başında (BLOOM_*, NODE_RADIUS, STRUT_RADIUS, TRAIL…).
+  YENİ `runs` prop'u (Faz 4 "yaşam formu", 2026-07-10): ajan uyduları — `tesseract/satellites.ts`
+  sistem durumu, yörünge trigonometrisi burada (motes ile AYNI iş bölümü)
+- `scene/tesseract/satellites.ts` — SAF, testli (`pulses.ts` deseni, rng enjekte): her aktif
+  koşu için `SatelliteEntry` (spawnT doğuş, dieT ölüm/patla-sön — 0'dan 1'e, silinene dek ANINDA
+  kaybolmaz). `MAX_SATELLITES=8` (ADR-014 `MAX_CHILD_RUNS` ile AYNI). Ölüm rengi mood'dan
+  BAĞIMSIZ (gerçek `ActiveRun.state` hiç "completed"/"failed" göstermiyor — store.ts o olaylarda
+  run'ı DOĞRUDAN siliyor, patch'lemeden; bkz. DURUM.md)
 - `scene/tesseract/geometry.ts` — SAF, testli: 3 kademeli küp topolojisi (25 düğüm/60 kenar,
   merkeze-doğru sıralı; DERİN küp = iç×DEEP_SCALE) + `projectNodes` (XW hiper-dönüş +
   perspektif bölme + innerSwell)

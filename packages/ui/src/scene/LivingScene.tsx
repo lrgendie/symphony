@@ -48,6 +48,7 @@ function heatColor(heat: number): string {
 export function LivingScene(): React.JSX.Element {
   const mood = useMood();
   const gpus = useStore((s) => s.gpus);
+  const runs = useStore((s) => s.runs);
   const lastCompletedAt = useStore((s) => s.lastCompletedAt);
   const lastErrorAt = useStore((s) => s.lastErrorAt);
   const vitals = deriveGpuVitals(gpus);
@@ -60,7 +61,7 @@ export function LivingScene(): React.JSX.Element {
   return (
     <div className="scene">
       <Canvas camera={{ position: [0, 0, 4.9], fov: 50 }} dpr={[1, 2]} gl={{ antialias: true, alpha: true }}>
-        <Tesseract mood={mood} vitals={vitals} convergeSignal={convergeSignal} />
+        <Tesseract mood={mood} vitals={vitals} convergeSignal={convergeSignal} runs={runs} />
       </Canvas>
       {/* HUD çerçeveleme (TASARIM.md §2): köşe braketleri + teknik etiket */}
       <div className="scene-frame" aria-hidden>

@@ -3,7 +3,54 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Sonnet — Dilim Z5 BİTTİ + Canlı bulgu #4 DÜZELTİLDİ, 382 test — Faz 6 TAMAMEN kapandı)
+**Son güncelleme:** 2026-07-10 (Sonnet — küçük cilalar: ROADMAP senkronu + ajan uyduları "yaşam formu", 392 test)
+
+## Faz 4 kalanı: ajan uyduları "yaşam formu" BİTTİ (2026-07-10, Sonnet)
+
+Faz 6 kapandıktan sonra kullanıcı "küçük kalan cilalar"ı seçti: ROADMAP.md senkronu (Faz 3/6
+başlık tarihleri, Faz 6 Bağlam Haritası maddesi işaretlendi) + Faz 4'ün eski notu "her agent'ın
+kendi yaşam formu" (birden çok eşzamanlı koşuyu ayrı ayrı görselleştirme). İkinci soruda kullanıcı
+kapsamı **3D sahnede uydu/parçacık** (hafif HUD göstergesi değil) olarak seçti; çocuk koşuların
+ayrı-ama-küçük uydu alacağını onayladı. Protokol/ADR YOK — TASARIM.md §2'nin zaten öngördüğü
+("tesseract... canlı mimari haritası olabilir... ajan koşarken kenar atımı hızlanır") ama
+detaylandırmadığı bir alanın somut uygulaması; renk/mood dili TAMAMEN mevcut sözleşmeden
+(`mood.ts`, `.state-*` CSS) türetildi, yeni bir tasarım kararı gerekmedi (bu yüzden Sonnet'te
+kaldı, Fable'a çıkmadı — kullanıcıyla bu ayrım netleştirildi).
+- **YENİ `ui/src/scene/tesseract/satellites.ts`** (SAF, testli, `pulses.ts` deseni — rng enjekte):
+  `SatelliteSystem` (Map<runId,entry>). `syncSatellites(sys, activeRuns, rng)`: yeni koşu → yeni
+  uydu (spawnT=0, SABİT rastgele açı tohumu); hâlâ aktif → mood güncellenir, açı KORUNUR; aktif
+  listeden düşünce ANINDA silinmez — `dieT=0` ile ölüm animasyonuna girer (ölüm sırasında yeniden
+  görülürse DİRİLİR, `dieT=null`). `MAX_SATELLITES=8` (ADR-014 `MAX_CHILD_RUNS` ile AYNI sayı) —
+  aşan koşular sessizce dışarıda. `advanceSatellites(sys, dt)`: spawnT SPAWN_TAU'da 1'e yükselir,
+  dieT DIE_DURATION'da 1'e varınca sistemden SİLİNİR (despawned raporlanır).
+- **`TesseractScene.tsx`:** YENİ `runs` prop'u (`ActiveRun[]`). Uydular İKİ AYRI `Points` katmanı
+  (üst-düzey/çocuk — tek materyalden per-instance boyut veremediğimiz için; `pulseGeo/haloGeo`
+  ile AYNI CPU-BufferAttribute deseni), gyro halkalarının (2.1-2.6) hemen dışında (radius 3.05)
+  yörüngeliyor. Yörünge trigonometrisi (motes ile AYNI fikir: sistem mantığı ayrı modülde, sahne
+  matematiği burada) `useFrame` adım 16'da. Renk: thinking=cyan, executing=magenta (`.run-agent`
+  ile AYNI ton), awaiting=amber (YENİ `AMBER` sabiti) — TAMAMEN mevcut mood sözleşmesi. **Ölüm
+  mood'dan BAĞIMSIZ nötr patla-sön** (CONVERGE_GLOW): ana tesseract'ın converge şelalesiyle AYNI
+  ilke — "bitti" tek görsel dil, başarı/hata ayrımı zaten ayrı bir kanaldan (hata anında TÜM sahne
+  kızarır, `mood.ts`) taşınıyor. **Kod arkeolojisi bulgusu:** gerçek `ActiveRun.state` hiçbir zaman
+  "completed"/"failed" olarak görünmüyor — `agent.run.completed`/`agent.run.failed` olayları
+  `store.ts`'te run'ı state'i hiç patch'lemeden DOĞRUDAN siler (yalnız `cancelled` state'i bir
+  kare görünüp sonra silinir); bu yüzden ölüm rengi mood'a değil nötr bir sabite bağlandı.
+- **`LivingScene.tsx`:** `runs` store'dan çekilip `<Tesseract>`'a geçiriliyor.
+- **Test:** 382→**392** (+10: `satellites.test.ts` YENİ — mood eşlemesi, yeni uydu/spawn,
+  angleSeed korunumu, ölüm animasyonuna giriş, ölüm sırasında diriliş, kapasite sınırı,
+  spawnT/dieT ilerlemesi + despawn raporu, canlı uydunun etkilenmemesi). `pnpm build && pnpm
+  test && pnpm lint` temiz (49 dosya/392 test; `ui:build` prod paketi de sorunsuz derledi).
+- **`ROADMAP.md` senkronu:** Faz 3 başlığına `✅ 2026-07-05` eklendi (tüm maddeleri zaten [x]'ti,
+  yalnız başlık tarihi eksikti); Faz 6 başlığı `✅ 2026-07-10 (ADR-016, Z1-Z5 tamamı)` oldu;
+  "Bağlam Haritası" maddesi `[x]`'lendi (Z4/Z5 + Canlı bulgu #4 notuyla); Faz 4'ün "yaşam formu"
+  notu yukarıdaki gibi ✅'lendi.
+- **Görsel doğrulama KULLANICIYA** (`desktop:dev`, Bash'ten 3D sahne görülemez): en az bir agent
+  koşusu başlatıp tesseract'ın etrafında yörüngelenen ayrı bir uydunun (mood rengiyle) belirip,
+  koşu bitince kısa bir parlayıp söndüğünü görmek yeterli; `run_agent` ile devretme varsa çocuk
+  uydunun daha küçük olduğu da doğrulanmalı.
+
+**Sıradaki:** yok — küçük cilalar da bitti. Faz 7 (Paketleme) ya da Faz 8 (Kendini geliştiren
+Symphony) arasında kullanıcıyla birlikte karar verilecek (önceki turda Faz 7 önerilmişti).
 
 ## Canlı bulgu #4 (2026-07-10, Sonnet): ui webview REST'e `fetch()`+Bearer ile erişemiyordu — CORS eksikti, DÜZELTİLDİ
 
