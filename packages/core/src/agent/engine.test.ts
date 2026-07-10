@@ -49,6 +49,16 @@ function turn(content: ContentPart[]): GenerateResult {
   } as unknown as GenerateResult;
 }
 
+/** Token tavanına çarpmış tur: metin akar ama `finishReason: "length"` ile YARIM biter. */
+function truncatedTurn(partialText: string): GenerateResult {
+  return {
+    finishReason: { unified: "length" },
+    usage: { inputTokens: { total: 5 }, outputTokens: { total: 7 } },
+    content: [text(partialText)],
+    warnings: [],
+  } as unknown as GenerateResult;
+}
+
 /**
  * Scripted `turn()`'ü AI SDK v3 doStream part akışına çevirir (ADR-012 streamText göçü):
  * stream-start → (text-start/delta/end | tool-call)* → finish{usage,finishReason}.
@@ -271,6 +281,10 @@ class CaptureBus extends EventBus {
 
 const openStores: DataStore[] = [];
 
+/** Testlerin varsayılan token tavanı — gerçek config default'undan (8192) bilinçle FARKLI:
+ *  "geçen değer config'ten mi geliyor" iddiası sabitlerin çakışmasıyla gizlenmesin. */
+const TEST_MAX_OUTPUT_TOKENS = 4321;
+
 function makeEngine(
   script: Array<GenerateResult | ErrorTurnEntry | DeferredTurnEntry>,
   memoryProfile: string | null = null,
@@ -296,6 +310,7 @@ function makeEngine(
     mcpServersFile: join(home, `mcp-servers-${Date.now()}-${Math.random()}.json`),
     pickModel: () => Promise.resolve(null),
     loadMemoryProfile: () => memoryProfile,
+    maxOutputTokens: TEST_MAX_OUTPUT_TOKENS,
   });
   return { engine, bus, store, permissionsFile, adapter };
 }
@@ -330,6 +345,20 @@ tools: [read_file]
 maxSteps: 3
 ---
 Damıtıcı test agent'ısın.`,
+    "utf8",
+  );
+  // Kaçak üretim sigortası: frontmatter'daki tavan config'inkini (TEST_MAX_OUTPUT_TOKENS) ezmeli.
+  writeFileSync(
+    join(home, "agents", "tavanli.md"),
+    `---
+name: tavanlı
+description: kendi maxOutputTokens tavanı olan test agent
+provider: fake
+model: fake-1
+maxSteps: 3
+maxOutputTokens: 99
+---
+Tavanlı test agent'ısın.`,
     "utf8",
   );
   writeFileSync(
@@ -768,6 +797,59 @@ describe("AgentEngine — rapor §5.4: akış ortasında sağlayıcı hatası", 
     expect(streamed).toBe("yarım kalan cev");
 
     // Koşu haritada asılı kalmadı (rapor §4.2'nin genel ilkesi: her çıkış yolu temizler).
+    expect(engine.activeRuns()).toHaveLength(0);
+  });
+});
+
+// ---- Kaçak üretim sigortası (SPEC §4; canlı bulgu #1: yerel modelin tekrar döngüsü) ----
+
+/** doStream'e giden çağrı seçeneklerinden tavanı okur (`any` yok — dar cast). */
+const maxOutputTokensOf = (options: unknown): number | undefined =>
+  (options as { maxOutputTokens?: number }).maxOutputTokens;
+
+describe("AgentEngine — çıktı token tavanı", () => {
+  it("config tavanı HER model turuna iletilir (sonlanma garantisi)", async () => {
+    // İki turlu koşu: araç turu + nihai metin — tavan ikisinde de geçmeli, ilkinde değil.
+    const { engine, bus, adapter } = makeEngine([
+      turn([toolCall("read_file", { path: "mevcut.txt" })]),
+      turn([text("bitti")]),
+    ]);
+    await engine.start({ ...START, cwd: workspace });
+    await bus.waitFor("agent.run.completed");
+
+    expect(adapter.prompts).toHaveLength(2);
+    expect(adapter.prompts.map(maxOutputTokensOf)).toEqual([
+      TEST_MAX_OUTPUT_TOKENS,
+      TEST_MAX_OUTPUT_TOKENS,
+    ]);
+  });
+
+  it("agent tanımındaki maxOutputTokens config tavanını EZER", async () => {
+    const { engine, bus, adapter } = makeEngine([turn([text("bitti")])]);
+    await engine.start({ ...START, agentId: "tavanli" });
+    await bus.waitFor("agent.run.completed");
+
+    expect(maxOutputTokensOf(adapter.prompts[0])).toBe(99); // tavanli.md frontmatter
+  });
+
+  it("KABUL: tavana çarpan tur (finishReason:'length') → failed(AGENT_MAX_OUTPUT_TOKENS); kesik metin 'nihai cevap' SANILMAZ ama harcanan token deftere yazılır", async () => {
+    const { engine, bus, store } = makeEngine([truncatedTurn("bir bir bir bir bir")]);
+    await engine.start(START);
+
+    const failed = await bus.waitFor("agent.run.failed");
+    expect(failed.error.code).toBe("AGENT_MAX_OUTPUT_TOKENS");
+    // Asıl tehlike buydu: kesik metin sessizce completed olarak sunulmamalı.
+    expect(bus.emitted.some((e) => e.type === "agent.run.completed")).toBe(false);
+
+    // Kesik metin yine de kullanıcıya aktı (PROVIDER_STREAM_ERROR ile aynı ilke).
+    const streamed = bus.emitted
+      .filter((e) => e.type === "agent.delta")
+      .map((e) => (e.payload as { text: string }).text)
+      .join("");
+    expect(streamed).toBe("bir bir bir bir bir");
+
+    // Token GERÇEKTEN harcandı → maliyet defterinde görünür (throw usage kaydından SONRA).
+    expect(store.usageTotals("fake", "fake-1").outputTokens).toBe(7);
     expect(engine.activeRuns()).toHaveLength(0);
   });
 });

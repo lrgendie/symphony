@@ -63,6 +63,11 @@ export interface AgentEngineDeps {
   pickModel(task: string): Promise<{ provider: string; model: string } | null>;
   /** ADR-013: kullanıcı profilini taze okur (null = yok/kapalı) — agent'lar buradan YAZAMAZ. */
   loadMemoryProfile(): string | null;
+  /**
+   * Kaçak üretim sigortası (SPEC §4): tur başına token tavanı, `config.limits.maxOutputTokens`.
+   * Agent tanımındaki `maxOutputTokens` bunu ezer. Zorunlu — sessiz varsayılan yok.
+   */
+  maxOutputTokens: number;
 }
 
 interface PendingPermissionInternal {
@@ -537,6 +542,9 @@ export class AgentEngine {
           : { role: "user", content: m.content },
       );
 
+      // Kaçak üretim sigortası (SPEC §4): agent tanımı > config. Koşu boyunca sabit.
+      const maxOutputTokens = definition.maxOutputTokens ?? this.deps.maxOutputTokens;
+
       for (;;) {
         this.transition(run, "thinking");
         const turnStartedAt = Date.now();
@@ -547,6 +555,7 @@ export class AgentEngine {
           tools: sdkTools,
           messages,
           abortSignal: run.abort.signal,
+          maxOutputTokens,
           // ADR-008: temperature yalnız kabul eden sağlayıcılara iletilir (chat ile aynı kural).
           ...(adapter.forwardsTemperature ? { temperature: definition.temperature } : {}),
         });
@@ -564,13 +573,26 @@ export class AgentEngine {
         // promise'lerini REDDETMEZ; SDK bunu `finishReason:"error"` ile "normal" tamamlanmış
         // gibi döner. Kontrol edilmezse motor bunu BOŞ bir "completed" sonucu sanırdı —
         // burada açıkça fırlatılıp mevcut failed yoluna (catch → agent.run.failed) yönlendirilir.
-        if ((await result.finishReason) === "error") {
+        const finishReason = await result.finishReason;
+        if (finishReason === "error") {
           throw new AgentError(
             "PROVIDER_STREAM_ERROR",
             "Sağlayıcı akışı hata ile bitti (finishReason: error) — model turu tamamlanamadı",
           );
         }
         this.recordTurnUsage(run, await result.usage, turnStartedAt);
+        // Kaçak üretim sigortası (SPEC §4, canlı bulgu #1): tavana çarpan tur YARIM'dır —
+        // metni kesik, varsa araç çağrısı bozuk. Sessizce "nihai cevap" saymak, kullanıcıya
+        // kesik bir yanıtı tamammış gibi göstermek olurdu. Usage'ı ÖNCE kaydediyoruz:
+        // token gerçekten harcandı, maliyet defterinde görünmeli. Sonra koşuyu düşürüyoruz.
+        if (finishReason === "length") {
+          throw new AgentError(
+            "AGENT_MAX_OUTPUT_TOKENS",
+            `Kaçak üretim sigortası: model turu ${maxOutputTokens} token tavanına çarptı ` +
+              `(cevap yarım kaldı). Tavanı config.json'daki limits.maxOutputTokens ya da ` +
+              `agent tanımındaki maxOutputTokens ile yükseltebilirsin.`,
+          );
+        }
         // Telemetri: rate-limit her turda en taze; cache token'ları koşu boyunca birikir.
         const cache = extractCacheTokens(await result.providerMetadata);
         run.cacheReadTokens += cache.read;

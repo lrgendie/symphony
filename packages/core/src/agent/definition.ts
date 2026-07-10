@@ -36,6 +36,12 @@ export const AgentFrontmatterSchema = z
     mcpServers: z.array(z.string().min(1)).default([]),
     // Döngü sigortası (SPEC §4).
     maxSteps: z.number().int().positive().max(500).default(50),
+    /**
+     * Kaçak üretim sigortası (SPEC §4): tek model turunun üretebileceği en fazla token.
+     * Verilmezse `config.limits.maxOutputTokens` geçerlidir — bu yüzden `.optional()`,
+     * `.default()` DEĞİL (varsayılan burada değil, config'te tek yerde durur).
+     */
+    maxOutputTokens: z.number().int().positive().max(200_000).optional(),
   })
   .strip();
 

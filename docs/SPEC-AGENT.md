@@ -87,6 +87,15 @@ Sen Symphony'nin kod agent'ısın. <sistem prompt'u buraya>
 
 - **Araç hatası ≠ koşu hatası.** Hata modele döner; model 3 kez üst üste aynı araçta aynı
   hatayı alırsa koşu `failed(AGENT_TOOL_LOOP)` ile kapanır.
+- **Kaçak üretim sigortası.** Her model turu bir çıktı-token tavanıyla çağrılır:
+  agent tanımındaki `maxOutputTokens` (frontmatter, isteğe bağlı) → yoksa
+  `config.json`daki `limits.maxOutputTokens` (varsayılan 8192). Tur tavana çarparsa
+  (`finishReason: "length"`) cevap YARIM'dır — kesik metni "nihai cevap" saymak yerine koşu
+  `failed(AGENT_MAX_OUTPUT_TOKENS)` ile kapanır; harcanan token'lar yine de usage'a yazılır.
+  Gerekçe (canlı bulgu #1, 2026-07-10): `temperature: 0`daki küçük yerel modeller uzun/
+  yapılandırılmış isteklerde tekrar döngüsüne girip durma token'ı hiç üretmeyebiliyor
+  (gözlenen: 15+ dk boyunca GPU %98'de takılı kalan bir koşu). `maxSteps` araç döngüsünü,
+  bu tavan TEK BİR TURUN sonlanmasını garanti eder — ikisi farklı kaçış yollarını kapatır.
 - İptal (`agent.cancel`): koşan araç varsa süreç öldürülür (`SIGTERM`→5sn→`SIGKILL`),
   durum `cancelled`, o ana dek yapılan dosya değişiklikleri GERİ ALINMAZ (bkz. §7 kayıt).
 - Daemon yeniden başlarsa: yarım koşular `failed(AGENT_DAEMON_RESTART)` işaretlenir;

@@ -189,6 +189,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       return first === undefined ? null : { provider: first.provider, model: first.model };
     },
     loadMemoryProfile,
+    maxOutputTokens: config.limits.maxOutputTokens,
   });
 
   async function buildSnapshot(): Promise<Snapshot> {
@@ -225,9 +226,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         model: payload.model,
         messages: payload.messages,
         temperature: payload.options.temperature,
-        ...(payload.options.maxTokens !== undefined
-          ? { maxTokens: payload.options.maxTokens }
-          : {}),
+        // Kaçak üretim sigortası (canlı bulgu #1): istemci bir tavan vermezse config'inki
+        // uygulanır — sohbet de agent turları gibi SONLANMASI garanti bir üst sınıra sahiptir.
+        maxTokens: payload.options.maxTokens ?? config.limits.maxOutputTokens,
         ...(profile !== null ? { instructions: formatProfileContext(profile) } : {}),
         abortSignal: abort.signal,
       });

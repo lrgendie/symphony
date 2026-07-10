@@ -70,7 +70,8 @@ protokol WS/REST üzerinden konuşulur.
   `readProfileSnapshot`/`writeProfile` (M2, REST GET/PUT — TAM içerik, `truncated` yalnız uyarı)
 - `secrets/secret-store.ts` — OS keychain + env yedek; anahtar DİSKE YAZILMAZ
 - `config/paths.ts` — `~/.symphony` yol haritası (SYMPHONY_HOME ile taşınır)
-- `config/config.ts` — config.json yükleme
+- `config/config.ts` — config.json yükleme (`daemon`/`defaults`/`memory`/`desktop` +
+  `limits.maxOutputTokens`: kaçak üretim sigortasının TEK varsayılan kaynağı, vars. 8192)
 - `agent/` — Faz 3 agent motoru (SPEC-AGENT.md'nin uygulaması):
   - `errors.ts` — `AgentError` (error.name = protokol hata kodu)
   - `jail.ts` — `WorkspaceJail`: path.resolve+realpath+kök kapsama; kaçış = PERMISSION_JAIL
@@ -93,7 +94,10 @@ protokol WS/REST üzerinden konuşulur.
     (2.2 awaiting_user+agent.say çok-tur, 2.3 birleşik TUI — bkz. ADR-012 + DURUM Dilim 2).
     M1 profil enjeksiyonu (`loadMemoryProfile`) TÜM agent'lara uygulanır — TEK istisna:
     `definition.id === "damitici"` (M3) hiç almaz (canlı bulgu: aksi hâlde arşiv damıtması
-    zaten bilinen profille kirlenir, "arşivden yeni ne çıktı" ayrımı kaybolur)
+    zaten bilinen profille kirlenir, "arşivden yeni ne çıktı" ayrımı kaybolur).
+    **İKİ sigorta (SPEC §4):** `maxSteps` araç döngüsünü, `maxOutputTokens` (tanım → config)
+    TEK BİR TURUN sonlanmasını garanti eder; tavana çarpan tur `finishReason:"length"` →
+    `AGENT_MAX_OUTPUT_TOKENS` ile failed (usage ÖNCE kaydedilir — token harcandı)
 
 ### packages/cli/src — symphony komutu
 - `index.ts` — commander kayıtları; argümansız → TUI

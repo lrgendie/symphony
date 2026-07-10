@@ -33,6 +33,19 @@ export const ConfigSchema = z
       })
       .strip()
       .default({}),
+    /**
+     * Kaçak üretim sigortası (canlı bulgu #1, 2026-07-10): `temperature:0`daki küçük yerel
+     * modeller uzun/yapılandırılmış isteklerde tekrar döngüsüne girip DURMA token'ı hiç
+     * üretmeyebiliyor (gözlenen: 15+ dk GPU %98). Bu tavan hem agent turlarına hem sohbete
+     * uygulanır — koşunun SONLANMASINI garanti eder. Agent tanımı (`maxOutputTokens`
+     * frontmatter) ve `chat.start.options.maxTokens` bu değeri ezebilir.
+     */
+    limits: z
+      .object({
+        maxOutputTokens: z.number().int().positive().max(200_000).default(8192),
+      })
+      .strip()
+      .default({}),
   })
   .strip();
 

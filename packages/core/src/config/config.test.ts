@@ -19,7 +19,19 @@ describe("config", () => {
     expect(config.daemon.port).toBe(7770);
     expect(config.defaults.provider).toBe("anthropic");
     expect(config.desktop.autoLaunch).toBe(true); // Faz 4: varsayılan açık
+    expect(config.limits.maxOutputTokens).toBe(8192); // kaçak üretim sigortası
     expect(existsSync(paths.configFile)).toBe(true);
+  });
+
+  it("limits.maxOutputTokens dosyadan ezilir; geçersiz değer (0) reddedilir", () => {
+    mkdirSync(testHome, { recursive: true });
+    const paths = getSymphonyPaths(testHome);
+    writeFileSync(paths.configFile, JSON.stringify({ limits: { maxOutputTokens: 16384 } }));
+    expect(loadConfig(paths).limits.maxOutputTokens).toBe(16384);
+
+    // Sigortayı fiilen kapatan bir değer sessizce kabul edilmemeli.
+    writeFileSync(paths.configFile, JSON.stringify({ limits: { maxOutputTokens: 0 } }));
+    expect(() => loadConfig(paths)).toThrow();
   });
 
   it("desktop.autoLaunch dosyada false ise ezilir", () => {

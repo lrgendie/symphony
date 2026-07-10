@@ -3,7 +3,55 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Sonnet — Dilim P3 BİTTİ ve testli, 315 test; **Faz 4 ✅ TAMAMEN KAPANDI**)
+**Son güncelleme:** 2026-07-10 (Opus — kaçak üretim sigortası: `maxOutputTokens` tavanı, 320 test)
+
+## Kaçak üretim sigortası: `maxOutputTokens` tavanı BİTTİ (2026-07-10, Opus)
+
+Canlı bulgu #1'in (qwen3:8b'nin 15+ dk GPU %98'de takılı kalması) açık bıraktığı **teorik risk
+kapatıldı**: agent ve sohbet turlarının HİÇBİRİNDE çıktı-token tavanı yoktu → durma token'ı hiç
+gelmezse koşu context dolana dek sürebiliyordu. Protokolsüz (yeni WS mesajı/olayı YOK).
+- **`config.ts`:** `limits.maxOutputTokens` (vars. **8192**, `1..200_000`). Tek varsayılan kaynağı.
+- **`definition.ts`:** frontmatter `maxOutputTokens?` — **`.optional()`, `.default()` DEĞİL**
+  (burada default olsaydı config'inki hiç uygulanmazdı). `maxSteps` ile simetrik sigorta.
+- **`engine.ts`:** `AgentEngineDeps.maxOutputTokens` (ZORUNLU — sessiz varsayılan yok); koşu
+  başında `definition.maxOutputTokens ?? deps.maxOutputTokens` çözülür, HER `streamText` turuna
+  geçer. `finishReason === "length"` → `AgentError("AGENT_MAX_OUTPUT_TOKENS")`. **Sıra önemli:**
+  `recordTurnUsage` ÖNCE çağrılır, sonra throw — token gerçekten harcandı, maliyet defterinde
+  görünmeli. Kesik metni sessizce "nihai cevap" saymak (eski davranış) kullanıcıya yarım yanıtı
+  tamammış gibi gösterirdi.
+- **`daemon.ts`:** motora tavan enjekte edilir; sohbet yolunda `payload.options.maxTokens ??
+  config.limits.maxOutputTokens` (istemci ezebilir, vermezse sigorta yine de var).
+- **Belgeler:** SPEC-AGENT §4'e sigorta + gerekçe + hata kodu; PROTOKOL.md `chat.start` satırına
+  "maxTokens verilmezse config tavanı uygulanır" notu.
+- **Test:** 315→**320** (engine +3: config tavanı HER turda iletiliyor · frontmatter config'i
+  eziyor · `length` → failed(AGENT_MAX_OUTPUT_TOKENS) + completed YOK + kesik metin delta'da
+  kaybolmuyor + usage deftere yazılmış; config +1: default 8192 & `0` reddediliyor;
+  definition +1: frontmatter okunuyor & yoksa `undefined`). `pnpm build && pnpm test && pnpm lint`
+  temiz (43 dosya/320 test).
+- **GERÇEK SAĞLAYICIYA KARŞI DOĞRULANDI (izole script, mock değil):** rapor §5.4 dersi gereği
+  (“kaynak okuması yanıltıcıydı”) Ollama'ya doğrudan soruldu — `maxOutputTokens:16` →
+  `finishReason:"length"`, `outputTokens=16` (tavana **harfiyen** uyuyor); tavansız → `"stop"`,
+  463 token. Yani motorun beklediği `"length"` değeri gerçekte geliyor.
+  - **Yan gözlem:** tavan=16'da `chars=0` — qwen3 16 token'ın tamamını `<think>` muhakemesinde
+    harcadı, `textStream` hiç metin vermedi. Muhakeme yapan modellerde ÇOK düşük bir tavan boş
+    cevap + AGENT_MAX_OUTPUT_TOKENS üretir (doğru davranış, ama 8192 varsayılanı bu bütçenin
+    rahatça üstünde).
+- **Bilinçli kapsam sınırı:** tavan tek turun SONLANMASINI garanti eder (qwen3:8b'de 8192 token
+  ≈ birkaç dakika üst sınır), ama "duvar saati zaman aşımı" EKLENMEDİ. Gerekçe: Dilim O1'de
+  bulunan `AbortSignal`'ın ham `streamText` tüketimini gerçekten kesmediği sorunu hâlâ açık —
+  bir zaman aşımı bugün ÇALIŞMAYABİLİR. Önce o araştırılmalı (ayrı dilim), tavan onsuz da
+  bağımsız bir kazanç.
+- **CANLI DOĞRULAMA TAMAMLANDI (daemon restart + gerçek qwen3:8b koşuları, HER İKİ öncelik dalı):**
+  1. *Agent tanımı dalı:* geçici `tavan-testi.md` (frontmatter `maxOutputTokens: 32`) →
+     `symphony agent tavan-testi` → `✘ koşu başarısız: AGENT_MAX_OUTPUT_TOKENS` ("32 token
+     tavanına çarptı"), CLI sıfır-dışı çıkış kodu.
+  2. *Config dalı (asıl doğrulanmamış halka: daemon→engine):* config'e geçici
+     `limits.maxOutputTokens: 32` + restart → frontmatter tavanı OLMAYAN `asistan` agent'ı
+     AYNI hatayla düştü → `config.limits` gerçekten motora geçiyor.
+  3. *Regresyon:* config yedekten geri yüklendi (varsayılan 8192), geçici agent silindi,
+     daemon restart → normal `asistan` koşusu sorunsuz `✔ tamamlandı` (835+206 token) —
+     sigorta sıradan işleri KIRMIYOR.
+  Kullanıcının `config.json`'ı ve `agents/` dizini bozulmadan eski hâline döndürüldü.
 
 ## Faz 4 — Dilim P3 (masaüstü roadmap paneli + kapanış) BİTTİ (2026-07-10, Sonnet)
 
@@ -465,11 +513,13 @@ kimliği olmadığını açıkça söylemiyordu. Küçük/yerel modellerde (öze
   uzun/yapılandırılmış bir istek qwen3:8b'yi 15+ dakika GPU %96-98/86-87°C'de "yazıyor…" durumunda
   TIKADI (donmuş değil — `ollama ps` aktif üretim gösteriyordu, ama bitmiyordu). Şüphe: küçük
   yerel modelde `temperature:0` + uzun/tekrarlı-yapılı metin isteği → tekrar döngüsü (durma
-  token'ı hiç gelmiyor). `engine.ts`'in `streamText` çağrısında (satır ~361) `maxOutputTokens`
-  GİBİ bir güvenlik tavanı YOK — teorik olarak model context'i dolana kadar sürebilir. Kullanıcıya
-  Esc/Ctrl+C ile iptal tavsiye edildi. **Kesin kök neden BULUNMADI** (bu, ayrı bir olası dilim:
-  agent/chat streamText çağrılarına makul bir `maxOutputTokens` tavanı eklemek + tekrar-döngüsü
-  tespiti — kullanıcıyla konuşulup istenirse ayrı iş olarak açılmalı, şimdi kapsam dışı bırakıldı).
+  token'ı hiç gelmiyor). `engine.ts`'in `streamText` çağrısında `maxOutputTokens` GİBİ bir
+  güvenlik tavanı YOKTU — teorik olarak model context'i dolana kadar sürebilirdi. Kullanıcıya
+  Esc/Ctrl+C ile iptal tavsiye edildi. **Kesin kök neden BULUNMADI.**
+  - ✅ **Tavan kısmı 2026-07-10'da YAPILDI** (bkz. dosyanın başındaki "Kaçak üretim sigortası"
+    bölümü): artık her tur `config.limits.maxOutputTokens` (vars. 8192) ile sınırlı → koşunun
+    sonlanması garanti. **Hâlâ açık:** tekrar-döngüsü TESPİTİ (tavan döngüyü önlemez, bitirir)
+    ve duvar-saati zaman aşımı (O1'in AbortSignal bulgusuna bağımlı).
 
 ## Öncelik #3 — Uzun-dönem hafıza: Dilim M2 (REST + CLI + TUI yüzeyi) BİTTİ (2026-07-10, Sonnet)
 

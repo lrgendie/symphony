@@ -43,6 +43,17 @@ Sistem prompt'u burada.`,
     expect(def.temperature).toBe(0);
     expect(def.tools).toHaveLength(6);
     expect(def.maxSteps).toBe(50);
+    // Kaçak üretim sigortası: tanımda YOKSA undefined kalır — varsayılan config'in tekelinde
+    // (burada bir default olsaydı config.limits.maxOutputTokens hiçbir zaman uygulanmazdı).
+    expect(def.maxOutputTokens).toBeUndefined();
+  });
+
+  it("maxOutputTokens frontmatter'dan okunur; pozitif tamsayı olmayan değer reddedilir", () => {
+    const def = parseAgentMarkdown("t", `---\nname: t\nmaxOutputTokens: 2048\n---\nP`);
+    expect(def.maxOutputTokens).toBe(2048);
+    expect(() => parseAgentMarkdown("t", `---\nname: t\nmaxOutputTokens: 0\n---\nP`)).toThrowError(
+      AgentError,
+    );
   });
 
   it("frontmatter yoksa / bilinmeyen araç varsa AGENT_DEFINITION_INVALID", () => {

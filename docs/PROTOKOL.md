@@ -70,7 +70,7 @@ Tüm WS mesajları tek zarf tipindedir:
 |---|---|---|
 | `hello` | `{ token, client: "cli"\|"desktop"\|"web", protocolVersion }` | İlk mesaj. Cevap: `hello.ok { daemonVersion, protocolVersion, snapshot }` |
 | `state.sync` | `{}` | Tam durum anlık görüntüsü iste (yeniden bağlanmada) |
-| `chat.start` | `{ sessionId?, provider, model, messages[], options? }` | Sohbet başlat. `options: { temperature? (vars. 0), maxTokens? }` |
+| `chat.start` | `{ sessionId?, provider, model, messages[], options? }` | Sohbet başlat. `options: { temperature? (vars. 0), maxTokens? }`. `maxTokens` verilmezse daemon `config.json`daki `limits.maxOutputTokens` tavanını uygular (kaçak üretim sigortası; bkz. SPEC-AGENT §4) |
 | `chat.cancel` | `{ sessionId }` | Akışı durdur |
 | `agent.start` | `{ agentId, task, cwd, model?, provider?, conversational?, sessionId? }` | Agent görevi başlat (agentId = `~/.symphony/agents/` tanımı). `conversational: true` (ADR-012) → koşu tur bitince `completed` yerine `awaiting_user`'a park olur, `agent.say` ile sürer. `sessionId` (Dilim 2.3b, yalnız `conversational` ile anlamlı) → o oturuma DEVAM: daemon geçmiş user/assistant mesajlarını bağlama tohumlar, konuşma aynı oturuma yazılır. Cevap: `agent.start.ok { runId, sessionId }` (konuşmalı koşunun yazdığı oturum; verilmezse daemon üretir) |
 | `agent.say` | `{ runId, text }` | Konuşmalı koşuya (ADR-012) sonraki kullanıcı turunu ekle — koşu `awaiting_user`'dayken; `thinking`'e geçip devam eder. Koşu `awaiting_user` değilse `AGENT_NOT_AWAITING_USER`, tanınmıyorsa `AGENT_UNKNOWN_RUN` hatası döner |
