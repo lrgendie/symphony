@@ -155,13 +155,27 @@ interface DeferredStreamController {
   finish(): void;
 }
 
-function deferredStream(): { stream: ReadableStream<unknown>; controller: DeferredStreamController } {
+/**
+ * `abortSignal` GERÇEK sağlayıcıdaki gibi onurlandırılır (2026-07-10 teşhisi): üretimde sinyal
+ * alttaki `fetch`'e iner, bağlantı kopar ve akış AbortError ile ölür — Ollama'ya karşı izole
+ * ölçümle doğrulandı (abort → döngü çıkışı 2ms, `result.usage` AbortError ile reddediyor).
+ * Bu mock önceden sinyali HİÇ dinlemiyordu; bu yüzden akış ortasında iptal edilen sahte koşular
+ * sonsuza dek asılı kalıyor, "AbortSignal streamText'i kesmiyor" YANILGISINA yol açıyordu
+ * (Dilim O1 notu). Yanılgı mock'a aitti; üretim yolu doğruydu.
+ */
+function deferredStream(abortSignal?: AbortSignal): {
+  stream: ReadableStream<unknown>;
+  controller: DeferredStreamController;
+} {
   let ctrl: ReadableStreamDefaultController<unknown> | null = null;
   let textId = 0;
   const stream = new ReadableStream<unknown>({
     start(controller) {
       ctrl = controller;
       controller.enqueue({ type: "stream-start", warnings: [] });
+      abortSignal?.addEventListener("abort", () => {
+        controller.error(new DOMException("The operation was aborted.", "AbortError"));
+      });
     },
   });
   return {
@@ -215,7 +229,9 @@ class FakeAdapter implements ProviderAdapter {
         const next = script.shift();
         if (next === undefined) throw new Error("senaryo bitti ama model yine çağrıldı");
         if (isDeferredTurn(next)) {
-          const { stream, controller } = deferredStream();
+          // Sinyali akışa BAĞLA: gerçek sağlayıcı da abortSignal'ı fetch'e indirir.
+          const { abortSignal } = options as { abortSignal?: AbortSignal };
+          const { stream, controller } = deferredStream(abortSignal);
           deferred.push(controller);
           return Promise.resolve({ stream });
         }
@@ -854,6 +870,41 @@ describe("AgentEngine — çıktı token tavanı", () => {
   });
 });
 
+// ---- Akış ortasında iptal: "Esc gerçekten durduruyor mu" güven sözleşmesi ----
+
+describe("AgentEngine — model turu akış ORTASINDAYKEN iptal", () => {
+  it("KABUL: akan bir model turu cancel edilince koşu 'cancelled' olur (completed/failed DEĞİL) ve o ana dek akan metin kaybolmaz", async () => {
+    // Dilim O1'de bu senaryo "test altyapısında güvenilir değil" diye ATLANMIŞTI ve bundan
+    // yanlışlıkla "AbortSignal streamText'i kesmiyor" sonucu çıkarılmıştı. 2026-07-10'da gerçek
+    // Ollama'ya karşı ölçüldü: abort → döngü çıkışı 2ms; canlı daemon'da agent.cancel → cancelled
+    // 5ms. Yanılgı mock'un sinyali dinlememesiydi; artık dinliyor → senaryo test edilebilir.
+    const { engine, bus, adapter } = makeEngine([deferredTurn()]);
+    const { runId } = await engine.start(START);
+
+    // Model gerçekten çağrıldı ve akış başladı (yarış yok: kontrolör doğduysa streamText içerde).
+    await waitUntil(() => adapter.deferred.length > 0);
+    adapter.deferred[0]?.pushText("yarım kalan cev");
+    await bus.waitFor("agent.delta");
+
+    // Tur BİTMEDEN (finish() hiç çağrılmadan) iptal — kullanıcının Esc'e bastığı an.
+    engine.cancel(runId);
+
+    await waitState(bus, "cancelled", 1);
+    expect(bus.emitted.some((e) => e.type === "agent.run.completed")).toBe(false);
+    expect(bus.emitted.some((e) => e.type === "agent.run.failed")).toBe(false);
+
+    // İptal öncesi akan kısmi metin kullanıcıda kalır (batcher flush güvenlik ağı).
+    const streamed = bus.emitted
+      .filter((e) => e.type === "agent.delta")
+      .map((e) => (e.payload as { text: string }).text)
+      .join("");
+    expect(streamed).toBe("yarım kalan cev");
+
+    // Koşu haritada asılı kalmadı — iptal her çıkış yolu gibi temizler.
+    expect(engine.activeRuns()).toHaveLength(0);
+  });
+});
+
 // ---- Dilim 2.3b: konuşma kalıcılığı (sessions/messages) + resume ----
 
 const transcript = (store: DataStore, sessionId: string): string[] =>
@@ -1130,11 +1181,12 @@ describe("AgentEngine — Faz 5 (ADR-014): run_agent çoklu agent devretme", () 
   }, 10_000);
 
   it("ebeveyn iptali çocuğu da cancelled yapar (öksüz koşu kalmaz)", async () => {
-    // Not: deferredTurn() ile ham streamText tüketimi ortasında sıkışan bir koşuyu iptal
-    // etmek bu test altyapısında GÜVENİLİR değil (bağımsız doğrulandı — motorun/mock'un
-    // kendi sınırı, run_agent'la ilgisiz). Kanıtlanmış iptal edilebilir durum
-    // awaiting_permission'dır (requestPermission kendi abort dinleyicisini kurar) —
-    // çocuğu oraya düşürüyoruz (write_file, "yazar" hedefi).
+    // Tarihsel not (2026-07-10'da ÇÜRÜTÜLDÜ): burada eskiden "deferredTurn ile akış ortasında
+    // iptal bu altyapıda güvenilir değil" yazıyordu ve bundan "AbortSignal streamText'i
+    // kesmiyor olabilir" sonucu çıkarılmıştı. Yanılgı mock'a aitti — deferredStream sinyali
+    // dinlemiyordu; artık dinliyor (bkz. aşağıdaki "akış ortasında iptal" testi). Bu test yine
+    // de awaiting_permission üzerinden gidiyor: run_agent'ın KASKAD iptalini (çocuğun da
+    // düşmesi) izin kapısında beklerken doğrulamak, ölçmek istediğimiz şeye daha yakın.
     const { engine, bus } = makeEngine([
       turn([toolCall("run_agent", { agent: "yazar", task: "bir şey yaz" })]),
       turn([toolCall("write_file", { path: "cocuk-yazisi.txt", content: "x" })]),

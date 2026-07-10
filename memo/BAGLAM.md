@@ -97,7 +97,12 @@ protokol WS/REST üzerinden konuşulur.
     zaten bilinen profille kirlenir, "arşivden yeni ne çıktı" ayrımı kaybolur).
     **İKİ sigorta (SPEC §4):** `maxSteps` araç döngüsünü, `maxOutputTokens` (tanım → config)
     TEK BİR TURUN sonlanmasını garanti eder; tavana çarpan tur `finishReason:"length"` →
-    `AGENT_MAX_OUTPUT_TOKENS` ile failed (usage ÖNCE kaydedilir — token harcandı)
+    `AGENT_MAX_OUTPUT_TOKENS` ile failed (usage ÖNCE kaydedilir — token harcandı).
+    **İptal:** `abortSignal` akış ortasında GERÇEKTEN keser (2026-07-10 ölçümü: SDK 2ms, canlı
+    daemon 5ms). `textStream` döngüsü sessizce biter, `result.response/usage` AbortError ile
+    reddeder → `catch`'teki `aborted` kontrolü koşuyu `cancelled` yapar. **Mock tuzağı:**
+    `engine.test.ts`'in sahte akışları sinyali ELLE dinlemeli (üretimde `fetch` yapar); dinlemezse
+    koşu asılı kalır ve "SDK abort'u kesmiyor" YANILGISI doğar — O1'de bir kez oldu
 
 ### packages/cli/src — symphony komutu
 - `index.ts` — commander kayıtları; argümansız → TUI
