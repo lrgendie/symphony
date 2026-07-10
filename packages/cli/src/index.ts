@@ -10,6 +10,7 @@ import { memoryDistillCommand, memoryPathCommand, memoryShowCommand } from "./co
 import { agentsCommand } from "./commands/agents.js";
 import { agentRunCommand } from "./commands/agent.js";
 import { addCommand } from "./commands/add.js";
+import { ensureDesktopRunning } from "./client/desktop-launch.js";
 
 const program = new Command();
 
@@ -86,6 +87,9 @@ memory
 // Argümansız `symphony` → TUI (model seçici + sohbet)
 program.action(
   wrap(async () => {
+    // Faz 4: masaüstü de otomatik açılır (kapalıysa, ~/.symphony/config.json → desktop.autoLaunch
+    // ile kapatılabilir) — en iyi gayret, TUI'nin başlamasını asla bloklamaz/kırmaz.
+    ensureDesktopRunning();
     const { runTui } = await import("./tui/app.js");
     await runTui();
   }),

@@ -18,6 +18,7 @@ beforeEach(() => {
     providers: [],
     runs: [],
     runStreams: {},
+    runFiles: {},
     pendingPermissions: [],
     lastErrorAt: null,
     lastCompletedAt: null,
@@ -308,6 +309,73 @@ describe("ui store", () => {
     store.handleEvent("agent.run.state", { runId: RUN, state: "cancelled" });
     expect(useStore.getState().runs).toHaveLength(0); // ZOMBİ satır yok
     expect(useStore.getState().runStreams[RUN]).toBeUndefined();
+  });
+
+  it("Faz 4 'hangi dosya': write_file diff'i İZİN ONAYLANIP kart kapansa da runFiles'ta KALIR", () => {
+    const store = useStore.getState();
+    store.handleEvent("agent.tool.requested", {
+      runId: RUN,
+      requestId: "r1",
+      tool: "write_file",
+      args: { path: "a.txt" },
+      riskClass: "mutating",
+      diff: "--- a.txt\n+++ a.txt\n+yeni satır",
+    });
+    expect(useStore.getState().runFiles[RUN]?.diff).toContain("+yeni satır");
+
+    // İzin cevaplanınca kart (pendingPermissions) temizlenir ama runFiles KALIR.
+    store.handleEvent("permission.resolved", { requestId: "r1", decision: "allow" });
+    expect(useStore.getState().pendingPermissions).toHaveLength(0);
+    expect(useStore.getState().runFiles[RUN]?.diff).toContain("+yeni satır");
+
+    store.handleEvent("agent.tool.completed", {
+      runId: RUN,
+      tool: "write_file",
+      ok: true,
+      resultSummary: "Yazıldı: a.txt (9 karakter)",
+      durationMs: 5,
+    });
+    expect(useStore.getState().runFiles[RUN]?.result).toContain("Yazıldı");
+    expect(useStore.getState().runFiles[RUN]?.diff).toContain("+yeni satır"); // hâlâ duruyor
+  });
+
+  it("Faz 4 'hangi dosya': read_file (izin istemez) started'tan başlık, completed'tan sonuç önizlemesi alır", () => {
+    const store = useStore.getState();
+    store.handleEvent("agent.tool.started", {
+      runId: RUN,
+      tool: "read_file",
+      argsSummary: "read_file a.txt",
+    });
+    expect(useStore.getState().runFiles[RUN]).toMatchObject({ tool: "read_file", summary: "read_file a.txt" });
+    expect(useStore.getState().runFiles[RUN]?.diff).toBeUndefined(); // read_file'da diff YOK
+
+    store.handleEvent("agent.tool.completed", {
+      runId: RUN,
+      tool: "read_file",
+      ok: true,
+      resultSummary: "dosya içeriği burada",
+      durationMs: 2,
+    });
+    expect(useStore.getState().runFiles[RUN]?.result).toBe("dosya içeriği burada");
+  });
+
+  it("Faz 4 'hangi dosya': dosya-dışı araçlar (glob/grep) runFiles'ı hiç DOKUNMAZ", () => {
+    const store = useStore.getState();
+    store.handleEvent("agent.tool.started", { runId: RUN, tool: "glob", argsSummary: "glob *.ts" });
+    expect(useStore.getState().runFiles[RUN]).toBeUndefined();
+  });
+
+  it("Faz 4 'hangi dosya': koşu tamamlanınca/başarısız olunca runFiles temizlenir", () => {
+    const store = useStore.getState();
+    store.handleEvent("agent.tool.started", { runId: RUN, tool: "read_file", argsSummary: "read_file a.txt" });
+    expect(useStore.getState().runFiles[RUN]).toBeDefined();
+
+    store.handleEvent("agent.run.completed", {
+      runId: RUN,
+      result: "bitti",
+      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+    });
+    expect(useStore.getState().runFiles[RUN]).toBeUndefined();
   });
 });
 

@@ -42,6 +42,20 @@ const MAX_LOG = 200;
 const MAX_RUN_STREAM_CHARS = 2000;
 let logSeq = 0;
 
+/** Faz 4 "hangi dosya" zengin görünümü: yalnız dosya-dokunan araçlar için önizleme tutulur. */
+const FILE_TOOLS = new Set(["read_file", "write_file", "edit"]);
+
+/** Koşu satırının altında kalıcı gösterilen dosya önizlemesi (izin kartı kapansa da kaybolmaz). */
+export interface RunFilePreview {
+  tool: string;
+  /** started/requested anındaki argüman özeti (ör. "read_file a.txt") — başlık olarak gösterilir. */
+  summary: string;
+  /** write_file/edit: izin isteğindeki birleşik diff. read_file'da yok (izin istemez). */
+  diff?: string;
+  /** Araç tamamlandıktan sonra sonucun kısa önizlemesi (ör. read_file içeriği, zaten sunucu tarafında kısaltılmış/maskelenmiş). */
+  result?: string;
+}
+
 interface UiState {
   status: ConnStatus;
   error: string | null;
@@ -50,6 +64,8 @@ interface UiState {
   runs: ActiveRun[];
   /** Koşu başına akışlı asistan metni (agent.delta; ADR-012). Araç başlayınca/koşu bitince temizlenir. */
   runStreams: Record<string, string>;
+  /** Faz 4: koşu başına "hangi dosya" zengin önizlemesi (yalnız read_file/write_file/edit). */
+  runFiles: Record<string, RunFilePreview>;
   pendingPermissions: PendingPermission[];
   /** Son hata anı (ms) — yaşayan tesseract kısa bir "kırmızı flaş" için okur (scene/mood.ts). */
   lastErrorAt: number | null;
@@ -177,6 +193,14 @@ export const useStore = create<UiState>((set) => {
       return { runStreams: next };
     });
 
+  const clearRunFile = (runId: string): void =>
+    set((state) => {
+      if (!(runId in state.runFiles)) return {};
+      const next = { ...state.runFiles };
+      delete next[runId];
+      return { runFiles: next };
+    });
+
   return {
     status: "connecting",
     error: null,
@@ -184,6 +208,7 @@ export const useStore = create<UiState>((set) => {
     providers: [],
     runs: [],
     runStreams: {},
+    runFiles: {},
     pendingPermissions: [],
     lastErrorAt: null,
     lastCompletedAt: null,
@@ -213,6 +238,7 @@ export const useStore = create<UiState>((set) => {
         runs: snapshot.runs,
         // Bayat akış metnini temizle — koşular snapshot'tan taze gelir, deltalar yeniden akar.
         runStreams: {},
+        runFiles: {},
         pendingPermissions: snapshot.pendingPermissions,
         sessionTokens: 0,
         sessionCostUsd: 0,
@@ -267,6 +293,7 @@ export const useStore = create<UiState>((set) => {
             // completed/failed'la aynı davranış (rapor §5.3) — aksi hâlde satır panoda
             // bir sonraki snapshot'a dek "zombi" kalır (görsel fark olmadan asılı durur).
             clearStream(p.runId);
+            clearRunFile(p.runId);
             removeRun(p.runId);
           }
           return;
@@ -280,12 +307,41 @@ export const useStore = create<UiState>((set) => {
         case "agent.tool.started": {
           const p = payload as { runId: string; tool: string; argsSummary: string };
           clearStream(p.runId); // yeni tur başlıyor: önceki turun metnini temizle
+          // Faz 4 "hangi dosya": requested'tan gelen diff varsa KORU (izin kartı kapanınca da
+          // kaybolmasın); yoksa (ör. read_file — izin istemez) taze başlık ile başlat.
+          if (FILE_TOOLS.has(p.tool)) {
+            set((state) => {
+              const existing = state.runFiles[p.runId];
+              return {
+                runFiles: {
+                  ...state.runFiles,
+                  [p.runId]:
+                    existing?.tool === p.tool
+                      ? existing
+                      : { tool: p.tool, summary: p.argsSummary },
+                },
+              };
+            });
+          }
           pushLog("tool", `⚙ ${short(p.argsSummary)}`);
           return;
         }
         case "agent.tool.completed": {
-          const p = payload as { tool: string; ok: boolean; resultSummary: string; durationMs: number };
+          const p = payload as {
+            runId: string;
+            tool: string;
+            ok: boolean;
+            resultSummary: string;
+            durationMs: number;
+          };
           if (!p.ok) set({ lastErrorAt: Date.now() });
+          if (FILE_TOOLS.has(p.tool)) {
+            set((state) => {
+              const existing = state.runFiles[p.runId];
+              if (existing === undefined || existing.tool !== p.tool) return {};
+              return { runFiles: { ...state.runFiles, [p.runId]: { ...existing, result: p.resultSummary } } };
+            });
+          }
           pushLog(p.ok ? "good" : "bad", `${p.ok ? "✔" : "✘"} ${p.tool} (${p.durationMs}ms) ${short(p.resultSummary, 60)}`);
           return;
         }
@@ -298,6 +354,15 @@ export const useStore = create<UiState>((set) => {
               p,
             ],
           }));
+          // Faz 4 "hangi dosya": write_file/edit'in diff'i İZİN KARTI KAPANSA DA kalıcı kalsın.
+          if (FILE_TOOLS.has(p.tool)) {
+            set((state) => ({
+              runFiles: {
+                ...state.runFiles,
+                [p.runId]: { tool: p.tool, summary: short(JSON.stringify(p.args)), ...(p.diff !== undefined ? { diff: p.diff } : {}) },
+              },
+            }));
+          }
           pushLog("warn", `🔐 izin bekliyor: ${p.tool} [${p.riskClass}]`);
           return;
         }
@@ -313,6 +378,7 @@ export const useStore = create<UiState>((set) => {
           const p = payload as { runId: string; usage: { costUsd: number } };
           removeRun(p.runId);
           clearStream(p.runId);
+          clearRunFile(p.runId);
           set({ lastCompletedAt: Date.now() }); // tesseract converge salvosu (dilim 8)
           pushLog("good", `✔ koşu tamamlandı — $${p.usage.costUsd.toFixed(4)}`);
           return;
@@ -321,6 +387,7 @@ export const useStore = create<UiState>((set) => {
           const p = payload as { runId: string; error: { code: string } };
           removeRun(p.runId);
           clearStream(p.runId);
+          clearRunFile(p.runId);
           set({ lastErrorAt: Date.now() });
           pushLog("bad", `✘ koşu başarısız: ${p.error.code}`);
           return;

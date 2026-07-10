@@ -18,7 +18,15 @@ describe("config", () => {
     const config = loadConfig(paths);
     expect(config.daemon.port).toBe(7770);
     expect(config.defaults.provider).toBe("anthropic");
+    expect(config.desktop.autoLaunch).toBe(true); // Faz 4: varsayılan açık
     expect(existsSync(paths.configFile)).toBe(true);
+  });
+
+  it("desktop.autoLaunch dosyada false ise ezilir", () => {
+    mkdirSync(testHome, { recursive: true });
+    const paths = getSymphonyPaths(testHome);
+    writeFileSync(paths.configFile, JSON.stringify({ desktop: { autoLaunch: false } }));
+    expect(loadConfig(paths).desktop.autoLaunch).toBe(false);
   });
 
   it("dosyadaki değerler varsayılanları ezer, bilinmeyen alanlar atılır", () => {

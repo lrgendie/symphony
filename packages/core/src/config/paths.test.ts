@@ -25,6 +25,7 @@ describe("~/.symphony yapısı", () => {
     expect(paths.daemonTokenFile).toBe(join(testHome, "daemon.token"));
     expect(paths.permissionsFile).toBe(join(testHome, "permissions.json"));
     expect(paths.mcpServersFile).toBe(join(testHome, "mcp-servers.json"));
+    expect(paths.desktopPidFile).toBe(join(testHome, "desktop.pid"));
   });
 
   it("ensureSymphonyHome dizin ağacını oluşturur (idempotent)", () => {

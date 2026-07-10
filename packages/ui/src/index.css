@@ -243,6 +243,24 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* Faz 4 "hangi dosya" zengin görünümü — izin kartı kapansa da kalıcı (write_file/edit diff'i,
+   read_file sonuç önizlemesi); .diff zaten uygun stilde, doğrudan yeniden kullanılır. */
+.run-file {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+}
+.run-file-head {
+  font-size: 0.8rem;
+}
+.run-file-result {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  background: var(--panel-2);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 /* ---- Model panosu (token/maliyet) ---- */
 .usage {

@@ -26,6 +26,8 @@ export interface SymphonyPaths {
   daemonTokenFile: string;
   permissionsFile: string;
   mcpServersFile: string;
+  /** Faz 4: CLI'nin başlattığı masaüstü sürecinin PID'si — yeniden başlatmayı önler. */
+  desktopPidFile: string;
 }
 
 export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPaths {
@@ -43,6 +45,7 @@ export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPath
     daemonTokenFile: join(home, "daemon.token"),
     permissionsFile: join(home, "permissions.json"),
     mcpServersFile: join(home, "mcp-servers.json"),
+    desktopPidFile: join(home, "desktop.pid"),
   };
 }
 

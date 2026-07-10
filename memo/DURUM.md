@@ -3,7 +3,99 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Sonnet — canlı bulgu #3: router vision-modeli yanlış seçiyordu — DÜZELTİLDİ, 288 test)
+**Son güncelleme:** 2026-07-10 (Sonnet — "hangi dosya" zengin görünümü BİTTİ, 297 test; proje görünümü/yol haritası görselleştirme Fable/Opus'a hazır)
+
+## Faz 4 — "Hangi dosya" zengin görünümü BİTTİ (2026-07-10, Sonnet)
+
+- **`ui/store.ts`:** yeni `runFiles: Record<runId, RunFilePreview>` — yalnız dosya-dokunan araçlar
+  (`read_file`/`write_file`/`edit`) için. `agent.tool.requested`'taki diff (write_file/edit) İZİN
+  KARTI KAPANDIKTAN SONRA da kalır (önceden yalnız kart açıkken görünüyordu, onaylanır onaylanmaz
+  kaybolurdu); `read_file` (izin istemez) `agent.tool.started`'tan başlık + `agent.tool.completed`'tan
+  sonuç önizlemesi alır. `agent.run.state:"cancelled"`/`completed`/`failed`'ta `runStreams` ile
+  AYNI anda temizlenir (zombi kalmaz); `applySnapshot`'ta da sıfırlanır.
+- **`App.tsx`:** yeni `RunFile` bileşeni, koşu satırının altında (`run-stream`'in yanında) —
+  mevcut `Diff` bileşenini YENİDEN KULLANIR (kod tekrarı yok).
+- **Test:** 293→**297** (store +4: diff-kalıcılığı, read_file başlık+sonuç, dosya-dışı araçlar
+  dokunmaz, koşu bitince temizlenir). `pnpm build && pnpm test && pnpm lint` temiz (41/297).
+- **Görsel doğrulama KULLANICIYA** (`desktop:dev`, Bash'ten görülemez).
+
+## 📋 SIRADAKİ (Faz 4 kalanı): proje görünümü + yol haritası görselleştirme — Fable/Opus tasarım bekliyor
+
+Kullanıcı onayladı: ikisi de gerçek mimari soru içeriyor (M1-M3/O1-O3'teki gibi "kalıbı
+tekrarlamak" değil), Sonnet doğaçlarsa revize riski var.
+
+**Zaten var olan (doğrulandı, kod okunarak):**
+- `agent.run.started` olayı `cwd`'yi ZATEN taşıyor (`AgentRunStartedPayloadSchema.cwd`) AMA
+  `ActiveRun`/store'un `runs[]`'ı bunu SAKLAMIYOR (yalnız runId/agentId/task/state/model/
+  parentRunId) — "hangi projede" sorusu için cwd'nin store'a taşınması gerekecek (küçük,
+  ADDITIVE: `ActiveRunSchema.cwd?` gibi).
+- SQLite `agent_runs` tablosu (Faz 3'ten beri) her koşunun `cwd`sini ZATEN kalıcı tutuyor —
+  geçmiş/tamamlanmış koşuları "projeye" göre gruplamak için REST'ten sorgulanabilir bir kaynak
+  hazır (yeni uç gerekebilir, `/api/history/*` deseniyle).
+- ROADMAP.md'nin KENDİ formatı: `### Faz N — ...` başlıkları + `- [ ]`/`- [x]`/`- [~]` madde
+  imleri (bu depoda tutarlı kullanılıyor) — parse edilebilir bir düz metin kalıbı zaten var.
+
+**Gerçek açık sorular (tasarım oturumunun karara bağlayacağı):**
+1. **"Proje" Symphony'de ne demek?** (a) cwd'den KENDİLİĞİNDEN çıkarılır (ör. en yakın `.git`
+   kökü ya da `cwd`'nin kendisi) — sıfır kurulum ama isim/etiket yok; (b) kullanıcı açıkça
+   kaydeder (`~/.symphony/projects.json`: ad+yol) — isimli/düzenli ama kurulum ister; (c) ikisi
+   birden (otomatik algıla + istersen isimlendir). Faz 7'deki `symphony sync` ile de kesişebilir.
+2. **Proje görünümü yalnız CANLI mı, geçmişi de mi gösterir?** Yalnız canlı ise mevcut "Aktif
+   koşular" panelinin cwd'ye göre YENİDEN GRUPLANMASI kadar küçük olabilir (ucuz); geçmiş de
+   gerekiyorsa yeni bir REST ucu + UI görünümü ister (daha büyük).
+3. **Yol haritası görselleştirme HANGİ formatı hedefliyor?** Yalnız BU projenin kendi ROADMAP.md
+   kalıbını (Faz N + checkbox) mı, yoksa KULLANICININ kaydettiği HERHANGİ bir projenin (farklı
+   yazım tarzı olabilir) roadmap'ini mi? Birincisi çok daha tractable (düz regex/markdown
+   ayrıştırma); ikincisi genel bir format/şema kararı ister (belki `docs/ROADMAP-ŞEMA.md` gibi
+   bir sözleşme — kullanıcı roadmap'ini o şemaya UYDURUR, ya da agent kendi ROADMAP'ini o şemada
+   YAZAR). **Görüş:** MVP kapsamı birincisi (yalnız Symphony'nin kendi formatı) olabilir,
+   genelleştirme ayrı bir dilim.
+4. **"Hangi adımda hangi agent çalışıyor CANLI görünür"** — bir aktif koşuyu bir roadmap adımına
+   nasıl bağlarız? Metin eşleştirme (`task` içinde "Faz 5" geçiyor mu) kırılgan; agent.start'a
+   YENİ bir alan (`roadmapStep?`) eklemek daha sağlam ama PROTOKOL değişikliği ister (ADDITIVE,
+   küçük). **Görüş:** MVP'de bu bağı KURMAYIP yalnız statik roadmap durumunu (done/in-progress/
+   todo) göstermek, canlı bağlamayı v2'ye bırakmak makul bir kapsam daraltması olabilir.
+5. **Görsel yön:** `docs/TASARIM.md`'ye eklenmeli (interaktif faz-adım grafiği nasıl görünecek —
+   kullanıcının Faz 6 notundaki "Bağlam Haritası/Obsidian graph benzeri" ile aynı görsel dilde mi
+   olacak, yoksa ayrı mı).
+
+**Önerilen sıradaki oturum akışı:** Opus/Fable bu bölümü okur → yukarıdaki 5 soruyu karara bağlar
+(muhtemelen: proje=cwd'den otomatik+isteğe bağlı isim, MVP=yalnız canlı görünüm, roadmap=yalnız
+Symphony'nin kendi formatı, canlı-adım-bağlama v2'ye ertelenir) → gerekirse yeni bir ADR yazar
+(protokole `ActiveRun.cwd?`/`roadmapStep?` eklenirse PROTOKOL.md önce) → dilim planı DURUM'a
+düşer → Sonnet uygular.
+
+## Faz 4 — ROADMAP senkronu + "CLI → masaüstü otomatik açılış" BİTTİ (2026-07-10, Sonnet)
+
+Kullanıcı Faz 6 (öğrenen router) yerine bunu seçti — kullanım verisi henüz az, küçük/düşük
+riskli Faz 4 boşlukları daha değerli.
+- **ROADMAP.md Faz 4 bölümü gerçek duruma senkronlandı:** Living Interface artık tesseract
+  (Dilim 7/8/8b, küre emekli) olarak işaretli; Model panosu (token/maliyet/cache/GPU/rate-limit,
+  Dilim 6) TAMAM işaretlendi; Şef Paneli'ne Faz 5 çocuk-koşu hiyerarşisi notu düşüldü; Terminal⇄
+  masaüstü eş zamanlılık TAMAM işaretlendi (dilim 1 + 2.1b + O2/O3 aynı kanıt). Belge artık kodla
+  hizalı — önceden çok iş yapılmış ama işaretlenmemişti.
+- **`config.ts`:** `desktop.autoLaunch` (vars. `true`) — kapatma anahtarı.
+- **`paths.ts`:** `desktopPidFile` (`~/.symphony/desktop.pid`) — CLI'nin başlattığı masaüstü
+  sürecinin PID'i, yeniden başlatmayı önler.
+- **YENİ `cli/client/desktop-launch.ts`:** `ensureDesktopRunning()` — argümansız `symphony`
+  (bare TUI) başında çağrılır (`index.ts`). **Kapsam notu (bilinçli):** paketleme (Faz 7,
+  installer) henüz YOK; tek çalışan yol bu repo checkout'undan `desktop:dev` (Tauri dev) —
+  `findRepoRoot()` `pnpm-workspace.yaml`'ı arayarak monorepo kökünü bulur, bulamazsa (paketlenmiş
+  kurulum) SESSİZCE vazgeçer. PID dosyasındaki süreç canlıysa yeniden başlatmaz. Spawn, `tools.ts`
+  `run_command`'daki AYNI cross-platform desen (PowerShell/bash) + `windowsHide:true` (Oturum 13
+  dersi — flaşlayan konsol penceresi tekrarlanmasın). **En iyi gayret:** her hata yutulur, TUI'nin
+  başlamasını asla bloklamaz/kırmaz (try/catch tüm fonksiyonu sarar).
+- **Test:** 288→**293** (config +2, paths +1, desktop-launch +3 — gerçek Tauri süreci başlatmadan:
+  monorepo kökü bulma, autoLaunch:false→PID dosyası yazılmaz, PID canlıysa yeniden başlatmaz,
+  bozuk config sessizce yutulur). `pnpm build && pnpm test && pnpm lint` temiz (41 dosya/293 test).
+- **Canlı doğrulama KULLANICIYA:** gerçek bir Tauri penceresi açıp Rust derlemesi tetiklediği
+  için (yavaş/görünür, testte simüle edilemez) kasıtlı olarak canlı denenmedi — bir dahaki
+  `symphony` çalıştırmanda masaüstünün de otomatik açıldığını (kapalıysa) görmen yeterli.
+  Kapatmak istersen: `~/.symphony/config.json` → `{"desktop":{"autoLaunch":false}}`.
+
+**Kalan Faz 4 boşlukları (küçük, isteğe bağlı, bilinçli bırakıldı):** "hangi dosya" zengin
+görünümü, proje görünümü, yol haritası görselleştirme, agent başına "yaşam formu". Hiçbiri
+acil değil — istenirse ayrı küçük dilimler.
 
 ## Canlı bulgu #3 (2026-07-10, Sonnet): router yeni kurulan vision modelini metin/agent görevlerinde YANLIŞLIKLA seçiyordu — DÜZELTİLDİ
 

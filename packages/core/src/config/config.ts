@@ -26,6 +26,13 @@ export const ConfigSchema = z
       })
       .strip()
       .default({}),
+    // Faz 4: `symphony` başlatılınca masaüstü de otomatik açılsın mı (kapalıysa) — vars. açık.
+    desktop: z
+      .object({
+        autoLaunch: z.boolean().default(true),
+      })
+      .strip()
+      .default({}),
   })
   .strip();
 

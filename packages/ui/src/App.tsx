@@ -7,7 +7,14 @@ import {
 } from "@symphony/shared";
 import { daemon, type PermissionDecision } from "./daemon/client";
 import { LivingScene } from "./scene/LivingScene";
-import { orderRunsForDisplay, useStore, type ConnStatus, type LogTone, type ModelUsage } from "./store";
+import {
+  orderRunsForDisplay,
+  useStore,
+  type ConnStatus,
+  type LogTone,
+  type ModelUsage,
+  type RunFilePreview,
+} from "./store";
 
 /**
  * Faz 4 dilim 1-2 — "Şef Paneli": bağlantı durumu, sağlayıcı sağlığı, aktif agent
@@ -27,6 +34,7 @@ export function App(): React.JSX.Element {
   const providers = useStore((s) => s.providers);
   const runs = useStore((s) => s.runs);
   const runStreams = useStore((s) => s.runStreams);
+  const runFiles = useStore((s) => s.runFiles);
   const pending = useStore((s) => s.pendingPermissions);
   const log = useStore((s) => s.log);
   const usageTotals = useStore((s) => s.usageTotals);
@@ -116,18 +124,21 @@ export function App(): React.JSX.Element {
           <p className="dim empty">Şu an çalışan agent yok. Terminalde `symphony agent …` başlat.</p>
         ) : (
           <ul className="runs">
-            {orderRunsForDisplay(runs).map((r) => (
-              <li key={r.runId} className={r.parentRunId !== undefined ? "run run-child" : "run"}>
-                {r.parentRunId !== undefined && <span className="run-child-arrow">↳</span>}
-                <span className={`state state-${r.state}`}>{r.state}</span>
-                <span className="run-agent">{r.agentId}</span>
-                {r.model !== undefined && <span className="dim">{r.model}</span>}
-                <span className="run-task">{r.task}</span>
-                {runStreams[r.runId] !== undefined && runStreams[r.runId] !== "" && (
-                  <p className="run-stream">{runStreams[r.runId]}</p>
-                )}
-              </li>
-            ))}
+            {orderRunsForDisplay(runs).map((r) => {
+              const stream = runStreams[r.runId];
+              const file = runFiles[r.runId];
+              return (
+                <li key={r.runId} className={r.parentRunId !== undefined ? "run run-child" : "run"}>
+                  {r.parentRunId !== undefined && <span className="run-child-arrow">↳</span>}
+                  <span className={`state state-${r.state}`}>{r.state}</span>
+                  <span className="run-agent">{r.agentId}</span>
+                  {r.model !== undefined && <span className="dim">{r.model}</span>}
+                  <span className="run-task">{r.task}</span>
+                  {stream !== undefined && stream !== "" && <p className="run-stream">{stream}</p>}
+                  {file !== undefined && <RunFile file={file} />}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
@@ -174,6 +185,21 @@ function PermissionCard({ permission }: { permission: PendingPermission }): Reac
           Hayır
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Faz 4 "hangi dosya" zengin görünümü: koşu satırının altında kalıcı — izin kartı onaylanıp
+ * kapansa da (write_file/edit) diff burada kalır; read_file'da (izin istemez) sonuç önizlemesi
+ * gösterilir. `agent.tool.completed`'a dek yalnız başlık (summary) görünür.
+ */
+function RunFile({ file }: { file: RunFilePreview }): React.JSX.Element {
+  return (
+    <div className="run-file">
+      <div className="run-file-head dim">📄 {file.summary}</div>
+      {file.diff !== undefined && <Diff diff={file.diff} />}
+      {file.result !== undefined && <p className="run-file-result dim">{file.result}</p>}
     </div>
   );
 }

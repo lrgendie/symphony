@@ -143,7 +143,7 @@ symphony/
 - **Çıktı:** "şu dosyadaki bug'ı düzelt" diyebildiğin, onayınla kodu değiştiren agent.
 - **Kabul testi:** Agent diff gösterip onay almadan tek bayt yazamıyor (izinsiz yazma girişimi testle kanıtlanmış şekilde engelli) ✅; workspace dışına çıkamıyor ✅; deny cevabı koşuyu kırmıyor ✅ (üçü de `engine.test.ts` + `daemon-agent.test.ts`, 2026-07-04); bir harici MCP sunucusu bağlanıp araç olarak çağrılıyor ✅ (2026-07-05, canlı: `@modelcontextprotocol/server-filesystem`, izin akışı + araç hatası kurtarma gerçek sunucuyla kanıtlandı — `mcp.test.ts` + `engine.test.ts`). Davranışlar `docs/SPEC-AGENT.md`'ye uygun.
 
-### Faz 4 — Masaüstü: Orkestra Sahnesi (9–11. hafta) — dilim 1 başladı (2026-07-05)
+### Faz 4 — Masaüstü: Orkestra Sahnesi (9–11. hafta) — çekirdek TAMAM, birkaç görsel/UX dilimi kalan (2026-07-10 senkronu)
 - [x] Tauri 2 + React dashboard, daemon'un WS akışına bağlanır ✅ 2026-07-05 (dilim 1) —
   `packages/ui` (React 19 + Vite 8, tarayıcı-güvenli WS istemcisi, yalnız `shared`'a bağımlı)
   + `packages/desktop` (Tauri 2, `ui/dist`'i sarar, token'ı `~/.symphony/daemon.token`'dan
@@ -151,25 +151,39 @@ symphony/
   `client:"desktop"` bağlantısını kabul edip snapshot döndü), store birim testleri ✅ (6).
   **Pencere görsel doğrulaması KULLANICI tarafından yapıldı ✅ 2026-07-05** — `desktop:dev`
   ile pencere açıldı, canlı akış çalıştı.
-- [~] **"Living Interface" sahnesi:** Three.js parçacık küresi merkezde — boşta yavaşça nefes alır, agent düşünürken dalgalanır, araç çalıştırırken hızlanır, hatada renk değiştirir. **Parçacık küresi YAPILDI ✅ 2026-07-05** (`@react-three/fiber`, `ui/src/scene/LivingScene.tsx`): fibonacci küre, durum→mood (`scene/mood.ts`, saf+testli: idle/thinking/executing/awaiting/error/offline), renk lerp + nefes + dönüş, HUD mood etiketi. Görsel doğrulama kullanıcıya. Kalan: her agent'ın kendi "yaşam formu", tesseract'ın canlı mimari haritasına dönüşmesi. Görsel yön: `docs/TASARIM.md`.
-- [~] **Şef Paneli:** aktif agent'lar (kim çalışıyor, hangi araç, hangi dosya), canlı log akışı —
-  dilim 1: aktif koşular + canlı olay akışı; **dilim 2 (2026-07-05): izin istekleri masaüstünden
-  CEVAPLANABİLİYOR** (kart + renkli diff + Evet/Bu koşu/Daima/Hayır → `permission.respond`,
-  ilk cevap kazanır, SPEC §5). "hangi dosya" zengin görünümü sonraki dilim
-- [~] Model panosu: provider durumları ✅ (canlı up/down/degraded), token kullanımı/maliyet
-  sayaçları + yerel model VRAM durumu — sonraki dilim
+- [x] **"Living Interface" sahnesi** ✅ TAMAM ama TASARIM DEĞİŞTİ (2026-07-08, Dilim 7/8/8b):
+  ilk parçacık küresi (fibonacci sphere) kullanıcı geri bildirimiyle ("çok basit") EMEKLİ
+  edildi, yerine **Yaşayan Tesseract** geldi — 3 kademeli 4B hiperküp (bakır dış=GPU,
+  cyan iç=LLM/mood, violet derin çekirdek kafesi), gerçek bloom (UnrealBloomPass), GLSL akış
+  shader'ı, atım sistemi (synapse/energy/converge), sinematik kamera. `ui/src/scene/
+  TesseractScene.tsx` + `scene/tesseract/{geometry,pulses}.ts` (saf+testli). Görsel dil artık
+  `docs/TASARIM.md §2`'de tesseract olarak güncel. Kalan: her agent'ın kendi "yaşam formu"
+  (birden çok eşzamanlı koşuyu ayrı ayrı görselleştirme) — küçük bir sonraki dilim adayı.
+- [~] **Şef Paneli:** aktif agent'lar + canlı log akışı ✅ · izin istekleri masaüstünden
+  CEVAPLANABİLİYOR ✅ (dilim 2, kart + renkli diff + Evet/Bu koşu/Daima/Hayır, SPEC §5) ·
+  çocuk koşular (Faz 5, `run_agent`) ebeveyninin altında girintili görünüyor ✅ (2026-07-10,
+  O3, `orderRunsForDisplay`). Kalan: "hangi dosya" zengin görünümü (agent'ın o an dokunduğu
+  dosyanın canlı önizlemesi) — sonraki dilim.
+- [x] Model panosu ✅ TAMAM (2026-07-05 temel + 2026-07-07 Dilim 6 API kapasitesi) — provider
+  durumları (canlı up/down/degraded), token kullanımı/maliyet sayaçları (`usage.updated`),
+  prompt-cache isabet göstergesi, yerel GPU/VRAM vitalleri (`hardware.updated`,
+  `scene/hardware-vitals.ts`), Anthropic rate-limit çubukları (`provider.limits`).
 - [ ] **Yol haritası görselleştirme:** projelerin ROADMAP/plan dosyalarından otomatik üretilen interaktif faz-adım grafiği; hangi adım bitti, hangi adımda hangi agent çalışıyor canlı görünür
 - [ ] Proje görünümü: hangi projede hangi agent ne yapıyor
 - [ ] **CLI → masaüstü otomatik açılış:** terminalde `symphony` başlatılınca masaüstü
   uygulaması da açılır (kurulu ve kapalıysa) — sistem tek komutla "canlanır".
   Yapılandırılabilir: `~/.symphony/config.json` → `desktop.autoLaunch` (varsayılan açık)
-- [ ] Terminal ⇄ masaüstü eş zamanlılık testi: CLI'da başlayan iş anında ekranda
-- **Çıktı:** Terminalde agent çalıştırırken masaüstünde canlı izlediğin, yaşayan dashboard.
-- **Kabul testi:** CLI'da başlatılan koşu 1 saniye içinde masaüstünde görünüyor ✅ (dilim 1,
-  kullanıcı doğruladı); küre agent durumlarına (thinking/executing/failed) görsel tepki veriyor
-  (Living Interface — bekliyor); token/maliyet sayaçları gerçek kullanım verisiyle artıyor
-  (model panosu — bekliyor); izin istekleri masaüstünden de cevaplanabiliyor ✅ (dilim 2, kod +
-  store testleri; buton tıklama görsel doğrulaması kullanıcıya kaldı).
+  ← **SIRADAKİ** (2026-07-10'da ele alınıyor)
+- [x] Terminal ⇄ masaüstü eş zamanlılık testi ✅ TAMAM — CLI'da başlayan iş masaüstünde anında
+  görünüyor (dilim 1 kabul testi, kullanıcı doğruladı) · agent akış metni paritesi (dilim 2.1b,
+  `agent.delta`→`runStreams`) · Faz 5 çocuk koşu hiyerarşisi de aynı anda iki yüzeyde tutarlı
+  (O2 CLI/TUI + O3 masaüstü, aynı `parentRunId` alanından besleniyor).
+- **Çıktı:** Terminalde agent çalıştırırken masaüstünde canlı izlediğin, yaşayan dashboard. ✅
+  (tesseract + model panosu + izin kartları + çocuk-koşu hiyerarşisiyle birlikte gerçekleşti)
+- **Kabul testi:** CLI'da başlatılan koşu 1 saniye içinde masaüstünde görünüyor ✅ · tesseract
+  agent durumlarına (thinking/executing/failed) görsel tepki veriyor ✅ (Living Interface,
+  görsel doğrulama kullanıcıya) · token/maliyet sayaçları gerçek kullanım verisiyle artıyor ✅
+  (model panosu) · izin istekleri masaüstünden de cevaplanabiliyor ✅ (dilim 2).
 
 ### Sıradaki dilimler — kullanıcı önceliği (2026-07-07, ANLAŞILAN SIRA: 1→2→3→4)
 
