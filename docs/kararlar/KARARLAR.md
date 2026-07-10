@@ -439,3 +439,85 @@ SAF kurucu) → Z5 masaüstü harita görünümü (d3-force + TASARIM §3). Adı
 **Geri dönüş koşulları:** skor düzeltmesi kötü öneriler üretirse `stats` geçirilmez (arayüz
 opsiyonel — tek satırla v1'e dönüş); geri bildirim tuşu sürtünme yaratırsa TUI satırı kalkar,
 komut kalır; harita 500 düğümde performansı boğarsa limit düşürülür, sanallaştırma v2'ye.
+
+## ADR-017 — Faz 7 Paketleme ve Taşınabilirlik: npm yayını, installer'lar, sync, update/rollback, rehber (2026-07-10, Fable)
+**Bağlam:** ROADMAP Faz 7 — installer'lar, CLI dağıtımı, `symphony sync`, otomatik güncelleme,
+PDF rehber. Faz 8'in ön koşulu: kendini geliştirme döngüsünün dört sigortasından üçü hazır
+(test ✅, telemetri ✅, onay kapısı ✅), **rollback bu fazın işi**. Kullanıcı kararları
+(2026-07-10): 4 platform installer CI ile hazırlansın (Mac erişimi ileride doğabilir), sync
+kapsamı = ayarlar+agent+hafıza (geçmiş DB HARİÇ), güncelleme manuel `update`+`rollback`
+(arka plan otomatiği YOK), CLI dağıtımı = **halka açık npm yayını**. Mevcut zemin şaşırtıcı
+ölçüde hazır: CLI daemon'ı `require.resolve("@symphony/core/daemon")` ile başlatıyor (repo
+yoluna bağımlı DEĞİL — kurulu node_modules'ta da çalışır); tek eksik yayın metadata'sı ve
+`private:true` bayrakları. npm kontrolü (2026-07-10): `@symphony/*` paketleri YOK (404);
+scope'un sahiplenilebilirliği ancak yayın anında (npm login ile org denemesi) netleşir.
+
+**Karar 1 — Yayın birimi: ÜÇ paket (`shared`+`core`+`cli`), lockstep tek sürüm; scope yayın
+anında bağlanır.** CLI, core+shared'a workspace bağımlılığıyla yayınlanır (pnpm publish
+`workspace:*`'ı gerçek sürüme çevirir); tek pakete bundle'lama REDDEDİLDİ (better-sqlite3/
+keytar native modülleri bundler'a girmez, üç paket yayını daha dürüst). Sürüm tek kaynaktan:
+kök `package.json.version` → build sırasında koda gömülmez, `DAEMON_VERSION` core'un kendi
+package.json'ından okunur (hardcoded "0.1.0" kalkar). `ui`/`desktop` npm'e YAYINLANMAZ
+(masaüstü dağıtımı installer'ın işi). Scope: yayın oturumunda önce `@symphony` org'u denenir
+(ücretsiz, public); ALINMIŞSA kullanıcının npm kullanıcı-scope'u ya da uygun bir org adı
+seçilir ve üç paketin adı repo çapında mekanik olarak yeniden adlandırılır — iç `@symphony/*`
+adı yayın adından ayrışmaz (publishConfig ile ad değiştirme pnpm'de kırılgan, REDDEDİLDİ).
+*Reddedilen:* tek-dosya binary (pkg/bun compile) — native modüller kırar, DEVIR.md tuzak listesi.
+
+**Karar 2 — Installer'lar: Tauri bundler, 4 hedef GitHub Actions matrix'inde, İMZASIZ v1.**
+Windows x64 (.msi, lokal de derlenebilir/test edilir) + Windows ARM64 + macOS Intel + macOS
+Apple Silicon (.dmg) `.github/workflows/release.yml`'de tag (v*) tetiklemeli derlenir,
+GitHub Releases'a artifact olarak yüklenir. Code signing v1'de YOK (SmartScreen/Gatekeeper
+uyarısı kabul edilir — kişisel kullanım; sertifika edinilirse ayrı dilim). macOS paketleri
+Mac erişimi doğana dek DOĞRULANMAMIŞ sayılır (Releases notuna yazılır). Masaüstü kabuk
+kurulu sürümde token'ı zaten `~/.symphony/daemon.token`'dan okur — installer'a özel daemon
+işi yok; CLI'nin `desktop-launch.ts`'i kurulu uygulamayı bilinen kurulum yolundan
+(`%LOCALAPPDATA%/Programs` vb.) ya da `config.desktop.appPath`'ten bulacak şekilde genişler
+(bugünkü "yalnız repo checkout" sınırı kalkar).
+
+**Karar 3 — `symphony sync`: `~/.symphony` İÇİNDE git deposu, açık BEYAZ LİSTE, uzak repo
+kullanıcının verdiği herhangi bir git URL'i.** Senkronlanan: `config.json`, `providers.json`,
+`agents/`, `memory/`, `mcp-servers.json`. ASLA senkronlanmayan (`.gitignore` + savunma
+katmanı olarak beyaz liste dışı her şey): `daemon.token`, `data/` (SQLite — makineye özgü,
+binary çakışması riski), `logs/`, `desktop.pid`, `reports/` (türetilmiş). Anahtarlar zaten
+keychain'de (ADR-006) — sync anahtarsız güvenli (satır 82'deki öngörü). Akış: `symphony sync`
+= add+commit (varsa) → `pull --rebase` → push; rebase çakışmasında işlem DURUR ve kullanıcıya
+dosya yolu + çözüm talimatı basılır (otomatik çakışma çözümü YOK — config dosyasında sessiz
+yanlış birleştirme kabul edilemez). Kimlik doğrulama sistemin git credential helper'ına
+bırakılır (yeni auth sistemi YAZILMAZ). Uygulama `simple-git` ile (GEREKSINIMLER envanterinde
+zaten planlıydı). *Reddedilen:* DB'yi de senkronlamak (kullanıcı kararı; bozulma riski).
+
+**Karar 4 — Güncelleme/rollback: manuel `symphony update` + `symphony rollback`; güncelleyici
+= CLI'de küçük, bağımsız komut çifti; daemon kendini GÜNCELLEYEMEZ.** `update`: registry'den
+son sürümü sorar → `npm i -g <cli>@<yeni>` çalıştırır → başarılıysa `~/.symphony/versions.json`'a
+`{previous, current, at}` kaydı düşer → daemon'ı yeniden başlatır. `rollback`: versions.json'daki
+`previous`'a aynı yolla döner (ROADMAP kabulü: "güncelleme tek komutla geri alınabiliyor").
+"Güncelleyici çekirdek ayrı ve dokunulmaz" ilkesinin v1 karşılığı: update/rollback mantığı
+agent araç yüzeyinden ERİŞİLEMEZ (Faz 8'in Doktor agent'ı yama ÖNERİR, uygulama daima bu
+insan-tetiklemeli komuttan geçer) ve bu iki komutun kendisi minimal tutulur (npm'e delege).
+Masaüstü güncellemesi v1'de installer'ı yeniden çalıştırmaktır; Tauri updater plugin
+REDDEDİLDİ (imza+manifest altyapısı ister, arka plan otomatiği kullanıcı kararına aykırı).
+
+**Karar 5 — Rehber: `docs/REHBER.md` kaynak markdown; PDF `md-to-pdf` devDependency'siyle
+`docs:pdf` script'inden derlenir.** İçerik iskeleti: sistem nedir → mimari şema (paket grafiği
++ daemon merkezli model) → kod haritası (BAGLAM.md'nin okuyucu-dostu hâli) → agent/araç/izin
+sistemi → protokol özeti → komut başvurusu → kurulum+sync+update. Belge kodla birlikte büyür;
+PDF teslimi "tüm sistem tamamlanınca" (ROADMAP) — script şimdiden çalışır durumda olur.
+*Reddedilen:* pandoc (harici binary kurulumu ister, npm envanteri dışı).
+
+**Dikey dilimler (Kural 7; sıra bağımlılığa göre):**
+F1 paketlenebilir çekirdek (sürüm tek-kaynak + metadata + `pnpm publish --dry-run` temiz) →
+F2 npm yayını (scope bağlama KULLANICIYLA + gerçek yayın + temiz makine simülasyonu kabulü) →
+F3 Windows .msi (lokal tauri build + kurulu masaüstünü bulma) →
+F4 `symphony sync` (beyaz liste + git akışı + ikinci-makine kabulü) →
+F5 `symphony update`/`rollback` (versions.json + kabul testi) →
+F6 GitHub Actions release matrix (4 platform + npm publish job) →
+F7 REHBER.md + docs:pdf (BAĞIMSIZ — istenirse öne alınabilir).
+Adım adım talimat `memo/DURUM.md`'de; uygulama Sonnet'te.
+
+**Geri dönüş koşulları:** `@symphony` scope'u alınamazsa yeniden adlandırma F2 içinde tek
+mekanik commit'tir (başka dilimi etkilemez); npm yayını herhangi bir nedenle istenmezse F2
+"GitHub Releases tarball" yoluna düşer (F1 değişmez — metadata her iki yola da hizmet eder);
+ARM64/macOS runner'ları derlemede kırılırsa matrix'ten çıkarılır, Windows x64 kalır (F6
+kabulü yalnız x64 üstünden verilir); sync rebase akışı pratikte sürtünme yaratırsa
+"yalnız pull ya da yalnız push" alt komutlarına ayrıştırılır (beyaz liste değişmez).

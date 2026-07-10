@@ -18,6 +18,8 @@
 | Ollama | Faz 1 | Yerel LLM çalıştırıcı (localhost:11434) | ⬜ kurulacak |
 | Rust toolchain (rustup + MSVC) | Faz 4 | Tauri masaüstü kabuğunun derlenmesi | ✅ kuruldu 2026-07-05 — rustc 1.96.1 (stable-x86_64-pc-windows-msvc); MSVC (VS 18 Community) + Windows SDK 10.0.26100 + WebView2 149 zaten vardı |
 | VS Code (öneri) | — | Geliştirme editörü | — |
+| GitHub Actions | Faz 7 | Release matrix: 4 platform Tauri installer + npm publish (ADR-017 Karar 2, Dilim F6 — `.github/workflows/release.yml`) | ⬜ F6'da kurulacak |
+| npm hesabı (+ scope/org) | Faz 7 | `shared`/`core`/`cli` halka açık yayını (ADR-017 Karar 1; scope yayın anında bağlanır, Dilim F2) | ⬜ F2'de kullanıcıyla |
 
 ## 2. Kütüphaneler (paket bazında)
 
@@ -42,11 +44,11 @@
 | `better-sqlite3` | Yerel veri katmanı: geçmiş, telemetri, skorlar |
 | `keytar` | API anahtarlarını OS keychain'inde saklama |
 | `pino` | Yapılandırılmış loglama (hata telemetrisinin temeli) |
-| `execa` | Agent'ın komut çalıştırma aracı (PowerShell/bash) ✅ kuruldu 2026-07-04 |
+| `execa` | Agent'ın komut çalıştırma aracı (PowerShell/bash) ✅ kuruldu 2026-07-04. **ADR-017 (Dilim F5):** `symphony update/rollback` npm'i bununla çağırır — `cli` paketine de kurulur (Windows npm.cmd tuzağına karşı) |
 | `tinyglobby` | Agent `glob`/`grep` araçlarının dosya tarayıcısı (fast-glob'dan küçük, vitest de kullanıyor) ✅ 2026-07-04 |
 | `picomatch` | İzin kurallarında glob desen eşleme (`permissions.json`) ✅ 2026-07-04 |
 | `diff` | İzin isteklerindeki birleşik diff üretimi (SPEC-AGENT §6) ✅ 2026-07-04 |
-| `simple-git` | Agent'ın git işlemleri + oturum yedekleme |
+| `simple-git` | Agent'ın git işlemleri + oturum yedekleme. **ADR-017 (Faz 7, Dilim F4):** `symphony sync` bunu kullanır — `cli` paketine kurulur (`~/.symphony` içi git repo, beyaz listeli eşitleme) |
 
 ### `packages/cli` — `symphony` komutu
 | Kütüphane | Amaç |
@@ -74,6 +76,7 @@
 | Kütüphane | Amaç |
 |---|---|
 | `vitest` | Test paketi — kendini güncellemenin bağışıklık sistemi |
+| `md-to-pdf` | `docs/REHBER.md` → PDF derleme (ADR-017 Karar 5, Dilim F7; puppeteer tabanlı, yalnız dev-time) ⬜ F7'de kurulacak |
 | `eslint` + `prettier` | Kod kalitesi ve format |
 | `tsx` | TS dosyalarını derlemeden çalıştırma (geliştirme) |
 | `turbo` | Monorepo görev orkestrasyonu (build/test önbelleği) |

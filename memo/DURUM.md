@@ -3,7 +3,156 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Sonnet — küçük cilalar: ROADMAP senkronu + ajan uyduları "yaşam formu", 392 test)
+**Son güncelleme:** 2026-07-10 (Fable — Faz 7 tasarımı TAMAM: ADR-017 yazıldı, dilimler F1-F7 Sonnet'e hazır)
+
+## Faz 7 — Paketleme ve Taşınabilirlik: TASARIM TAMAM (2026-07-10, Fable — ADR-017) → dilimler F1..F7
+
+Kullanıcı 4 soruyu bağladı (installer = 4 platform CI'da, Mac doğrulaması erişim doğunca;
+sync = ayarlar+agent+hafıza, DB HARİÇ; güncelleme = manuel `update`+`rollback`; CLI dağıtımı =
+**halka açık npm yayını**). **ADR-017 yazıldı** (`docs/kararlar/KARARLAR.md` — BAĞLAYICI kaynak;
+buradaki talimatlar uygulama kılavuzudur, çelişkide ADR kazanır). Kararların özü:
+- **Yayın birimi:** ÜÇ paket (shared+core+cli), lockstep tek sürüm; tek-dosya binary RED (native
+  modüller); `ui`/`desktop` npm'e yayınlanmaz. Scope yayın anında bağlanır (`@symphony` org
+  denemesi; alınmışsa repo çapında yeniden adlandırma — tek mekanik commit).
+- **Installer:** Tauri bundler, 4 hedef GitHub Actions matrix'inde, İMZASIZ v1; Windows x64
+  lokalde de derlenip test edilir; macOS paketleri Mac erişimi doğana dek "doğrulanmamış" etiketli.
+- **Sync:** `~/.symphony` İÇİNDE git repo; AÇIK BEYAZ LİSTE (config.json, providers.json,
+  agents/, memory/, mcp-servers.json); `daemon.token`/`data/`/`logs/` ASLA; çakışmada DUR ve
+  kullanıcıya anlat (otomatik birleştirme yok); auth = sistemin git credential helper'ı.
+- **Update/rollback:** `symphony update` + `symphony rollback` (npm'e delege, versions.json
+  geçmişi); daemon kendini güncelleyemez; agent araç yüzeyinden erişilemez; Tauri updater RED.
+- **Rehber:** `docs/REHBER.md` + `md-to-pdf` ile `docs:pdf` script'i.
+
+**Doğrulanmış zemin (2026-07-10, tasarım oturumu ölçümleri):** CLI daemon'ı
+`require.resolve("@symphony/core/daemon")` ile başlatıyor (`daemon-client.ts:416` civarı) —
+paketli kurulumda da çalışır, F1 bu yüzden hafif. npm'de `@symphony/cli|core` YOK (404).
+Kök+3 paket sürümü zaten 0.1.0 (lockstep başlangıcı hazır).
+
+### 📋 Dilim F1 — paketlenebilir çekirdek (yayın metadata'sı + sürüm tek-kaynağı) — SIRADAKİ
+
+**Önce oku (yalnız bunlar):** ADR-017 Karar 1 · `packages/{shared,core,cli}/package.json` ·
+`packages/core/src/server/daemon.ts` başı (DAEMON_VERSION) · `packages/cli/src/index.ts` başı
+(shebang var mı bak).
+1. Üç pakette `"private": true` KALDIR; her birine ekle: `"files": ["dist"]`,
+   `"license"` (F2'de kullanıcıya sorulacak — şimdilik `"UNLICENSED"` YAZMA, alanı F2'ye bırak),
+   `"repository": {"type":"git","url":"https://github.com/lrgendie/symphony.git","directory":"packages/<ad>"}`,
+   `"publishConfig": {"access":"public"}`. `cli`'de `bin` zaten var; `dist/index.js`'in başına
+   shebang çıktığını doğrula (kaynak `src/index.ts`'in İLK satırı `#!/usr/bin/env node` olmalı —
+   yoksa ekle; tsc shebang'ı korur).
+2. `core/package.json` `exports`'a `"./package.json": "./package.json"` ekle (aynısını cli+shared'a).
+   `daemon.ts`'teki hardcoded `DAEMON_VERSION = "0.1.0"` yerine core'un KENDİ package.json'ından
+   oku: `createRequire(import.meta.url)` + `require("@symphony/core/package.json").version`
+   (self-referans — exports'taki yeni satır bunu mümkün kılar).
+3. YENİ `scripts/set-version.mjs` (kökte): argümandaki sürümü kök + 3 paket package.json'ına
+   yazar (lockstep; `node scripts/set-version.mjs 0.2.0`). Bağımlılık YOK, düz `fs` + JSON.
+4. Test: daemon.test'te `/api/health`.daemonVersion'ın core package.json'daki version'la AYNI
+   olduğu (hardcode kalmadığının kanıtı). `pnpm -r publish --dry-run` üç pakette temiz çıktı
+   (bunu test değil, elle doğrulama olarak yap; tarball içinde `dist/` VAR `src/` YOK olduğunu
+   `npm pack --dry-run` çıktısından teyit et).
+5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
+
+### 📋 Dilim F2 — npm yayını (KULLANICIYLA BİRLİKTE — interaktif adımlar var)
+
+1. Kullanıcıya SOR: (a) lisans (öneri: MIT — LICENSE dosyası köke + `"license":"MIT"` üç pakete);
+   (b) `npm login` yaptır (interaktif — kullanıcı `! npm login` ile kendi çalıştırsın);
+   (c) www.npmjs.com'da `symphony` adlı org oluşturmayı DENESİN — alınmışsa yeni scope kararı
+   (kullanıcının npm kullanıcı adı scope'u ya da uygun org adı).
+2. Scope `@symphony` DEĞİLSE: repo çapında `@symphony/` → `@<yeni>/` yeniden adlandırma (package
+   adları + TÜM import'lar + BAGLAM/belge referansları) — tek mekanik commit (ADR-017 geri dönüş
+   maddesi). Scope alındıysa bu adım atlanır.
+3. Her pakete 5-10 satırlık `README.md` (npm sayfası boş kalmasın; Türkçe, ne olduğunu söyler).
+4. Yayın: `pnpm -r publish` (topolojik sıra: shared→core→cli; pnpm `workspace:*`'ı sürüme çevirir).
+5. **Kabul (ROADMAP "temiz makinede kurulup çalışıyor" simülasyonu):** geçici prefix'e gerçek
+   registry'den kur — `npm i -g --prefix <geçici> @<scope>/cli` → `SYMPHONY_HOME=<geçici-home>`
+   ile `symphony --version` + `symphony status` (daemon repo'suz, kurulu paketten ayağa kalkıyor).
+6. DURUM güncelle (yayınlanan sürüm + scope kararını YAZ).
+
+### 📋 Dilim F3 — Windows .msi + CLI'nin kurulu masaüstünü bulması
+
+**Önce oku:** ADR-017 Karar 2 · `cli/src/client/desktop-launch.ts` (tamamı, kısa) ·
+`desktop/src-tauri/tauri.conf.json`.
+1. Lokal derleme: `pnpm --filter @symphony/desktop exec tauri build` (Rust toolchain kurulu ✅).
+   Üretilen .msi'yi kur; kurulum yolunu NOT ET (beklenen: `%LOCALAPPDATA%\Programs\Symphony\` ya
+   da `C:\Program Files\Symphony\` — WiX per-user/per-machine hangisiyse).
+2. `desktop-launch.ts` genişlet — arama sırası: (1) `config.desktop.appPath` (YENİ config alanı,
+   `config.ts`'e opsiyonel string), (2) bilinen kurulum yolları (adım 1'de not edilen; iki aday
+   yolu da dene), (3) mevcut `findRepoRoot` dev yolu. Bulunan exe DOĞRUDAN spawn edilir
+   (detached, windowsHide — mevcut desen). Hiçbiri yoksa mevcut davranış: sessizce vazgeç.
+3. Test: yol-arama fonksiyonunu SAF çıkar (aday listesi üretimi + ilk-var-olanı-seç; fs.existsSync
+   enjekte edilebilir) — gerçek .msi kurulumu testte YOK. Config alanı testi (appPath okunuyor).
+4. **Kabul (canlı, kullanıcıyla):** .msi kur → terminalde `symphony` → kurulu masaüstü otomatik
+   açılıyor, token'ı okuyor, canlı akış görünüyor. `pnpm build && pnpm test && pnpm lint` + DURUM.
+
+### 📋 Dilim F4 — `symphony sync` (beyaz liste + git akışı)
+
+**Önce oku:** ADR-017 Karar 3 · `cli/src/commands/report.ts` (komut deseni) · `config/paths.ts`.
+1. `simple-git`'i `cli`'ye ekle (GEREKSINIMLER envanterinde planlıydı — satırı "✅ + symphony
+   sync (ADR-017)" olarak güncelle).
+2. YENİ `cli/src/commands/sync-plan.ts` (SAF, testli): `SYNC_WHITELIST = ["config.json",
+   "providers.json", "agents", "memory", "mcp-servers.json"]` + `.gitignore` içeriği üretici
+   (`*` ignore + beyaz liste `!` negasyonları + dizinler için `!agents/` `!agents/**` deseni) +
+   "yerel dosya yedekle" planlayıcısı (init'te uzak doluysa hangi dosyalar `.bak`lanır).
+3. YENİ `cli/src/commands/sync.ts`: `symphony sync init <remote-url>` — `~/.symphony`'de git init
+   + .gitignore yaz + remote add + fetch; uzak dal VARSA yerel beyaz-liste dosyalarını `.bak`
+   yedekleyip uzağı checkout et (yeni-makine akışı), YOKSA ilk commit+push. `symphony sync` —
+   add(beyaz liste)+commit(değişiklik varsa) → `pull --rebase` → push; rebase çakışmasında DUR:
+   çakışan dosya + `~/.symphony` yolu + "elle çöz, sonra tekrar dene" mesajı (otomatik çözüm YOK).
+4. Test (gerçek git, ağ YOK): geçici dizinde bare repo = remote → init+push → İKİNCİ geçici
+   home'da `sync init` → agents/ + config.json geldi (ROADMAP kabulü) → `git ls-files`'ta
+   `daemon.token`/`data/` YOK (güvenlik kabulü) → çakışma senaryosu: iki home aynı dosyayı
+   değiştirir, ikincide DUR mesajı.
+5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
+
+### 📋 Dilim F5 — `symphony update` + `symphony rollback`
+
+**Önce oku:** ADR-017 Karar 4 · `docs/PROTOKOL.md` §1.1 · `daemon.ts` REST bölümü.
+1. **PROTOKOL önce (Kural 1):** PROTOKOL.md §1.1'e `POST /api/shutdown` satırı (Bearer; daemon
+   temiz kapanır — update/rollback'in "daemon'ı yeniden başlat" adımı; ADR-017 Karar 4).
+   `daemon.ts`'e endpoint: cevabı gönderdikten sonra `close()` çağırır.
+2. `paths.ts`'e `versionsFile` (`~/.symphony/versions.json`). YENİ `cli/src/commands/update.ts`:
+   SAF yardımcılar (`readVersions`/`writeVersions` roundtrip + karşılaştırma) ayrı ve testli.
+   `symphony update`: CLI'nin kendi package.json adı+sürümü (self-require, F1 deseni) →
+   `npm view <ad> version` → aynıysa "güncel" mesajı; yeniyse `npm i -g <ad>@<yeni>` (execa —
+   `cli`'ye ekle, GEREKSINIMLER satırını "core+cli" yap; Windows'ta npm.cmd tuzağına karşı execa
+   zaten doğru davranır) → versions.json `{previous: eski, current: yeni, at}` → `/api/shutdown`
+   + `ensureDaemonRunning` (yeni sürüm ayağa kalkar).
+3. `symphony rollback`: versions.json'da `previous` yoksa net hata+exit 1; varsa `npm i -g
+   <ad>@<previous>` → versions.json swap → shutdown+restart. (ROADMAP kabulü: "güncelleme tek
+   komutla geri alınabiliyor".)
+4. Test: versions.json roundtrip/swap/previous-yok hatası (SAF) · shutdown endpoint'i 401/200 +
+   daemon'ın gerçekten kapandığı (daemon.test'te yeni it — health artık cevap vermiyor) ·
+   npm çağrıları testte MOCK (gerçek global kurulum testte yok; execa çağrı argümanları doğrulanır).
+5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
+
+### 📋 Dilim F6 — GitHub Actions release matrix (4 platform + npm publish)
+
+**Önce oku:** ADR-017 Karar 2 + geri dönüş koşulları.
+1. YENİ `.github/workflows/release.yml`: tetik `push: tags: v*`. Job 1 `test` (windows-latest):
+   pnpm kur → `pnpm install && pnpm build && pnpm test && pnpm lint`. Job 2 `bundle` (needs:
+   test, matrix): `windows-latest` (x64 .msi) · `windows-11-arm` (ARM64) · `macos-13` (Intel
+   .dmg) · `macos-14` (Apple Silicon .dmg); Rust toolchain + pnpm + `tauri-apps/tauri-action`
+   (release'i kendisi oluşturur, artifact'ları yükler). Job 3 `publish-npm` (needs: test):
+   `NPM_TOKEN` secret'ıyla `pnpm -r publish --no-git-checks` (kullanıcı secret'ı repo ayarına
+   ekler — talimatı DURUM'a yaz).
+2. Release notlarına otomatik satır: "macOS paketleri imzasız ve Mac üzerinde doğrulanmamıştır"
+   (ADR-017 Karar 2).
+3. Yerelde SADECE YAML lint/mantık kontrolü mümkün — **kabul kullanıcıyla:** `git tag v0.1.1 &&
+   git push --tags` → Actions yeşil → Releases'ta 4 installer + npm'de yeni sürüm. ARM/macOS
+   runner kırılırsa ADR geri dönüşü: matrix'ten çıkar, Windows x64 kalır, DURUM'a not düş.
+
+### 📋 Dilim F7 — REHBER.md + docs:pdf (BAĞIMSIZ — istenirse öne alınabilir)
+
+1. `md-to-pdf` köke devDependency (ÖNCE `docs/GEREKSINIMLER.md` envanterine işle — puppeteer
+   tabanlı, yalnız dev-time). Kök package.json'a `"docs:pdf": "md-to-pdf docs/REHBER.md"`.
+2. YENİ `docs/REHBER.md` — iskelet + ilk dolu sürüm (ADR-017 Karar 5 içindekiler): sistem nedir
+   → mimari şema (paket grafiği + daemon merkezli model, BAGLAM.md'den uyarla) → kod haritası →
+   agent/araç/izin sistemi (SPEC-AGENT özeti) → protokol özeti (PROTOKOL.md'den) → komut
+   başvurusu (`symphony` alt komutları) → kurulum+sync+update akışı. Türkçe; kod adları İngilizce.
+3. `pnpm docs:pdf` çalışıyor + PDF açılıyor (görsel kontrol kullanıcıya). Test gerekmez (belge).
+
+**Dilim sırası F1→F2→F3→F4→F5→F6 (F7 bağımsız, araya alınabilir); her dilim sonrası
+`pnpm build && pnpm test && pnpm lint` + DURUM güncelle. F2/F3/F6 kabulleri kullanıcıyla
+(interaktif npm login, .msi kurulumu, Actions koşusu — Bash'ten tam doğrulanamaz).**
 
 ## Faz 4 kalanı: ajan uyduları "yaşam formu" BİTTİ (2026-07-10, Sonnet)
 
