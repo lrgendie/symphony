@@ -615,9 +615,79 @@ export class DataStore {
       .all(limit) as AgentRunRow[];
   }
 
+  /**
+   * Router v2 (ADR-016 Karar 1): tamamlanmış koşuların ham listesi — görev türü sınıflandırması
+   * ÇAĞIRAN TARAFTA (router/stats.ts) yapılır, burada yalnız veri çekilir. `cancelled` koşular
+   * BİLİNÇLE dışarıda (kullanıcı vazgeçti — ne başarı ne başarısızlık kanıtıdır).
+   */
+  runsSince(sinceMs: number): RouterRunRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT task, provider, model, state, cost_usd
+         FROM agent_runs WHERE started_at >= ? AND state IN ('completed', 'failed')`,
+      )
+      .all(sinceMs) as Array<{
+      task: string;
+      provider: string;
+      model: string;
+      state: string;
+      cost_usd: number;
+    }>;
+    return rows.map((row) => ({
+      task: row.task,
+      provider: row.provider,
+      model: row.model,
+      ok: row.state === "completed",
+      costUsd: row.cost_usd,
+    }));
+  }
+
+  /**
+   * Router v2 (ADR-016 Karar 1): sağlayıcı+model başına ortalama tur süresi. `requests.duration_ms`
+   * KULLANILIR — `agent_runs`'ın toplam süresi insan beklemesini (awaiting_permission/awaiting_user)
+   * içerir, model hızını ÖLÇMEZ; `requests` yalnız model turlarını kapsar.
+   */
+  turnStatsSince(sinceMs: number): RouterTurnStatsRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT provider, model, AVG(duration_ms) AS avg_duration_ms, COUNT(*) AS turns
+         FROM requests WHERE started_at >= ? AND status = 'ok'
+         GROUP BY provider, model`,
+      )
+      .all(sinceMs) as Array<{
+      provider: string;
+      model: string;
+      avg_duration_ms: number;
+      turns: number;
+    }>;
+    return rows.map((row) => ({
+      provider: row.provider,
+      model: row.model,
+      avgDurationMs: row.avg_duration_ms,
+      turns: row.turns,
+    }));
+  }
+
   close(): void {
     this.db.close();
   }
+}
+
+/** `runsSince` satırı — router/stats.ts girdisi. */
+export interface RouterRunRow {
+  task: string;
+  provider: string;
+  model: string;
+  ok: boolean;
+  costUsd: number;
+}
+
+/** `turnStatsSince` satırı — router/stats.ts girdisi. */
+export interface RouterTurnStatsRow {
+  provider: string;
+  model: string;
+  avgDurationMs: number;
+  turns: number;
 }
 
 export interface AgentRunCreate {

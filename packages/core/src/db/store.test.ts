@@ -219,4 +219,67 @@ describe("DataStore", () => {
     store = new DataStore(file); // afterEach bunu kapatacak
     expect(store.recentRequests()).toHaveLength(1);
   });
+
+  describe("router v2 okumaları (ADR-016 Karar 1)", () => {
+    function finishRun(overrides: {
+      state: "completed" | "failed" | "cancelled";
+      startedAt: number;
+      task?: string;
+      provider?: string;
+      model?: string;
+      costUsd?: number;
+    }): void {
+      const id = crypto.randomUUID();
+      store.createAgentRun({
+        id,
+        agentId: "coder",
+        task: overrides.task ?? "şu kodu düzelt",
+        provider: overrides.provider ?? "ollama",
+        model: overrides.model ?? "qwen3:8b",
+        cwd: dir,
+        startedAt: overrides.startedAt,
+      });
+      store.finishAgentRun(id, {
+        state: overrides.state,
+        result: overrides.state === "completed" ? "tamam" : null,
+        errorCode: overrides.state === "failed" ? "AGENT_TOOL_LOOP" : null,
+        usage: { inputTokens: 10, outputTokens: 5, costUsd: overrides.costUsd ?? 0 },
+        steps: 1,
+      });
+    }
+
+    it("runsSince: yalnız completed/failed döner, cancelled HARİÇ tutulur", () => {
+      openStore();
+      finishRun({ state: "completed", startedAt: 5_000, costUsd: 0.02 });
+      finishRun({ state: "failed", startedAt: 6_000 });
+      finishRun({ state: "cancelled", startedAt: 7_000 });
+
+      const rows = store.runsSince(0);
+      expect(rows).toHaveLength(2);
+      expect(rows.map((r) => r.ok).sort()).toEqual([false, true]);
+      expect(rows.find((r) => r.ok)?.costUsd).toBe(0.02);
+    });
+
+    it("runsSince: sinceMs'ten ÖNCEki koşuları dışarıda bırakır", () => {
+      openStore();
+      finishRun({ state: "completed", startedAt: 1_000 });
+      finishRun({ state: "completed", startedAt: 9_000 });
+
+      expect(store.runsSince(5_000)).toHaveLength(1);
+      expect(store.runsSince(0)).toHaveLength(2);
+    });
+
+    it("turnStatsSince: sağlayıcı+model başına ortalama tur süresi ve tur sayısı (yalnız status='ok')", () => {
+      openStore();
+      store.recordRequest(makeRequest({ startedAt: 5_000, durationMs: 1000 }));
+      store.recordRequest(makeRequest({ startedAt: 6_000, durationMs: 3000 }));
+      store.recordRequest(
+        makeRequest({ startedAt: 7_000, durationMs: 99_000, status: "error" }), // sayılmamalı
+      );
+
+      const rows = store.turnStatsSince(0);
+      const row = rows.find((r) => r.provider === "anthropic" && r.model === "claude-opus-4-8");
+      expect(row).toMatchObject({ turns: 2, avgDurationMs: 2000 });
+    });
+  });
 });

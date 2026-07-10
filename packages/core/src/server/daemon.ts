@@ -30,6 +30,7 @@ import type { ProviderAdapter } from "../providers/types.js";
 import { DataStore } from "../db/store.js";
 import { detectVramGb, sampleGpus } from "../router/hardware.js";
 import { suggestModels } from "../router/router.js";
+import { computeRouterStats, STATS_WINDOW_DAYS, type RouterStats } from "../router/stats.js";
 import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent } from "../agent/definition.js";
 import { registerMcpServer } from "../agent/mcp.js";
@@ -162,6 +163,17 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     return lists.flat();
   }
 
+  /**
+   * Router v2 (ADR-016 Karar 1/2): mevcut tablolardan sorgu-zamanı skor agregasyonu — fiziksel
+   * skor tablosu yok. `router.suggest` işleyicisi VE `pickModel` (agent motoru) AYNI fonksiyonu
+   * çağırır ki iki yol aynı kanıta göre aynı kararı versin (SPEC §1 "boşsa router seçer" ilkesiyle
+   * tutarlılık). Feedback tablosu Dilim Z2'de gelir — burada bilinçle hep `[]`.
+   */
+  function buildRouterStats(): RouterStats {
+    const sinceMs = Date.now() - STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    return computeRouterStats(store.runsSince(sinceMs), store.turnStatsSince(sinceMs), []);
+  }
+
   async function providerStatuses(): Promise<ProviderHealth[]> {
     const statuses: ProviderHealth[] = [];
     for (const provider of providers.values()) {
@@ -184,7 +196,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     // "boşsa router seçer" (SPEC-AGENT §1): ilk öneri kullanılır.
     pickModel: async (task) => {
       const [models, vramGb] = await Promise.all([availableModels(), getVramGb()]);
-      const suggestions = suggestModels(task, undefined, { models, vramGb });
+      const suggestions = suggestModels(task, undefined, { models, vramGb, stats: buildRouterStats() });
       const first = suggestions[0];
       return first === undefined ? null : { provider: first.provider, model: first.model };
     },
@@ -616,6 +628,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             const suggestions = suggestModels(payload.task, payload.constraints, {
               models,
               vramGb,
+              stats: buildRouterStats(),
             });
             if (suggestions.length === 0) {
               sendError(

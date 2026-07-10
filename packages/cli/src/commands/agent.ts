@@ -130,24 +130,42 @@ export async function agentRunCommand(
       }
     });
 
-    client
-      .request("agent.start", {
-        agentId,
-        task,
-        cwd,
-        ...(options.model !== undefined ? { model: options.model } : {}),
-        ...(options.provider !== undefined ? { provider: options.provider } : {}),
-      })
-      .then((ok) => {
-        runId = ok.runId;
-        console.log(
-          chalk.bold(`🤖 ${agentId} çalışıyor`) + chalk.dim(` — koşu ${ok.runId.slice(0, 8)} · ${cwd}`),
-        );
-      })
-      .catch((error: unknown) => {
-        console.error(chalk.red(`✘ ${error instanceof Error ? error.message : String(error)}`));
-        resolveExit(1);
-      });
+    // Router v2 (ADR-016 Karar 2, Dilim Z1): model ELLE verilmediyse ne seçileceğini ÖNCEDEN
+    // göster — engine'in pickModel'i AYNI fonksiyon+kanıtla aynı seçimi yapar (determinizm),
+    // burası yalnız görünürlük katar. İstek başarısızsa sessizce atla; koşuyu ASLA bloklamaz.
+    const announceRouterPick = async (): Promise<void> => {
+      if (options.model !== undefined) return;
+      try {
+        const { suggestions } = await client.request("router.suggest", { task });
+        const first = suggestions[0];
+        if (first !== undefined) {
+          console.log(chalk.dim(`🧭 yönlendirici: ${first.model} — ${first.reason}`));
+        }
+      } catch {
+        // öneri süsü — koşuyu engellemez.
+      }
+    };
+
+    void announceRouterPick().then(() =>
+      client
+        .request("agent.start", {
+          agentId,
+          task,
+          cwd,
+          ...(options.model !== undefined ? { model: options.model } : {}),
+          ...(options.provider !== undefined ? { provider: options.provider } : {}),
+        })
+        .then((ok) => {
+          runId = ok.runId;
+          console.log(
+            chalk.bold(`🤖 ${agentId} çalışıyor`) + chalk.dim(` — koşu ${ok.runId.slice(0, 8)} · ${cwd}`),
+          );
+        })
+        .catch((error: unknown) => {
+          console.error(chalk.red(`✘ ${error instanceof Error ? error.message : String(error)}`));
+          resolveExit(1);
+        }),
+    );
   });
 
   readline.close();

@@ -1,5 +1,12 @@
 import type { ModelInfo } from "@symphony/shared";
 import { computeCostUsd } from "../providers/pricing.js";
+import {
+  hasEnoughEvidence,
+  routerStatsKey,
+  scoreOf,
+  type RouterStats,
+  type RouterStatsEntry,
+} from "./stats.js";
 
 /**
  * Model yönlendirici v1 — KURAL TABANLI (ROADMAP Faz 1).
@@ -7,8 +14,8 @@ import { computeCostUsd } from "../providers/pricing.js";
  * üzerinden gerekçeli öneri listesi üretir. Öneri her zaman şeffaf gerekçelidir
  * (protokol `router.suggest.ok.suggestions[].reason` zorunlu alan).
  *
- * v2 (Faz 6) bu kuralların yerine SQLite'taki gerçek kullanım skorlarını koyacak;
- * arayüz aynı kalacak şekilde tasarlandı.
+ * v2 (ADR-016 Karar 2, Dilim Z1): kural iskeleti KORUNUR, `RouterContext.stats` verilirse
+ * öneriler kanıtlı skorla YENİDEN SIRALANIR + gerekçelendirilir — yeni aday ÜRETİLMEZ.
  */
 
 export type TaskKind = "code" | "quick" | "longContext" | "general";
@@ -18,6 +25,8 @@ export interface RouterContext {
   models: ModelInfo[];
   /** NVIDIA VRAM (GB); tespit edilemediyse null. */
   vramGb: number | null;
+  /** ADR-016 Karar 1/2: verilmezse v1 davranışı BİREBİR (kural iskeleti, kanıt yok). */
+  stats?: RouterStats;
 }
 
 export interface RouterConstraints {
@@ -227,7 +236,65 @@ export function suggestModels(
       ? suggestions
       : suggestions.filter((s) => (s.estimatedCostUsd ?? 0) <= budget);
 
-  return withinBudget.slice(0, 3);
+  // ADR-016 Karar 2: kanıt varsa (stats verildi VE ilgili model/tür için ≥MIN_SAMPLES koşu
+  // varsa) yeniden sırala + gerekçelendir; yoksa v1 sırası/gerekçesi BİREBİR korunur.
+  const mixed = context.stats !== undefined ? applyStatsMixing(withinBudget, kind, context.stats) : withinBudget;
+
+  return mixed.slice(0, 3);
+}
+
+/** Kanıtlı bir girdiyi kullanıcıya okunur gerekçeye çevirir (ADR-016 Karar 2). */
+function describeEvidence(entry: RouterStatsEntry, score: number): string {
+  const successPct = entry.runs > 0 ? Math.round((entry.ok / entry.runs) * 100) : 0;
+  const parts = [`son ${entry.runs} koşuda %${successPct} başarı`];
+  if (entry.avgTurnMs !== undefined) {
+    parts.push(`ort. ${(entry.avgTurnMs / 1000).toFixed(1)}s/tur`);
+  }
+  if (entry.avgCostUsd > 0) {
+    parts.push(`ort. ${formatUsd(entry.avgCostUsd)}/koşu`);
+  }
+  const scoreNote = score < 0.5 ? " — düşük güven skoru" : "";
+  return `${parts.join(", ")}${scoreNote}.`;
+}
+
+/**
+ * v1'in ürettiği öneri listesini kanıtla yeniden sıralar: kanıtlı ve skoru en yüksek (≥0.5)
+ * olan BAŞA, kanıtlı ve skoru <0.5 olan SONA taşınır; kanıtsızlar (ya da tek başına ne en
+ * yüksek ne düşük olan kanıtlılar) ARADA, orijinal göreli sırayla kalır. Yeni aday üretmez.
+ */
+function applyStatsMixing(
+  suggestions: RouterSuggestion[],
+  kind: TaskKind,
+  stats: RouterStats,
+): RouterSuggestion[] {
+  interface Scored {
+    suggestion: RouterSuggestion;
+    score: number | null;
+  }
+
+  const scored: Scored[] = suggestions.map((suggestion) => {
+    const entry = stats.get(routerStatsKey(suggestion.provider, suggestion.model, kind));
+    if (entry === undefined || !hasEnoughEvidence(entry)) {
+      return { suggestion, score: null };
+    }
+    const score = scoreOf(entry);
+    return { suggestion: { ...suggestion, reason: describeEvidence(entry, score) }, score };
+  });
+
+  const demoted = new Set(scored.filter((x) => x.score !== null && x.score < 0.5));
+  const remaining = scored.filter((x) => !demoted.has(x));
+
+  let promoted: Scored | undefined;
+  let bestScore = -Infinity;
+  for (const x of remaining) {
+    if (x.score !== null && x.score >= 0.5 && x.score > bestScore) {
+      bestScore = x.score;
+      promoted = x;
+    }
+  }
+  const rest = remaining.filter((x) => x !== promoted);
+
+  return [...(promoted ? [promoted] : []), ...rest, ...demoted].map((x) => x.suggestion);
 }
 
 function localCoderRank(model: ModelInfo): number {

@@ -183,6 +183,57 @@ describe("symphonyd", () => {
     ws.close();
   });
 
+  it("router.suggest v2 (ADR-016 Karar 1/2, Dilim Z1): geçmiş koşu kanıtı VARSA reason'a yazılır", async () => {
+    // Aynı (provider, model, tür) için ≥MIN_SAMPLES tamamlanmış koşu SEED et — ayrı bir
+    // DataStore ile aynı dosyayı aç (kabul testi deseni: satır ~380 "usage.query" testinde de
+    // kullanılıyor). Görev metni bilerek üstteki testle AYNI ("bu metni özetle" → quick) —
+    // v2'nin gerçekten O testin sonraki çağrısında devreye girdiğini göstermek için.
+    const db = new DataStore(join(testHome, "data", "symphony.db"));
+    try {
+      for (let i = 0; i < 4; i++) {
+        const id = crypto.randomUUID();
+        db.createAgentRun({
+          id,
+          agentId: "asistan",
+          task: "bu metni özetle",
+          provider: "ollama",
+          model: "qwen3:8b",
+          cwd: testHome,
+          startedAt: Date.now(),
+        });
+        db.finishAgentRun(id, {
+          state: "completed",
+          result: "özet",
+          errorCode: null,
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0 },
+          steps: 1,
+        });
+      }
+    } finally {
+      db.close();
+    }
+
+    const { reply, ws } = await roundTrip(
+      createMessage("hello", {
+        token: daemon.token,
+        client: "cli",
+        protocolVersion: PROTOCOL_VERSION,
+      }),
+    );
+    expect(reply.type).toBe("hello.ok");
+
+    const suggestReply = await request(
+      ws,
+      createMessage("router.suggest", { task: "bu metni özetle" }),
+    );
+    const { suggestions } = suggestReply.payload as {
+      suggestions: Array<{ provider: string; model: string; reason: string }>;
+    };
+    const local = suggestions.find((s) => s.provider === "ollama" && s.model === "qwen3:8b");
+    expect(local?.reason).toContain("4 koşuda %100 başarı");
+    ws.close();
+  });
+
   it("tek-kopya kilidi: ikinci kopya reddedilir ve token dosyası EZİLMEZ", async () => {
     const tokenFile = join(testHome, "daemon.token");
     const tokenBefore = readFileSync(tokenFile, "utf8");

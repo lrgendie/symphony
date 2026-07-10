@@ -3,7 +3,50 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Fable — **ADR-016: Faz 6 Zeka Katmanı tasarımı TAMAM**, dilimler Z1-Z5 hazır)
+**Son güncelleme:** 2026-07-10 (Sonnet — Dilim Z1 BİTTİ ve testli, 339 test)
+
+## Faz 6 — Dilim Z1 (routerStats + router v2 karışımı) BİTTİ (2026-07-10, Sonnet)
+
+ADR-016 Karar 1/2 uygulandı. Protokolsüz (öngörüldüğü gibi).
+- **`store.ts`:** `runsSince(sinceMs)` (`agent_runs`, yalnız completed/failed — cancelled SQL'de
+  elenir) + `turnStatsSince(sinceMs)` (`requests`, `status='ok' GROUP BY provider,model`,
+  ortalama `duration_ms`). İki YENİ export tip: `RouterRunRow`/`RouterTurnStatsRow`. Göç YOK.
+- **YENİ `router/stats.ts`** (SAF, testli): `MIN_SAMPLES=3`, `STATS_WINDOW_DAYS=30`,
+  `computeRouterStats(runRows, turnStatsRows, feedbackRows)` — `classifyTask`'ı `router.ts`'ten
+  import eder (Z1'de `feedbackRows` hep `[]`, Z2'de dolacak arayüz hazır), `scoreOf` (Laplace +
+  açık geri bildirim 2× ağır), `hasEnoughEvidence`. **Bilinçli döngüsel import:** `stats.ts`
+  runtime'da `router.ts`'ten `classifyTask` alır, `router.ts` runtime'da `stats.ts`'ten
+  `scoreOf`/`hasEnoughEvidence`/`routerStatsKey` alır — ikisi de yalnız fonksiyon GÖVDESİNDE
+  kullanılır (modül değerlendirme anında değil), bu yüzden ESM döngüsü güvenli (build ile
+  doğrulandı, hata yok).
+- **`router.ts`:** `RouterContext.stats?: RouterStats` (opsiyonel — verilmezse v1 BİREBİR).
+  `suggestModels` bütçe filtresinden SONRA `applyStatsMixing`: kanıtlı (`runs>=MIN_SAMPLES`) ve
+  `score<0.5` → listenin SONUNA; kanıtlı ve en yüksek skorlu (≥0.5) → BAŞA; ikisi de reason'ı
+  kanıtla YENİDEN yazar (`describeEvidence`: "son N koşuda %X başarı" + varsa "Ys/tur" + varsa
+  "$Z/koşu", düşük skorda "— düşük güven skoru" notu). Yeni aday ÜRETMEZ, yalnız v1 listesini
+  sıralar/gerekçelendirir.
+- **`daemon.ts`:** `buildRouterStats()` yardımcı fonksiyon (son 30 gün → `store.runsSince` +
+  `turnStatsSince` + `[]` feedback → `computeRouterStats`) — HEM `pickModel` (engine) HEM
+  `router.suggest` handler'ı AYNI fonksiyonu çağırır (iki yol aynı kanıta göre aynı kararı verir).
+- **CLI `commands/agent.ts`:** `--model` verilmediyse `agent.start`'tan ÖNCE `router.suggest`
+  atılır, ilk öneri `🧭 yönlendirici: <model> — <reason>` satırıyla basılır (öneri süsü — istek
+  başarısız olursa sessizce atlanır, koşuyu ASLA bloklamaz). `Promise` executor'ı async
+  OLMADIĞI için `.then()` zincirine çevrildi (`await` doğrudan kullanılamazdı).
+- **Test:** 321→**339** (+18: `stats.test.ts` YENİ dosya 9 — gruplama/görev-türü ayrımı,
+  cancelled'ın girdide hiç temsil edilemediği notu [gerçek filtre store'da, ayrı test], avgTurnMs
+  eşlemesi, feedback ağırlığı, `scoreOf` formülü 3 senaryo, `MIN_SAMPLES` sınırı; `router.test.ts`
+  +5 — kanıtsız BİREBİR, `MIN_SAMPLES` altı sayılmaz, demote, promote, maliyet gerekçesi;
+  `store.test.ts` +3 — `runsSince` cancelled hariç + zaman penceresi, `turnStatsSince` ortalama;
+  `daemon.test.ts` +1 — gerçek DB'ye 4 completed koşu seed edilip `router.suggest` cevabında
+  "4 koşuda %100 başarı" doğrulanır, ADR-016'nın "gerekçesini gösteriyor" kabul maddesinin
+  uçtan-uca kanıtı). `pnpm build && pnpm test && pnpm lint` temiz (44 dosya/339 test).
+- **CANLI DOĞRULAMA TAMAMLANDI:** daemon restart (yeni kod) → `symphony agent asistan "..."`
+  (--model VERİLMEDEN) → `🧭 yönlendirici: qwen2.5-coder:7b — Genel iş: ...` satırı düzgün
+  basıldı, koşu normal tamamlandı (842+50 token). Kanıt yoksa (bu kombinasyon için henüz
+  ≥3 koşu birikmemiş) v1 gerekçesi zarifçe göründü — beklenen davranış.
+
+**Sıradaki: Dilim Z2** (geri bildirim — `feedback.submit` + göç v5 + TUI/CLI yüzeyi).
+Talimat aşağıda ("📋 Dilim Z2" başlığı) zaten yazılı, değişmedi.
 
 ## Faz 6 — Zeka Katmanı: TASARIM TAMAM (2026-07-10, Fable — ADR-016) → dilimler Z1..Z5
 
@@ -27,7 +70,7 @@ Z2, `GET /api/report` Z3, `GET /api/context-map` Z4), ROADMAP Faz 6 maddeleri AD
   komşuluk); model = renk/filtre (kenar değil); d3-force ile 2D AYRI görünüm (three.js'e
   bindirme reddedildi). Ebeveyn-çocuk kenarı v1'de yok (agent_runs'ta parent sütunu yok).
 
-### 📋 Dilim Z1 — routerStats + router v2 karışımı (protokolsüz) — SIRADAKİ
+### ✅ Dilim Z1 — routerStats + router v2 karışımı (protokolsüz) — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 **Önce oku (yalnız bunlar):** ADR-016 Karar 1+2 · `router/router.ts` (tamamı, kısa) ·
 `store.ts`'te `usageQuery`/`recentAgentRuns` civarı · `daemon.ts` 180-195 (pickModel) ve
@@ -59,7 +102,7 @@ Z2, `GET /api/report` Z3, `GET /api/context-map` Z4), ROADMAP Faz 6 maddeleri AD
    cevabında kanıtlı reason (seed'li DB ile).
 7. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
 
-### 📋 Dilim Z2 — geri bildirim (`feedback.submit` + göç v5 + TUI/CLI yüzeyi)
+### 📋 Dilim Z2 — geri bildirim (`feedback.submit` + göç v5 + TUI/CLI yüzeyi) — SIRADAKİ
 
 1. PROTOKOL'deki `(planlandı — Dilim Z2)` işaretini kaldır; `shared/requests.ts`'e
    `FeedbackSubmitPayloadSchema` + events'e `feedback.submit.ok {}`.

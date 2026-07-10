@@ -57,7 +57,14 @@ protokol WS/REST üzerinden konuşulur.
 - `providers/telemetry.ts` — SAF, testli: `parseRateLimits` (cevap header'larından rate-limit,
   ek-toleranslı) + `extractCacheTokens` (Anthropic providerMetadata). adapter+engine kullanır →
   `provider.limits` yayını + `usage.updated` cache alanları
-- `router/router.ts` — kural tabanlı model önerisi v1 (`router.suggest`)
+- `router/router.ts` — kural tabanlı model önerisi (`router.suggest`). v2 (ADR-016 Karar 2, Dilim
+  Z1): `RouterContext.stats?` verilirse `applyStatsMixing` v1 listesini kanıtla yeniden sıralar +
+  gerekçelendirir (yeni aday üretmez); verilmezse v1 BİREBİR
+- `router/stats.ts` — SAF, testli (ADR-016 Karar 1): `computeRouterStats(runRows, turnStatsRows,
+  feedbackRows)` → `(provider,model,taskKind)` başına `RouterStats` Map; `scoreOf` (Laplace +
+  açık geri bildirim 2× ağır), `hasEnoughEvidence` (`MIN_SAMPLES=3`). `router.ts` ile RUNTIME
+  döngüsel import (yalnız fonksiyon gövdelerinde kullanılır — modül değerlendirmede değil, ESM'de
+  güvenli, build ile doğrulandı)
 - `router/hardware.ts` — nvidia-smi: `detectVramGb` (router) + `sampleGpus`/`parseGpuCsv` (saf,
   testli) → GPU vitalleri (util/VRAM/ısı). Daemon 2sn poll → `hardware.updated` yayını
   (`DaemonOptions.sampleHardware`, testte kapalı)
@@ -65,7 +72,9 @@ protokol WS/REST üzerinden konuşulur.
   (v1 requests+telemetry, v2 sessions+messages, v3 agent_runs+agent_steps, v4 agent_runs
   CHECK'ine awaiting_user — tablo yeniden kurma; migrate() göç sırasında FK'yı kapatır).
   `saveConversation` (2.3b): tam mesaj listesini sessions/messages'a REPLACE eder — chat.start
-  (`saveChatTurn` buna delege) VE konuşmalı-agent (engine) aynı kalıcılık modelini paylaşır
+  (`saveChatTurn` buna delege) VE konuşmalı-agent (engine) aynı kalıcılık modelini paylaşır.
+  `runsSince`/`turnStatsSince` (ADR-016 Karar 1, Dilim Z1): router v2'nin ham veri kaynağı —
+  göç YOK, sorgu-zamanı okuma
 - `memory/profile.ts` — SAF, testli, `core/index.ts`'ten dışa açık (ADR-013): `loadProfile`/
   `ensureProfileScaffold` (M1, enjeksiyon — kesiyor/scaffold'u null sayıyor) AYRI amaçlı
   `readProfileSnapshot`/`writeProfile` (M2, REST GET/PUT — TAM içerik, `truncated` yalnız uyarı)

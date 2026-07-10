@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ModelInfo } from "@symphony/shared";
 import { classifyTask, suggestModels, type RouterContext } from "./router.js";
+import { routerStatsKey, type RouterStats, type RouterStatsEntry } from "./stats.js";
 
 const opus: ModelInfo = {
   provider: "anthropic",
@@ -95,5 +96,72 @@ describe("suggestModels", () => {
     const result = suggestModels("bir özet yaz", undefined, context);
     const local = result.find((s) => s.local);
     expect(local?.model).toBe("qwen2.5vl:7b");
+  });
+});
+
+describe("suggestModels — router v2 stats karışımı (ADR-016 Karar 2)", () => {
+  const entry = (overrides: Partial<RouterStatsEntry>): RouterStatsEntry => ({
+    runs: 0,
+    ok: 0,
+    iyi: 0,
+    kötü: 0,
+    avgCostUsd: 0,
+    ...overrides,
+  });
+
+  it("kanıt YOKSA (stats verilse bile eşleşen entry yok) v1 sırası/gerekçesi BİREBİR korunur", () => {
+    const v1 = suggestModels("şu kodu refactor et", undefined, fullContext);
+    const stats: RouterStats = new Map(); // boş — hiçbir modele kanıt yok
+    const v2 = suggestModels("şu kodu refactor et", undefined, { ...fullContext, stats });
+    expect(v2).toEqual(v1);
+  });
+
+  it("MIN_SAMPLES altı (2 koşu) kanıt SAYILMAZ — sıra/gerekçe v1 ile aynı kalır", () => {
+    const stats: RouterStats = new Map([
+      [routerStatsKey("ollama", "qwen3:8b", "code"), entry({ runs: 2, ok: 2 })],
+    ]);
+    const v1 = suggestModels("şu kodu refactor et", undefined, fullContext);
+    const v2 = suggestModels("şu kodu refactor et", undefined, { ...fullContext, stats });
+    expect(v2).toEqual(v1);
+  });
+
+  it("kanıtlı düşük skor (<0.5) DEMOTE edilir — listenin sonuna iner, gerekçe kanıtla değişir", () => {
+    // score = (1 + 2*1) / (5 + 2) = 3/7 ≈ 0.43 < 0.5
+    const stats: RouterStats = new Map([
+      [routerStatsKey("anthropic", "claude-opus-4-8", "code"), entry({ runs: 5, ok: 1 })],
+    ]);
+    const result = suggestModels("şu kodu refactor et", undefined, { ...fullContext, stats });
+    // v1'de opus (bulut) başta, qwen (yerel) ikinciydi — düşük skor opus'u SONA atar.
+    expect(result[0]?.model).toBe("qwen3:8b");
+    expect(result.at(-1)?.model).toBe("claude-opus-4-8");
+    expect(result.at(-1)?.reason).toContain("son 5 koşuda %20 başarı");
+    expect(result.at(-1)?.reason).toContain("düşük güven skoru");
+  });
+
+  it("kanıtlı en yüksek skor (≥0.5) PROMOTE edilir — başa çıkar, gerekçe kanıt sayılarını taşır", () => {
+    // score = (9 + 1) / (10 + 2) = 10/12 ≈ 0.83 ≥ 0.5
+    const stats: RouterStats = new Map([
+      [
+        routerStatsKey("ollama", "qwen3:8b", "code"),
+        entry({ runs: 10, ok: 9, avgTurnMs: 2500, avgCostUsd: 0 }),
+      ],
+    ]);
+    const result = suggestModels("şu kodu refactor et", undefined, { ...fullContext, stats });
+    // v1'de qwen (yerel) ikinciydi — yüksek skor onu BAŞA taşır.
+    expect(result[0]?.model).toBe("qwen3:8b");
+    expect(result[0]?.reason).toContain("son 10 koşuda %90 başarı");
+    expect(result[0]?.reason).toContain("2.5s/tur");
+  });
+
+  it("kanıtlı yüksek maliyetli model gerekçesinde ortalama maliyet görünür", () => {
+    const stats: RouterStats = new Map([
+      [
+        routerStatsKey("anthropic", "claude-opus-4-8", "code"),
+        entry({ runs: 4, ok: 4, avgCostUsd: 0.021 }),
+      ],
+    ]);
+    const result = suggestModels("şu kodu refactor et", undefined, { ...fullContext, stats });
+    const opusResult = result.find((s) => s.model === "claude-opus-4-8");
+    expect(opusResult?.reason).toContain("$0.021/koşu");
   });
 });
