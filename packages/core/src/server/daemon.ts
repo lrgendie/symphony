@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join } from "node:path";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
@@ -54,7 +55,12 @@ import { EventBus } from "./bus.js";
 import { DeltaBatcher } from "./delta-batcher.js";
 import { generateDaemonToken, loadExistingToken, persistDaemonToken } from "./token.js";
 
-export const DAEMON_VERSION = "0.1.0";
+// ADR-017 (Faz 7, Dilim F1): sürüm tek kaynağı package.json — hardcode edilmez. Self-referans
+// (`@symphony/core/package.json`) `exports` haritasındaki `./package.json` girdisiyle çalışır.
+const require = createRequire(import.meta.url);
+export const DAEMON_VERSION: string = (
+  require("@symphony/core/package.json") as { version: string }
+).version;
 
 export interface DaemonOptions {
   /** Test/geliştirme: 0 verilirse boş bir port seçilir. */

@@ -3,7 +3,41 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Fable — Faz 7 tasarımı TAMAM: ADR-017 yazıldı, dilimler F1-F7 Sonnet'e hazır)
+**Son güncelleme:** 2026-07-10 (Sonnet — Dilim F1 BİTTİ ve testli, 392 test)
+
+## Faz 7 — Dilim F1 (paketlenebilir çekirdek) BİTTİ (2026-07-10, Sonnet)
+
+ADR-017 Karar 1 uygulandı.
+- **`packages/{shared,core,cli}/package.json`:** `"private": true` kaldırıldı; üçüne de
+  `files: ["dist"]`, `repository` (`directory: packages/<ad>`), `publishConfig: {access:"public"}`
+  eklendi. `license` alanı BİLİNÇLE eklenmedi (F2'de kullanıcıyla kararlaştırılacak). `exports`'a
+  üçünde de `"./package.json": "./package.json"` eklendi (self-referans için — cli'de `exports`
+  hiç yoktu, `"."` + `"./package.json"` ile YENİ eklendi; `bin`/`main` davranışını etkilemedi,
+  build+test bunu doğruladı). `cli/src/index.ts` zaten shebang'lıydı, dokunulmadı.
+- **`daemon.ts`:** hardcoded `DAEMON_VERSION = "0.1.0"` kaldırıldı — `createRequire(import.meta.url)`
+  ile `@symphony/core/package.json`'ı self-referansla okuyor (`exports`'taki yeni satır bunu
+  mümkün kıldı). `main.ts`/health/hello.ok'taki üç kullanım yeri değişmedi (aynı export'u kullanıyor).
+- **YENİ `scripts/set-version.mjs`:** kök + 3 paketin `version` alanını TEK argümanla lockstep
+  yazar (bağımlılık yok, düz fs+JSON regex semver kontrolü). `node scripts/set-version.mjs 0.1.0`
+  ile İDEMPOTENT test edildi (JSON yeniden serileştirme dışında içerik değişmedi — `files` dizisi
+  çok satırlı biçime döndü, semantik fark yok, build/test/lint sonrasında da temiz).
+- **Test:** `daemon.test.ts`'teki sağlık ucu testi genişletildi — `daemonVersion`'ın core'un
+  `package.json`'ından **BAĞIMSIZ okunan** (daemon.ts'in kendi sabitine karşı DEĞİL — bu tautolojik
+  olurdu) gerçek `version` alanıyla birebir eşleştiği doğrulanıyor (hardcode'a geri dönüşü yakalar).
+  392 test sabit (yeni `it` eklenmedi, mevcut genişletildi). `pnpm build && pnpm test && pnpm lint`
+  temiz.
+- **Elle doğrulama (F1'in kabul maddesi, test DEĞİL):** `npm pack --dry-run` üç pakette de
+  (shared/core/cli) yalnız `dist/` + `package.json` içeriyor, `src/` YOK (shared 33, core 129,
+  cli 97 dosya — hepsi dist). `pnpm -r publish --dry-run --no-git-checks` üçünde de temiz (hata
+  yok; `ui`/`desktop` `private:true` kaldığından otomatik atlandı — beklenen). `pnpm pack` ile
+  gerçek tarball alınıp açıldı: cli'nin paketlenmiş `package.json`'ında `@symphony/core`/
+  `@symphony/shared` `"workspace:*"` → `"0.1.0"`'a ÇEVRİLMİŞ görüldü (ADR-017 Karar 1'in
+  "pnpm publish workspace:*'ı gerçek sürüme çevirir" iddiası doğrulandı) — geçici tgz/dizin
+  temizlendi, kalıcı yan etki yok.
+
+**Sıradaki: Dilim F2** (npm yayını — KULLANICIYLA birlikte: lisans seçimi, `npm login`,
+`@symphony` org denemesi). Talimat aşağıda ("📋 Dilim F2" başlığı) zaten yazılı, değişmedi;
+F2'ye başlarken önce kullanıcıya lisans + npm login + org denemesini SOR, varsayım yapma.
 
 ## Faz 7 — Paketleme ve Taşınabilirlik: TASARIM TAMAM (2026-07-10, Fable — ADR-017) → dilimler F1..F7
 
@@ -28,7 +62,7 @@ buradaki talimatlar uygulama kılavuzudur, çelişkide ADR kazanır). Kararları
 paketli kurulumda da çalışır, F1 bu yüzden hafif. npm'de `@symphony/cli|core` YOK (404).
 Kök+3 paket sürümü zaten 0.1.0 (lockstep başlangıcı hazır).
 
-### 📋 Dilim F1 — paketlenebilir çekirdek (yayın metadata'sı + sürüm tek-kaynağı) — SIRADAKİ
+### ✅ Dilim F1 — paketlenebilir çekirdek (yayın metadata'sı + sürüm tek-kaynağı) — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 **Önce oku (yalnız bunlar):** ADR-017 Karar 1 · `packages/{shared,core,cli}/package.json` ·
 `packages/core/src/server/daemon.ts` başı (DAEMON_VERSION) · `packages/cli/src/index.ts` başı
@@ -51,7 +85,7 @@ Kök+3 paket sürümü zaten 0.1.0 (lockstep başlangıcı hazır).
    `npm pack --dry-run` çıktısından teyit et).
 5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
 
-### 📋 Dilim F2 — npm yayını (KULLANICIYLA BİRLİKTE — interaktif adımlar var)
+### 📋 Dilim F2 — npm yayını (KULLANICIYLA BİRLİKTE — interaktif adımlar var) — SIRADAKİ
 
 1. Kullanıcıya SOR: (a) lisans (öneri: MIT — LICENSE dosyası köke + `"license":"MIT"` üç pakete);
    (b) `npm login` yaptır (interaktif — kullanıcı `! npm login` ile kendi çalıştırsın);

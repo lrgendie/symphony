@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import { createMessage, PROTOCOL_VERSION, type Envelope } from "@symphony/shared";
 import { DataStore } from "../db/store.js";
@@ -104,9 +105,15 @@ describe("symphonyd", () => {
   it("sağlık ucu token istemez ve protokol sürümünü bildirir", async () => {
     const res = await fetch(`http://127.0.0.1:${daemon.port}/api/health`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { ok: boolean; protocolVersion: number };
+    const body = (await res.json()) as { ok: boolean; protocolVersion: number; daemonVersion: string };
     expect(body.ok).toBe(true);
     expect(body.protocolVersion).toBe(PROTOCOL_VERSION);
+    // ADR-017 (Faz 7, Dilim F1): daemonVersion HARDCODE DEĞİL — core'un KENDİ package.json'ından
+    // (self-referans) okunuyor. Testte package.json'ı BAĞIMSIZ okuyup karşılaştırmak (daemon.ts'in
+    // aynı sabiti kendine karşı sınamasından FARKLI) hardcode'a geri dönüşü gerçekten yakalar.
+    const pkgPath = fileURLToPath(new URL("../../package.json", import.meta.url));
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version: string };
+    expect(body.daemonVersion).toBe(pkg.version);
   });
 
   it("REST, token'sız isteği 401 ile reddeder", async () => {
