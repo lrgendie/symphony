@@ -3,7 +3,7 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Sonnet — "hangi dosya" zengin görünümü BİTTİ, 297 test; proje görünümü/yol haritası görselleştirme Fable/Opus'a hazır)
+**Son güncelleme:** 2026-07-10 (Fable — ADR-015: proje görünümü + yol haritası tasarımı TAMAM; dilimler P1/P2/P3 Sonnet'e hazır)
 
 ## Faz 4 — "Hangi dosya" zengin görünümü BİTTİ (2026-07-10, Sonnet)
 
@@ -19,51 +19,64 @@
   dokunmaz, koşu bitince temizlenir). `pnpm build && pnpm test && pnpm lint` temiz (41/297).
 - **Görsel doğrulama KULLANICIYA** (`desktop:dev`, Bash'ten görülemez).
 
-## 📋 SIRADAKİ (Faz 4 kalanı): proje görünümü + yol haritası görselleştirme — Fable/Opus tasarım bekliyor
+## Faz 4 kalanı: proje görünümü + yol haritası — TASARIM TAMAM (2026-07-10, Fable — ADR-015) → dilimler P1/P2/P3
 
-Kullanıcı onayladı: ikisi de gerçek mimari soru içeriyor (M1-M3/O1-O3'teki gibi "kalıbı
-tekrarlamak" değil), Sonnet doğaçlarsa revize riski var.
+5 açık soru karara bağlandı, **ADR-015 yazıldı** (`docs/kararlar/KARARLAR.md`). Kararların özü:
+- **Proje = koşunun cwd'sinden otomatik** (görünen ad = basename, tam yol soluk); kayıt defteri
+  YOK (v1) — çakışma gerçek sorun olursa v2'de isteğe bağlı adlandırma.
+- **Kapsam v1 = yalnız CANLI:** "Aktif koşular" paneli cwd'ye göre gruplanır; geçmiş dökümü v2.
+- **Roadmap = sözleşmeli düz markdown:** `### başlık` fazları, `- [ ]/- [x]/- [~]` maddeleri,
+  başlıkta `✅` = faz bitti. Parser SAF core modülü; HERHANGİ dizindeki ROADMAP.md'ye çalışır
+  (kullanıcı kendi projesine bu kalıpla koyarsa görselleşir), kalıpsız dosya zarifçe boş döner.
+- **Protokol (ADDITIVE):** `ActiveRunSchema.cwd?` (olay zaten taşıyor, snapshot'a eklenir) +
+  REST `GET /api/roadmap?dir=<mutlak-yol>` (Bearer; masaüstü webview dosya okuyamaz → daemon okur).
+- **Canlı adım-koşu bağlama v1'de YOK** (statik done/in_progress/todo yeter; `roadmapStep?` eki
+  spekülatif). **Görsel: mütevazı panel** (Model panosu diliyle çubuklar) — Obsidian-graph işi
+  Faz 6 Bağlam Haritası'nındır, ön alınmaz.
 
-**Zaten var olan (doğrulandı, kod okunarak):**
-- `agent.run.started` olayı `cwd`'yi ZATEN taşıyor (`AgentRunStartedPayloadSchema.cwd`) AMA
-  `ActiveRun`/store'un `runs[]`'ı bunu SAKLAMIYOR (yalnız runId/agentId/task/state/model/
-  parentRunId) — "hangi projede" sorusu için cwd'nin store'a taşınması gerekecek (küçük,
-  ADDITIVE: `ActiveRunSchema.cwd?` gibi).
-- SQLite `agent_runs` tablosu (Faz 3'ten beri) her koşunun `cwd`sini ZATEN kalıcı tutuyor —
-  geçmiş/tamamlanmış koşuları "projeye" göre gruplamak için REST'ten sorgulanabilir bir kaynak
-  hazır (yeni uç gerekebilir, `/api/history/*` deseniyle).
-- ROADMAP.md'nin KENDİ formatı: `### Faz N — ...` başlıkları + `- [ ]`/`- [x]`/`- [~]` madde
-  imleri (bu depoda tutarlı kullanılıyor) — parse edilebilir bir düz metin kalıbı zaten var.
+### 📋 Dilim P1 — canlı proje gruplaması ← SIRADAKİ (Sonnet)
 
-**Gerçek açık sorular (tasarım oturumunun karara bağlayacağı):**
-1. **"Proje" Symphony'de ne demek?** (a) cwd'den KENDİLİĞİNDEN çıkarılır (ör. en yakın `.git`
-   kökü ya da `cwd`'nin kendisi) — sıfır kurulum ama isim/etiket yok; (b) kullanıcı açıkça
-   kaydeder (`~/.symphony/projects.json`: ad+yol) — isimli/düzenli ama kurulum ister; (c) ikisi
-   birden (otomatik algıla + istersen isimlendir). Faz 7'deki `symphony sync` ile de kesişebilir.
-2. **Proje görünümü yalnız CANLI mı, geçmişi de mi gösterir?** Yalnız canlı ise mevcut "Aktif
-   koşular" panelinin cwd'ye göre YENİDEN GRUPLANMASI kadar küçük olabilir (ucuz); geçmiş de
-   gerekiyorsa yeni bir REST ucu + UI görünümü ister (daha büyük).
-3. **Yol haritası görselleştirme HANGİ formatı hedefliyor?** Yalnız BU projenin kendi ROADMAP.md
-   kalıbını (Faz N + checkbox) mı, yoksa KULLANICININ kaydettiği HERHANGİ bir projenin (farklı
-   yazım tarzı olabilir) roadmap'ini mi? Birincisi çok daha tractable (düz regex/markdown
-   ayrıştırma); ikincisi genel bir format/şema kararı ister (belki `docs/ROADMAP-ŞEMA.md` gibi
-   bir sözleşme — kullanıcı roadmap'ini o şemaya UYDURUR, ya da agent kendi ROADMAP'ini o şemada
-   YAZAR). **Görüş:** MVP kapsamı birincisi (yalnız Symphony'nin kendi formatı) olabilir,
-   genelleştirme ayrı bir dilim.
-4. **"Hangi adımda hangi agent çalışıyor CANLI görünür"** — bir aktif koşuyu bir roadmap adımına
-   nasıl bağlarız? Metin eşleştirme (`task` içinde "Faz 5" geçiyor mu) kırılgan; agent.start'a
-   YENİ bir alan (`roadmapStep?`) eklemek daha sağlam ama PROTOKOL değişikliği ister (ADDITIVE,
-   küçük). **Görüş:** MVP'de bu bağı KURMAYIP yalnız statik roadmap durumunu (done/in-progress/
-   todo) göstermek, canlı bağlamayı v2'ye bırakmak makul bir kapsam daraltması olabilir.
-5. **Görsel yön:** `docs/TASARIM.md`'ye eklenmeli (interaktif faz-adım grafiği nasıl görünecek —
-   kullanıcının Faz 6 notundaki "Bağlam Haritası/Obsidian graph benzeri" ile aynı görsel dilde mi
-   olacak, yoksa ayrı mı).
+1. PROTOKOL.md: `ActiveRun`a `cwd?` notu (§5 civarı, parentRunId notunun yanına; "ADR-015" andaç).
+2. `shared/common.ts` `ActiveRunSchema.cwd?` → `engine.ts activeRuns()`'a `cwd` ekle (kayıtta
+   zaten var: `run.cwd`).
+3. `ui/store.ts`: `agent.run.started` handler'ı `cwd`'yi de `upsertRun`'a geçirsin (olay zaten
+   taşıyor); YENİ SAF export `groupRunsByProject(runs)` — cwd'ye göre grupla (cwd'siz koşu
+   "diğer" grubuna), grup içi sıra `orderRunsForDisplay` (çocuk girintisi grup İÇİNDE sürer),
+   grup adı = basename (path ayracı hem `/` hem `\` — `split(/[\\/]/)`).
+4. `App.tsx`: Aktif koşular paneli gruplu render (grup başlığı: ad + soluk tam yol); tek grup
+   varsa başlık yine gösterilir (tutarlılık). Küçük CSS (`.project-head`).
+5. Test: store +2-3 (cwd geçişi · gruplama/basename [`C:\a\b` ve `/x/y` iki ayracı] · çocuk
+   koşu ebeveyninin grubunda). `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
 
-**Önerilen sıradaki oturum akışı:** Opus/Fable bu bölümü okur → yukarıdaki 5 soruyu karara bağlar
-(muhtemelen: proje=cwd'den otomatik+isteğe bağlı isim, MVP=yalnız canlı görünüm, roadmap=yalnız
-Symphony'nin kendi formatı, canlı-adım-bağlama v2'ye ertelenir) → gerekirse yeni bir ADR yazar
-(protokole `ActiveRun.cwd?`/`roadmapStep?` eklenirse PROTOKOL.md önce) → dilim planı DURUM'a
-düşer → Sonnet uygular.
+### 📋 Dilim P2 — roadmap parser + REST
+
+1. PROTOKOL.md §1.1'e satır: `GET /api/roadmap?dir=...` → `{ phases: [{ title, done, total,
+   state }] }`; `<dir>/ROADMAP.md` yoksa 404 (`VALIDATION_ROADMAP_NOT_FOUND`).
+2. `shared/rest.ts`: `RoadmapPhaseSchema {title, done, total, state: "done"|"in_progress"|"todo"}`
+   + `RoadmapResponseSchema {phases}`.
+3. YENİ `core/src/roadmap/parse.ts` (SAF, testli): satır satır — `### ` başlık yeni faz açar
+   (`✅` içeriyorsa state=done); gövdede `- [x]` done++, `- [~]` done'a YARIM sayılmaz ama
+   in_progress işareti koyar, `- [ ]` total'a; state türetme: başlıkta ✅ → done; değilse
+   herhangi `[~]` var ya da 0<done<total → in_progress; done===total>0 → done; aksi todo.
+   Faz-dışı satırlar yok sayılır; hiç faz yoksa boş dizi.
+4. `daemon.ts`: uç — `dir` mutlak yol paramı, `join(dir, "ROADMAP.md")` oku (yalnız OKUMA;
+   Bearer arkasında; jail YOK — koşudan bağımsız görünüm isteği, ADR-015 Karar 3 gerekçesi).
+5. Test: parser (bu deponun GERÇEK ROADMAP.md'sinden küçük fixture: ✅'li faz, karışık checkbox,
+   kalıpsız metin→boş) + daemon REST (200/404/401). Üçlü + DURUM.
+
+### 📋 Dilim P3 — masaüstü roadmap paneli + kapanış
+
+1. `ui/daemon/client.ts` (ya da store yanına): `fetchRoadmap(dir)` — Bearer'lı REST, 404→null.
+2. UI: aktif proje gruplarının (P1) cwd'leri için roadmap çek (grup görünür olunca bir kez;
+   agresif polling YOK), proje başlığının altında faz satırları + ilerleme çubuğu (Model panosu
+   `model-bar` deseni). Roadmap'i olmayan proje satırsız kalır (boş durum gösterme).
+3. `docs/TASARIM.md`'ye tek paragraf: roadmap paneli mütevazı liste/çubuk dilinde; graf
+   görselleştirme Faz 6 Bağlam Haritası'na aittir (ADR-015 Karar 5).
+4. ROADMAP Faz 4'ün son iki maddesini işaretle (yol haritası maddesindeki "hangi adımda hangi
+   agent canlı" kısmına "v2'ye ertelendi — ADR-015 Karar 4" notu düş; Faz 4'ü ✅ yap).
+5. Test: store/bileşen (+fetch mock). Üçlü + DURUM + görsel doğrulama kullanıcıya (`desktop:dev`).
+
+**Sıra P1→P2→P3; her dilim sonrası üçlü doğrulama + DURUM güncelle. Uygulama: Sonnet.**
 
 ## Faz 4 — ROADMAP senkronu + "CLI → masaüstü otomatik açılış" BİTTİ (2026-07-10, Sonnet)
 

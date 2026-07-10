@@ -284,3 +284,61 @@ koşular) · derinlik>1 · agent'lar arası doğrudan mesajlaşma · çocuğa ay
 **Geri dönüş koşulu:** `run_agent` izin/jail kabul testlerinden herhangi birini kırarsa ya da
 şef koşuları maliyet görünürlüğünü bulanıklaştırırsa (kullanıcı hangi paranın nereye gittiğini
 izleyemezse) dilim geri alınır; host-orkestrasyon (reddedilen 2. seçenek) yedek plandır.
+
+## ADR-015 — Proje görünümü + yol haritası görselleştirme: cwd-türevi proje, sözleşmeli markdown, panel (2026-07-10, Fable)
+**Bağlam:** ROADMAP Faz 4'ün son iki maddesi: "Proje görünümü: hangi projede hangi agent ne
+yapıyor" + "Yol haritası görselleştirme: ROADMAP/plan dosyalarından üretilen interaktif faz-adım
+grafiği; hangi adımda hangi agent çalışıyor canlı görünür". Mevcut altyapı: `agent.run.started`
+olayı `cwd` taşıyor ama `ActiveRun` (snapshot) taşımıyor; SQLite `agent_runs` her koşunun
+cwd'sini zaten kalıcı tutuyor; bu deponun ROADMAP kalıbı (`### Faz N` + `- [ ]/- [x]/- [~]`)
+tutarlı ve parse edilebilir.
+
+**Karar 1 — "Proje" = koşunun `cwd`'sinden OTOMATİK türetilir; kayıt defteri YOK (v1).**
+Gruplama anahtarı cwd'nin kendisi (jail kökü — koşunun zaten değişmez gerçeği), görünen ad =
+son dizin adı (basename), tam yol soluk alt bilgi. Sıfır kurulum, sıfır yeni dosya/komut.
+*Reddedilen:* `~/.symphony/projects.json` kayıt defteri (ad+yol) — isimlendirme hoş ama yeni
+dosya + CRUD komutu + Faz 7 sync sorusu getirir; kazanım küçük. Geri dönüş: basename çakışması
+gerçek hayatta karışıklık yaratırsa v2'de isteğe bağlı adlandırma eklenir (türetme temel kalır).
+
+**Karar 2 — Kapsam v1 = yalnız CANLI görünüm.** Proje görünümü, mevcut "Aktif koşular"
+panelinin cwd'ye göre GRUPLANMASIDIR (proje başlığı altında koşu satırları; Faz 5 çocuk-koşu
+girintisi grup İÇİNDE aynen sürer). ROADMAP maddesinin özü ("hangi projede hangi agent ne
+yapıyor") canlıyla karşılanır. Geçmiş koşuların projeye göre dökümü (agent_runs zaten cwd
+tutuyor → REST `/api/history` deseniyle sorgulanabilir) bilinçle v2 — yeni uç + UI yüzeyi
+büyütür, canlı görünümün değerini beklemeye gerek yok.
+**Protokol dokunuşu (ADDITIVE, PROTOCOL_VERSION=1):** `ActiveRunSchema.cwd?` — olay zaten
+taşıyor, yalnız snapshot'a ekleniyor; masaüstü yeniden bağlanınca da gruplayabilsin diye.
+
+**Karar 3 — Yol haritası YALNIZ bu deponun kendi kalıbını hedefler (sözleşmeli düz markdown).**
+Sözleşme (parser'ın tek varsayımı): `### <başlık>` fazları açar; gövdedeki `- [ ]` todo,
+`- [x]` bitti, `- [~]` devam sayılır; faz başlığındaki `✅` fazın kendisini bitti işaretler.
+Parser SAF bir core modülüdür (`core/src/roadmap/parse.ts`, testli) ve girdisi HERHANGİ bir
+dizindeki `ROADMAP.md`'dir — yani kullanıcı KENDİ projesine bu kalıpla bir ROADMAP.md koyarsa
+o da görselleşir; kalıba uymayan dosya zarifçe "faz bulunamadı" döner (hata değil).
+*Reddedilen:* her formatı anlayan genel ayrıştırma (LLM-destekli dönüştürme dâhil) — sınırsız
+girdi uzayı, v1'i belirsizleştirir. Gerekirse v2: "agent'a roadmap'ini bu kalıba çevirt".
+**REST (ADDITIVE):** `GET /api/roadmap?dir=<mutlak-yol>` (Bearer) → `{ phases: [{ title, done,
+total, state: "done"|"in_progress"|"todo" }] }`; `<dir>/ROADMAP.md` yoksa 404. Masaüstü webview
+dosya sistemine dokunamaz → daemon okur (loopback+token; CLI'nin zaten okuyabildiği dosya —
+yeni yetki yüzeyi değil). Cevap şeması `shared/rest.ts`'e (history deseni).
+
+**Karar 4 — Canlı "hangi adımda hangi agent" bağlaması v1'de YOK.** Görselleştirme statik
+faz durumunu gösterir (done/in-progress/todo — `[~]` kalıpta zaten var). Koşu→adım bağlamak
+için metin eşleştirme kırılgan, `agent.start.roadmapStep?` protokol eki ise gerçek talep
+doğmadan spekülatif. Panel, aktif koşuları ZATEN aynı proje başlığı altında gösterdiğinden
+"bu projede şu an kim çalışıyor + proje nerede duruyor" bilgisi yan yana düşer — v1 için yeter.
+
+**Karar 5 — Görsel yön: mütevazı PANEL, interaktif GRAF DEĞİL.** Faz satırları + ilerleme
+çubukları, mevcut Model panosu görsel diliyle (çubuk/metrik desenleri hazır). "Obsidian-graph
+benzeri" büyük görselleştirme Faz 6 "Bağlam Haritası"nın işidir — roadmap paneli onu ÖN ALMAZ;
+Bağlam Haritası tasarlanırken roadmap verisi o grafiğe bir katman olarak taşınabilir.
+TASARIM.md'ye tek paragraflık not düşülür (dilim P3).
+
+**Dikey dilimler (Kural 7):** P1 canlı proje gruplaması (ActiveRun.cwd? + UI grupla) →
+P2 roadmap parser + REST → P3 masaüstü roadmap paneli + TASARIM notu + ROADMAP kapanışı.
+Adım adım talimat `memo/DURUM.md`'de; uygulama Sonnet'te.
+
+**Geri dönüş koşulu:** cwd-türevi gruplama gerçek kullanımda anlamsız gruplar üretirse
+(ör. hep aynı tek dizinden çalışılıyorsa panel değer katmaz) P1 geri alınmaz ama v2 adlandırma
+öne çekilir; parser sözleşmesi kullanıcının gerçek proje roadmap'lerini karşılayamazsa Karar 3
+genişletmesi (dönüştürücü agent) yeniden değerlendirilir.
