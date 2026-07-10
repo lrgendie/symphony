@@ -3,7 +3,41 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10/11 (Sonnet, Auto Mode gece oturumu — F1 BİTTİ; F2 KISMEN [npm login/yayın BEKLİYOR]; devam ediyor)
+**Son güncelleme:** 2026-07-10/11 (Sonnet, Auto Mode gece oturumu — F1 BİTTİ; F2 KISMEN; F3 KISMEN; kullanım limiti nedeniyle DURDU)
+
+## Faz 7 — Dilim F3 (Windows installer + kurulu masaüstünü bulma) KISMEN (2026-07-10, Sonnet)
+
+Kullanım limiti %10'a düşünce kullanıcı "commit+push yap, devam etme" dedi — bu dilim KOD/TEST
+tarafı bitmiş, CANLI kabul testi (uçtan uca `symphony` → masaüstü açılışı) YAPILMADI.
+- **Gerçek `.msi`/NSIS derlendi** (`pnpm --filter @symphony/desktop desktop:build`, ~4.5dk):
+  `bundle/msi/Symphony_0.1.0_x64_en-US.msi` + `bundle/nsis/Symphony_0.1.0_x64-setup.exe`.
+- **CANLI ölçüm — ÖNEMLİ bulgu:** kurulu yürütülebilir `Symphony.exe` DEĞİL **`app.exe`**
+  (Cargo paketi `src-tauri/Cargo.toml` `name = "app"` — scaffold varsayılanı, hiç yeniden
+  adlandırılmamış; Tauri bundle'ı productName'e göre ikiliyi YENİDEN ADLANDIRMIYOR, yalnız
+  kurulum klasörü/kısayol adı "Symphony"). Kozmetik ama gerçek — istenirse ayrı küçük dilimde
+  Cargo paketi `"symphony-desktop"`/`"Symphony"` olarak yeniden adlandırılabilir (F3'ün kapsamı
+  dışı bırakıldı, bilinçli).
+- **NSIS (`/S`, sessiz) BAŞARIYLA kuruldu, yönetici GEREKTİRMEDİ** — gerçek yol doğrulandı:
+  `%LOCALAPPDATA%\Symphony\app.exe`. **WiX (.msi) DOĞRULANAMADI** — per-machine kurulum yönetici
+  hakkı istiyor (Hata 1925), bu oturumda yükseltilmiş yetki YOK, zorlanmadı. `Program Files\
+  Symphony\app.exe` adayı VARSAYIMLA eklendi (aynı ikili, aynı isim), gerçek kurulumla teyit
+  EDİLMEDİ — kullanıcı isterse yönetici olarak `.msi`'yi kurup teyit edebilir.
+- **`config.ts`:** `desktop.appPath?: string` (opsiyonel elle geçersiz kılma).
+- **`desktop-launch.ts`:** YENİ `candidateInstalledAppPaths(appPath, env)` + `findExistingPath`
+  (SAF, testli). `ensureDesktopRunning` artık ÖNCE kurulu uygulamayı arar (bulunursa DOĞRUDAN
+  spawn — `desktop:dev`'e gerek yok), bulunamazsa eski repo-dev yoluna düşer (değişmedi).
+- **Test:** 392→**399** (+7: candidateInstalledAppPaths 3, findExistingPath 3, config.appPath 1).
+  `pnpm build && pnpm test && pnpm lint` temiz (399/399).
+- **YAPILMADI (kullanım limiti nedeniyle):** `ensureDesktopRunning`'in gerçekten kurulu
+  `app.exe`'yi bulup başlattığının UÇTAN UCA canlı doğrulaması (`symphony` bare komutuyla) —
+  kod NSIS'in gerçek yerleştirdiği yolu kullanıyor, mantıken çalışmalı ama canlı denenmedi.
+  `.msi`/Program Files yolu hiç denenmedi (yönetici gerekiyor).
+
+**Sıradaki (kullanıcı döndüğünde):** (1) F3'ün canlı kabulünü sen dene — terminalde `symphony`
+çalıştır, masaüstünün (`%LOCALAPPDATA%\Symphony\app.exe`) otomatik açıldığını gör; istersen
+`.msi`'yi yönetici olarak kurup Program Files yolunu da doğrula. (2) F2'nin bekleyen kısmı hâlâ
+duruyor (npm login + org denemesi) — yukarıdaki "Dilim F2 (npm yayını) KISMEN" bölümüne bak.
+(3) Sonra F4'e (symphony sync) geçilebilir.
 
 ## Faz 7 — Dilim F2 (npm yayını) KISMEN — kullanıcının npm login'i BEKLİYOR (2026-07-10, Sonnet)
 

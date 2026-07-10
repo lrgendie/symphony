@@ -30,6 +30,12 @@ export const ConfigSchema = z
     desktop: z
       .object({
         autoLaunch: z.boolean().default(true),
+        /**
+         * ADR-017 (Faz 7, Dilim F3): kurulu masaüstü uygulamasının .exe yolu — otomatik arama
+         * (bilinen kurulum dizinleri) yetersiz kalırsa elle geçersiz kılmak için. Vars. tanımsız
+         * (otomatik arama kullanılır).
+         */
+        appPath: z.string().min(1).optional(),
       })
       .strip()
       .default({}),

@@ -3,7 +3,12 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { getSymphonyPaths } from "@symphony/core";
-import { ensureDesktopRunning, findRepoRoot } from "./desktop-launch.js";
+import {
+  candidateInstalledAppPaths,
+  ensureDesktopRunning,
+  findExistingPath,
+  findRepoRoot,
+} from "./desktop-launch.js";
 
 /**
  * Faz 4: gerçek bir Tauri süreci başlatmak testte pratik değil (Rust/GUI ortamı gerektirir) —
@@ -22,6 +27,43 @@ describe("findRepoRoot", () => {
     const root = findRepoRoot();
     expect(root).not.toBeNull();
     expect(existsSync(join(root ?? "", "pnpm-workspace.yaml"))).toBe(true);
+  });
+});
+
+describe("candidateInstalledAppPaths (ADR-017, Dilim F3) — SAF", () => {
+  it("appPath verilmemişse yalnız bilinen kurulum dizinleri (LOCALAPPDATA + Program Files)", () => {
+    const candidates = candidateInstalledAppPaths(undefined, { LOCALAPPDATA: "C:\\Users\\d\\AppData\\Local" });
+    // app.exe: Cargo paketi "app" (yeniden adlandırılmadı) — canlı NSIS kurulumuyla doğrulandı.
+    expect(candidates).toEqual([
+      "C:\\Users\\d\\AppData\\Local\\Symphony\\app.exe",
+      "C:\\Program Files\\Symphony\\app.exe",
+    ]);
+  });
+
+  it("appPath verilmişse İLK aday odur (elle geçersiz kılma öncelikli)", () => {
+    const candidates = candidateInstalledAppPaths("D:\\ozel\\Symphony.exe", { LOCALAPPDATA: "C:\\AL" });
+    expect(candidates[0]).toBe("D:\\ozel\\Symphony.exe");
+    expect(candidates).toHaveLength(3);
+  });
+
+  it("LOCALAPPDATA ortam değişkeni yoksa o aday sessizce atlanır (Program Files hâlâ var)", () => {
+    const candidates = candidateInstalledAppPaths(undefined, {});
+    expect(candidates).toEqual(["C:\\Program Files\\Symphony\\app.exe"]);
+  });
+});
+
+describe("findExistingPath — SAF, exists enjekte edilir", () => {
+  it("listedeki İLK var olan yolu döner", () => {
+    const exists = (p: string): boolean => p === "b";
+    expect(findExistingPath(["a", "b", "c"], exists)).toBe("b");
+  });
+
+  it("hiçbiri yoksa null döner", () => {
+    expect(findExistingPath(["a", "b"], () => false)).toBeNull();
+  });
+
+  it("boş liste → null", () => {
+    expect(findExistingPath([], () => true)).toBeNull();
   });
 });
 

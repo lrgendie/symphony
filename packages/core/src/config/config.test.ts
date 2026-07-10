@@ -41,6 +41,18 @@ describe("config", () => {
     expect(loadConfig(paths).desktop.autoLaunch).toBe(false);
   });
 
+  it("desktop.appPath vars. tanımsız; dosyadan okunursa aynen döner (ADR-017, Dilim F3)", () => {
+    mkdirSync(testHome, { recursive: true });
+    const paths = getSymphonyPaths(testHome);
+    expect(loadConfig(paths).desktop.appPath).toBeUndefined();
+
+    writeFileSync(
+      paths.configFile,
+      JSON.stringify({ desktop: { appPath: "C:\\Program Files\\Symphony\\Symphony.exe" } }),
+    );
+    expect(loadConfig(paths).desktop.appPath).toBe("C:\\Program Files\\Symphony\\Symphony.exe");
+  });
+
   it("dosyadaki değerler varsayılanları ezer, bilinmeyen alanlar atılır", () => {
     mkdirSync(testHome, { recursive: true });
     const paths = getSymphonyPaths(testHome);
