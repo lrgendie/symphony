@@ -3,7 +3,45 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Sonnet — Dilim P1 BİTTİ ve testli, 301 test; P2 sırada)
+**Son güncelleme:** 2026-07-10 (Sonnet — Dilim P2 BİTTİ ve testli, 310 test; P3 sırada)
+
+## Faz 4 — Dilim P2 (roadmap parser + REST) BİTTİ (2026-07-10, Sonnet)
+
+ADR-015 Karar 3 uygulandı. Kural 1 sırası: PROTOKOL → shared → core → daemon.
+**Not:** ilk uygulamada şema yanlış çıkmıştı (`{title, done:boolean, steps:[]}}`) — ADR-015'in
+bağlayıcı REST şekli `{title, done, total, state}` (agregat sayaç, adım metni YOK); KARARLAR.md'yi
+tekrar okuyup düzeltildi. Ders: DURUM.md'deki plan taslağı değil, KARARLAR.md'deki ADR bağlayıcıdır.
+- **PROTOKOL.md:** `GET /api/roadmap?dir=<yol>` satırı + sözleşme notu (`### başlık` faz;
+  gövdedeki `- [ ]/- [x]/- [~]` hepsi `total`'a, yalnız `- [x]` `done`'a sayılır; `state`
+  türetimi: başlıkta `✅` → done, yoksa `[~]` var ya da `0<done<total` → in_progress,
+  `done===total>0` → done, aksi todo). Symphony'ye özgü değil — bu kalıba uyan HERHANGİ bir
+  dizinin ROADMAP.md'sinde çalışır.
+- **`shared/rest.ts`:** `RoadmapPhaseSchema {title, done, total, state}`, `RoadmapResponseSchema` (ADDITIVE).
+- **YENİ `core/src/roadmap/parse.ts`:** `parseRoadmap(markdown)` — SAF, dosya G/Ç yok. `###`
+  başlıkları faz sayar (`####` alt başlıkları saymaz — regex `\s+` şartı doğal olarak ayırıyor);
+  `- [ ]/- [x]/- [~]` dışındaki bullet'lar (ör. `- **Çıktı:**`) adım sayılmaz.
+- **`daemon.ts`:** `GET /api/roadmap` — Bearer auth (global hook), `dir` eksikse 400
+  (`VALIDATION_ROADMAP_DIR_REQUIRED`), `<dir>/ROADMAP.md` yoksa 404
+  (`VALIDATION_ROADMAP_NOT_FOUND`), varsa `{ phases }` döner.
+- **Test:** 301→**310** — `parse.test.ts` (8: gerçek ROADMAP.md kesitinden fixture ·
+  `[~]`siz de 0<done<total in_progress türetir · done===total>0 başlıksız da done ·
+  adımsız faz todo · başlıksız checkbox yok sayılır · `- **` bullet adım sayılmaz · faz
+  yoksa boş dizi · `####` faz saymaz) + `daemon.test.ts` (1: 401/400/404/200 roundtrip,
+  gerçek geçici dizinde ROADMAP.md yazıp okutarak). `pnpm build && pnpm test && pnpm lint` temiz.
+
+### 📋 Dilim P3 — masaüstü roadmap paneli + kapanış ← SIRADAKİ (Sonnet)
+
+1. `ui/daemon/client.ts` (ya da store yanına): `fetchRoadmap(dir)` — Bearer'lı REST, 404→null.
+2. UI: aktif proje gruplarının (P1) cwd'leri için roadmap çek (grup görünür olunca bir kez;
+   agresif polling YOK), proje başlığının altında faz satırları + ilerleme çubuğu (`done/total`,
+   Model panosu `model-bar` deseni; renk `state`'ten). Roadmap'i olmayan proje satırsız kalır
+   (boş durum gösterme, 404 sessizce yutulur).
+3. `docs/TASARIM.md`'ye tek paragraf: roadmap paneli mütevazı liste/çubuk dilinde; graf
+   görselleştirme Faz 6 Bağlam Haritası'na aittir (ADR-015 Karar 5).
+4. ROADMAP Faz 4'ün son iki maddesini işaretle (yol haritası maddesindeki "hangi adımda hangi
+   agent canlı" kısmına "v2'ye ertelendi — ADR-015 Karar 4" notu düş; Faz 4'ü ✅ yap).
+5. Test: `fetchRoadmap` birim testi (mock fetch) + panel bileşen/store testi. Üçlü + DURUM +
+   görsel doğrulama kullanıcıya (`desktop:dev`).
 
 ## Faz 4 — Dilim P1 (canlı proje gruplaması) BİTTİ (2026-07-10, Sonnet)
 
@@ -26,14 +64,7 @@ ADR-015 Karar 1/2 uygulandı. Kural 1 sırası: PROTOKOL → shared → core →
 - **Görsel doğrulama KULLANICIYA** (`desktop:dev`, Bash'ten görülemez — birden fazla farklı
   cwd'de agent koşusu başlatıp proje başlıklarının ayrıştığını görmek yeterli).
 
-### 📋 Dilim P2 — roadmap parser + REST ← SIRADAKİ (Sonnet)
-
-DURUM.md'nin ADR-015 sonrası eklenen "Dilim P2" talimatı (yukarıda arşivlenmiş hâliyle) geçerli:
-1. PROTOKOL.md §1.1: `GET /api/roadmap?dir=...` satırı.
-2. `shared/rest.ts`: `RoadmapPhaseSchema` + `RoadmapResponseSchema`.
-3. YENİ `core/src/roadmap/parse.ts` (SAF, testli) — `### başlık` + checkbox kalıbı.
-4. `daemon.ts`: REST ucu (Bearer, dir paramı, dosya oku, yoksa 404).
-5. Test: parser (bu deponun gerçek ROADMAP.md'sinden küçük fixture) + daemon REST (200/404/401).
+### ✅ Dilim P2 — roadmap parser + REST — BİTTİ (yukarıda "Faz 4 — Dilim P2" bölümünde ayrıntı)
 
 ## Faz 4 — "Hangi dosya" zengin görünümü BİTTİ (2026-07-10, Sonnet)
 
@@ -66,33 +97,9 @@ DURUM.md'nin ADR-015 sonrası eklenen "Dilim P2" talimatı (yukarıda arşivlenm
 
 ### ✅ Dilim P1 — canlı proje gruplaması — BİTTİ (yukarıda "Faz 4 — Dilim P1" bölümünde ayrıntı)
 
-### 📋 Dilim P2 — roadmap parser + REST ← SIRADAKİ (Sonnet)
+### ✅ Dilim P2 — roadmap parser + REST — BİTTİ (yukarıda "Faz 4 — Dilim P2" bölümünde ayrıntı)
 
-1. PROTOKOL.md §1.1'e satır: `GET /api/roadmap?dir=...` → `{ phases: [{ title, done, total,
-   state }] }`; `<dir>/ROADMAP.md` yoksa 404 (`VALIDATION_ROADMAP_NOT_FOUND`).
-2. `shared/rest.ts`: `RoadmapPhaseSchema {title, done, total, state: "done"|"in_progress"|"todo"}`
-   + `RoadmapResponseSchema {phases}`.
-3. YENİ `core/src/roadmap/parse.ts` (SAF, testli): satır satır — `### ` başlık yeni faz açar
-   (`✅` içeriyorsa state=done); gövdede `- [x]` done++, `- [~]` done'a YARIM sayılmaz ama
-   in_progress işareti koyar, `- [ ]` total'a; state türetme: başlıkta ✅ → done; değilse
-   herhangi `[~]` var ya da 0<done<total → in_progress; done===total>0 → done; aksi todo.
-   Faz-dışı satırlar yok sayılır; hiç faz yoksa boş dizi.
-4. `daemon.ts`: uç — `dir` mutlak yol paramı, `join(dir, "ROADMAP.md")` oku (yalnız OKUMA;
-   Bearer arkasında; jail YOK — koşudan bağımsız görünüm isteği, ADR-015 Karar 3 gerekçesi).
-5. Test: parser (bu deponun GERÇEK ROADMAP.md'sinden küçük fixture: ✅'li faz, karışık checkbox,
-   kalıpsız metin→boş) + daemon REST (200/404/401). Üçlü + DURUM.
-
-### 📋 Dilim P3 — masaüstü roadmap paneli + kapanış
-
-1. `ui/daemon/client.ts` (ya da store yanına): `fetchRoadmap(dir)` — Bearer'lı REST, 404→null.
-2. UI: aktif proje gruplarının (P1) cwd'leri için roadmap çek (grup görünür olunca bir kez;
-   agresif polling YOK), proje başlığının altında faz satırları + ilerleme çubuğu (Model panosu
-   `model-bar` deseni). Roadmap'i olmayan proje satırsız kalır (boş durum gösterme).
-3. `docs/TASARIM.md`'ye tek paragraf: roadmap paneli mütevazı liste/çubuk dilinde; graf
-   görselleştirme Faz 6 Bağlam Haritası'na aittir (ADR-015 Karar 5).
-4. ROADMAP Faz 4'ün son iki maddesini işaretle (yol haritası maddesindeki "hangi adımda hangi
-   agent canlı" kısmına "v2'ye ertelendi — ADR-015 Karar 4" notu düş; Faz 4'ü ✅ yap).
-5. Test: store/bileşen (+fetch mock). Üçlü + DURUM + görsel doğrulama kullanıcıya (`desktop:dev`).
+### 📋 Dilim P3 — masaüstü roadmap paneli + kapanış ← SIRADAKİ (yukarıda ayrıntılı talimat, Sonnet)
 
 **Sıra P1→P2→P3; her dilim sonrası üçlü doğrulama + DURUM güncelle. Uygulama: Sonnet.**
 

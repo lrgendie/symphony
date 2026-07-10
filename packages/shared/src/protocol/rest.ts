@@ -59,3 +59,24 @@ export type MemoryGetResponse = z.infer<typeof MemoryGetResponseSchema>;
 
 export const MemoryPutRequestSchema = z.object({ content: z.string() }).strip();
 export type MemoryPutRequest = z.infer<typeof MemoryPutRequestSchema>;
+
+/**
+ * Yol haritası REST ucu (ADR-015 Karar 3, Dilim P2). `ROADMAP.md` sözleşmesi: `### başlık`
+ * fazlar (başlıkta `✅` = tamamlanmış), `- [ ]/- [x]/- [~]` adımlar (todo/done/in_progress).
+ * Bu kalıba uyan HERHANGİ bir dizinin ROADMAP.md'sinde çalışır — Symphony'ye özgü bir kayıt
+ * DEĞİLDİR. `done`/`total` ilerleme çubuğu içindir (P3); `state` fazın genel rengi içindir.
+ */
+export const RoadmapPhaseSchema = z
+  .object({
+    title: z.string(),
+    /** Tamamlanmış (`- [x]`) adım sayısı. */
+    done: z.number().int().nonnegative(),
+    /** Toplam adım sayısı (`- [ ]/- [x]/- [~]` hepsi). */
+    total: z.number().int().nonnegative(),
+    state: z.enum(["done", "in_progress", "todo"]),
+  })
+  .strip();
+export type RoadmapPhase = z.infer<typeof RoadmapPhaseSchema>;
+
+export const RoadmapResponseSchema = z.object({ phases: z.array(RoadmapPhaseSchema) }).strip();
+export type RoadmapResponse = z.infer<typeof RoadmapResponseSchema>;

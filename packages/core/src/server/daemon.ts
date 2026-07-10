@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import Fastify from "fastify";
 import { WebSocketServer, WebSocket } from "ws";
 import { pino } from "pino";
@@ -31,6 +33,7 @@ import { suggestModels } from "../router/router.js";
 import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent } from "../agent/definition.js";
 import { registerMcpServer } from "../agent/mcp.js";
+import { parseRoadmap } from "../roadmap/parse.js";
 import {
   ensureProfileScaffold,
   formatProfileContext,
@@ -409,6 +412,26 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       });
     }
     return writeProfile(paths.profileFile, parsed.data.content);
+  });
+
+  // Yol haritası (ADR-015 Karar 3, Dilim P2). İstemci (masaüstü webview) dosya sistemine
+  // erişemediği için dizini query'de gönderir, daemon okuyup ayrıştırır.
+  app.get("/api/roadmap", async (request, reply) => {
+    const { dir } = request.query as { dir?: string };
+    if (dir === undefined || dir.length === 0) {
+      return reply.code(400).send({
+        code: "VALIDATION_ROADMAP_DIR_REQUIRED",
+        message: "dir sorgu parametresi zorunludur",
+      });
+    }
+    const file = join(dir, "ROADMAP.md");
+    if (!existsSync(file)) {
+      return reply.code(404).send({
+        code: "VALIDATION_ROADMAP_NOT_FOUND",
+        message: `ROADMAP.md bulunamadı: ${file}`,
+      });
+    }
+    return { phases: parseRoadmap(readFileSync(file, "utf8")) };
   });
 
   // ---- WebSocket ----

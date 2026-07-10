@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -304,6 +304,44 @@ describe("symphonyd", () => {
     const afterGet = await fetch(`http://127.0.0.1:${daemon.port}/api/memory`, auth);
     const after = (await afterGet.json()) as { content: string };
     expect(after.content).toBe("## Kimlik\nAdım Deniz.\n"); // yazma kalıcı
+  });
+
+  it("yol haritası (ADR-015 Karar 3, Dilim P2): auth'suz 401 · dir eksikse 400 · yoksa 404 · varsa ayrıştırılmış cevap", async () => {
+    const unauthorized = await fetch(`http://127.0.0.1:${daemon.port}/api/roadmap?dir=x`);
+    expect(unauthorized.status).toBe(401);
+
+    const auth = { headers: { authorization: `Bearer ${daemon.token}` } };
+
+    const missingDir = await fetch(`http://127.0.0.1:${daemon.port}/api/roadmap`, auth);
+    expect(missingDir.status).toBe(400);
+
+    const emptyProjectDir = mkdtempSync(join(tmpdir(), "symphony-roadmap-test-empty-"));
+    const notFound = await fetch(
+      `http://127.0.0.1:${daemon.port}/api/roadmap?dir=${encodeURIComponent(emptyProjectDir)}`,
+      auth,
+    );
+    expect(notFound.status).toBe(404);
+    rmSync(emptyProjectDir, { recursive: true, force: true });
+
+    const projectDir = mkdtempSync(join(tmpdir(), "symphony-roadmap-test-"));
+    writeFileSync(
+      join(projectDir, "ROADMAP.md"),
+      "### Faz 0 — Temel Atma ✅ 2026-07-03\n- [x] adım bir\n\n### Faz 1 — Devam\n- [ ] adım iki\n",
+      "utf8",
+    );
+    const res = await fetch(
+      `http://127.0.0.1:${daemon.port}/api/roadmap?dir=${encodeURIComponent(projectDir)}`,
+      auth,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      phases: { title: string; done: number; total: number; state: string }[];
+    };
+    expect(body.phases).toEqual([
+      { title: "Faz 0 — Temel Atma ✅ 2026-07-03", done: 1, total: 1, state: "done" },
+      { title: "Faz 1 — Devam", done: 0, total: 1, state: "todo" },
+    ]);
+    rmSync(projectDir, { recursive: true, force: true });
   });
 
   it("başarısız sohbet SQLite'a istek kaydı + telemetri düşürür; usage.query cevaplar", async () => {

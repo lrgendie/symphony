@@ -25,6 +25,7 @@
 | `GET /api/history/sessions/:id` | Bearer | Bir oturumun tam dökümü: `{ session, messages: HistoryMessage[] }`; yoksa 404 |
 | `GET /api/memory` | Bearer | Kullanıcı profili: `{ content, chars, truncated, updatedAt }`; dosya yoksa boş iskelet |
 | `PUT /api/memory` | Bearer | Profilin TAM içeriğini değiştirir (gövde: `{ content }`) — yalnız insan arayüzünden çağrılır; agent araç yüzeyinde bu uca giden yol YOKTUR (ADR-013 yazma kısıtı) |
+| `GET /api/roadmap?dir=<yol>` | Bearer | `<dir>/ROADMAP.md`'yi ayrıştırıp `{ phases: RoadmapPhase[] }` döner (ADR-015 Karar 3); `dir` eksikse 400, dosya yoksa 404 — istemci (masaüstü webview) dosya sistemine erişemediği için daemon okur |
 
 Kalıcı geçmiş SQLite'tadır ve YALNIZ REST ile sorgulanır (§6: olay replay'i yok).
 Cevap şemaları `shared`'dadır: `HistorySessionSummarySchema`, `HistoryMessageSchema`,
@@ -34,6 +35,15 @@ Cevap şemaları `shared`'dadır: `HistorySessionSummarySchema`, `HistoryMessage
 tarafından her agent koşusu ve chat isteğinde system bağlamına eklenir (sunucu tarafı;
 kalıcı oturum geçmişine YAZILMAZ). Protokol mesajlarını değiştirmez — istemciler profili
 görmez/taşımaz; yönetimi yalnız yukarıdaki REST uçları ve doğrudan dosya düzenlemesiyledir.
+
+**Yol haritası (ADR-015 Karar 3):** `RoadmapPhase = { title, done, total, state: "done"|
+"in_progress"|"todo" }` — `done`/`total` ilerleme çubuğu (P3), `state` fazın genel rengi
+içindir. Sözleşme SAF metin kalıbıdır: `### başlık` = faz, gövdesindeki `- [ ]`/`- [x]`/`- [~]`
+satırları `total`'a (hepsi) ve `- [x]` ayrıca `done`'a sayılır. `state` türetimi: başlıkta `✅`
+→ done; değilse herhangi `[~]` var ya da `0<done<total` → in_progress; `done===total>0` → done;
+aksi hâlde todo. Bu kalıba uyan HERHANGİ bir dizindeki `ROADMAP.md` ayrıştırılır — Symphony'ye
+özel değildir. "Proje" gibi ayrı bir kayıt yoktur; `dir` doğrudan istemciden gelir (ADR-015
+Karar 1 ile tutarlı: proje = cwd).
 
 ## 2. Zarf (envelope)
 
