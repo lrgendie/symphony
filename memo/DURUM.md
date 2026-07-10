@@ -3,7 +3,31 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Sonnet — Dilim F1 BİTTİ ve testli, 392 test)
+**Son güncelleme:** 2026-07-10/11 (Sonnet, Auto Mode gece oturumu — F1 BİTTİ; F2 KISMEN [npm login/yayın BEKLİYOR]; devam ediyor)
+
+## Faz 7 — Dilim F2 (npm yayını) KISMEN — kullanıcının npm login'i BEKLİYOR (2026-07-10, Sonnet)
+
+Kullanıcı uyumaya geçti, Auto Mode'da "gerisi sende" dedi. F2'nin YAPILABİLEN kısmı (login/
+yayın GEREKTİRMEYEN) bitirildi; asıl yayın adımı (npm login + org denemesi + `pnpm -r publish`)
+GERÇEK kimlik doğrulama ister — bu, otomasyonla atlanamayacak, kullanıcının fiziksel/interaktif
+onayını gerektiren bir eşik (Auto Mode kuralı: "genuinely blocked" durumunda dur). O kısım
+BEKLEMEDE bırakıldı, aşağıda net talimatla.
+- **Lisans: MIT seçildi** (ADR-017'nin önerisiydi, kullanıcı onayı henüz alınmadı ama düşük
+  riskli/geri alınabilir bir varsayılan — değiştirmek istersen tek satır). Kök `LICENSE` (MIT,
+  copyright "brkn2319" — git kimliğinden), üç pakete `"license": "MIT"`.
+- **Her pakete 5-10 satırlık `README.md`** yazıldı (shared/core/cli) — npm sayfası boş kalmasın.
+- **YAPILMADI (kullanıcı gerekiyor):**
+  1. `npm login` (interaktif — terminalde `! npm login`, tarayıcı/OTP akışı).
+  2. www.npmjs.com'da `symphony` org'unu deneme — alınmışsa yeni scope kararı (ADR-017 geri
+     dönüş: repo çapında `@symphony/` → `@<yeni>/` yeniden adlandırma, tek mekanik commit).
+  3. `pnpm -r publish` (gerçek, geri alması zor bir yayın — dry-run F1'de zaten temiz çıktı).
+  4. Kabul testi: geçici prefix'e gerçek registry'den kurup `symphony --version`/`status`.
+- `pnpm build && pnpm lint` temiz (LICENSE/README/license alanı kod değil, test sayısı 392 sabit).
+
+**Sıradaki (kullanıcı uyanınca):** `! npm login` çalıştır, `www.npmjs.com/org/symphony`'yi dene,
+sonucu söyle (org tuttu mu / scope ne olacak) — ondan sonra 4 adımı tamamlarım. Bu arada F2'nin
+geri kalanını BEKLETİP F3'e geçtim (F3, F2'nin gerçek yayınına bağımlı DEĞİL — ADR-017'deki
+sıra önerisiydi, katı bağımlılık değil; ayrıntı DURUM'da aşağıda F3 bölümünde).
 
 ## Faz 7 — Dilim F1 (paketlenebilir çekirdek) BİTTİ (2026-07-10, Sonnet)
 

@@ -1,6 +1,7 @@
 {
   "name": "@symphony/cli",
   "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "description": "symphony komutu — terminal arayüzü (Ink TUI Faz 2'de gelecek)",
   "bin": {
