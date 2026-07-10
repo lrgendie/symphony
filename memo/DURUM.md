@@ -3,7 +3,46 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Sonnet — Dilim Z3 BİTTİ ve testli, 365 test)
+**Son güncelleme:** 2026-07-10 (Sonnet — Dilim Z4 BİTTİ ve testli, 375 test)
+
+## Faz 6 — Dilim Z4 (bağlam haritası verisi) BİTTİ (2026-07-10, Sonnet)
+
+ADR-016 Karar 6 uygulandı. Kural 1 sırası: PROTOKOL → shared → core → daemon. CLI/UI tüketicisi
+YOK (o Dilim Z5'in işi) — bu dilim yalnız REST + SAF kurucu.
+- **PROTOKOL.md:** `GET /api/context-map` satırındaki `(planlandı — Dilim Z4)` kaldırıldı.
+- **`shared/rest.ts`:** `ContextMapNodeSchema {id, kind:"session"|"run"|"project", label, at,
+  meta}` + `ContextMapEdgeSchema {from, to, kind:"project"|"same_day"}` + `ContextMapResponseSchema
+  {nodes, edges}` — ADR'nin cevap şekliyle birebir.
+- **YENİ `core/src/context-map/build.ts`** (SAF, testli): `buildContextMap({runs, sessions,
+  limit}): ContextMapResponse`. Girdi sessions+runs birleşiminden `at`e göre AZALAN sıralanıp
+  `limit`e (vars. 500) kesilir — yalnız bu seçili kümeden düğüm/kenar üretilir (eski öğeler VE
+  onlara özgü projeler elenir, ADR'nin "en-yeni N" kuralı). Proje düğümleri run.cwd'den türetilir
+  (ADR-015 Karar 1 basename kuralı — `ui/store.ts groupRunsByProject` ile AYNI fikir, ayrı
+  katman; boş cwd → "diğer"), `at`i o proje altındaki EN YENİ koşudan. Kenarlar: her run→proje
+  (kind:"project") + aynı takvim gününde (UTC, `usageQuery`nin gün gruplamasıyla AYNI tanım)
+  ARDIŞIK öğeler arası zayıf zincir (kind:"same_day", TÜM çiftler DEĞİL — kronolojik sıradaki
+  komşular). **Model bağı kenar DEĞİL** — düğüm `meta`sında (görsel kanal, "çöp graf" önlenir).
+- **`store.ts`:** YENİ okuma metodu GEREKMEDİ — mevcut `listSessions(limit)` + `recentAgentRuns
+  (limit)` doğrudan yeniden kullanıldı (her ikisi de zaten en-yeniden sıralı); daemon ikisini de
+  `limit` ile çekip `buildContextMap`'e projekte eder.
+- **`daemon.ts`:** `GET /api/context-map?limit=<n>` (Bearer; `/api/history/sessions`'la AYNI
+  clamp deseni: `1..500`, vars. 500).
+- **Test:** 365→**375** (+10: `context-map/build.test.ts` YENİ 9 — boş girdi, tek koşu (run+proje
+  düğümü+kenar TAM eşitlik), tek sohbet (proje/kenar YOK), aynı cwd'li iki koşu→tek proje+`at`
+  en yeniden, boş cwd→"diğer", aynı-gün zinciri (3 öğe→2 kenar, kronolojik sırayla), farklı gün→
+  kenar YOK, `limit` eski öğeleri VE projelerini eler, model bağının kenar DEĞİL meta olduğu;
+  `daemon.test.ts` +1 — 401 + gerçek koşu seed edilip run/proje düğümü ve run→proje kenarının
+  cevapta TAM olarak bulunduğu doğrulanır). `pnpm build && pnpm test && pnpm lint` temiz (47
+  dosya/375 test).
+- **CANLI DOĞRULAMA TAMAMLANDI:** daemon eski kodla (`tsx` watch DEĞİL, tek seferlik `start`)
+  ayaktaydı → süreç sonlandırılıp yeniden başlatıldı → gerçek `~/.symphony` verisiyle
+  `/api/context-map?limit=8` → auth'suz 401, auth'lu 11 düğüm/14 kenar (1 session + 7 run + 3
+  proje; `packages/core` ve depo kökü cwd'leri AYRI projelere ayrıştı — ADR-015'in tam-cwd
+  anahtarlama kuralı beklendiği gibi çalıştı), run→proje ve aynı-gün kenarları gerçek zaman
+  damgalarıyla doğru üretildi.
+
+**Sıradaki: Dilim Z5** (masaüstü harita görünümü — d3-force, `ui/src/map/ContextMap.tsx`).
+Talimat aşağıda ("📋 Dilim Z5" başlığı) zaten yazılı, değişmedi.
 
 ## Faz 6 — Dilim Z3 (rapor) BİTTİ (2026-07-10, Sonnet)
 
@@ -229,7 +268,7 @@ Z2, `GET /api/report` Z3, `GET /api/context-map` Z4), ROADMAP Faz 6 maddeleri AD
 5. Test: build.ts eşik/özet senaryoları · endpoint 401/200 · **lokallik: rapor üretimi hiçbir
    adapter/fetch çağırmaz** (kabul maddesi) · markdown render snapshot değil alan kontrolü.
 
-### 📋 Dilim Z4 — bağlam haritası verisi (REST `GET /api/context-map`) — SIRADAKİ
+### ✅ Dilim Z4 — bağlam haritası verisi (REST `GET /api/context-map`) — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 1. PROTOKOL işaretini kaldır; `shared/rest.ts`'e `ContextMapResponseSchema` (nodes/edges).
 2. YENİ `core/src/context-map/build.ts` (SAF, testli): girdi = sessions + agent_runs satırları
@@ -239,7 +278,7 @@ Z2, `GET /api/report` Z3, `GET /api/context-map` Z4), ROADMAP Faz 6 maddeleri AD
 4. `daemon.ts`: endpoint (Bearer). Test: kurucu senaryoları (proje kenarı, aynı-gün zinciri,
    limit) + endpoint.
 
-### 📋 Dilim Z5 — masaüstü harita görünümü (d3-force)
+### 📋 Dilim Z5 — masaüstü harita görünümü (d3-force) — SIRADAKİ
 
 1. `d3-force` ekle → **önce `docs/GEREKSINIMLER.md` envanterine işle** (yalnız simülasyon;
    render bizim SVG/Canvas). `ui` paketine bağımlılık.

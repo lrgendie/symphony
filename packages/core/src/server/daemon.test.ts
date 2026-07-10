@@ -551,6 +551,48 @@ describe("symphonyd", () => {
     ).toBe(true);
   });
 
+  it("bağlam haritası (ADR-016 Karar 6, Dilim Z4): auth'suz 401 · gerçek koşu verisinden run+proje düğümü + run→proje kenarı", async () => {
+    const unauthorized = await fetch(`http://127.0.0.1:${daemon.port}/api/context-map`);
+    expect(unauthorized.status).toBe(401);
+
+    const auth = { headers: { authorization: `Bearer ${daemon.token}` } };
+    const db = new DataStore(join(testHome, "data", "symphony.db"));
+    const runId = crypto.randomUUID();
+    const cwd = join(testHome, "baglam-test-projesi");
+    try {
+      db.createAgentRun({
+        id: runId,
+        agentId: "asistan",
+        task: "bağlam haritası testi görevi",
+        provider: "ollama",
+        model: "qwen3:8b",
+        cwd,
+        startedAt: Date.now(),
+      });
+      db.finishAgentRun(runId, {
+        state: "completed",
+        result: "tamam",
+        errorCode: null,
+        usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+        steps: 1,
+      });
+    } finally {
+      db.close();
+    }
+
+    const res = await fetch(`http://127.0.0.1:${daemon.port}/api/context-map`, auth);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      nodes: Array<{ id: string; kind: string; label: string; meta: Record<string, unknown> }>;
+      edges: Array<{ from: string; to: string; kind: string }>;
+    };
+    const runNode = body.nodes.find((n) => n.id === runId);
+    expect(runNode).toMatchObject({ kind: "run", label: "bağlam haritası testi görevi" });
+    const projectNode = body.nodes.find((n) => n.kind === "project" && n.meta.cwd === cwd);
+    expect(projectNode).toMatchObject({ label: "baglam-test-projesi" });
+    expect(body.edges).toContainEqual({ from: runId, to: projectNode?.id, kind: "project" });
+  });
+
   it("başarısız sohbet SQLite'a istek kaydı + telemetri düşürür; usage.query cevaplar", async () => {
     const { reply, ws } = await roundTrip(
       createMessage("hello", {

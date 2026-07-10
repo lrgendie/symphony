@@ -138,3 +138,39 @@ export const ReportResponseSchema = z
   })
   .strip();
 export type ReportResponse = z.infer<typeof ReportResponseSchema>;
+
+/**
+ * Bağlam haritası (ADR-016 Karar 6, Dilim Z4): mevcut `sessions`/`agent_runs` verisinin
+ * deterministik grafı — embedding YOK. Kenarlar run→proje (cwd) ve aynı-takvim-günü zamansal
+ * komşuluk; model bağı kenar DEĞİL, düğüm `meta`'sında taşınır (görsel kanal — renk/filtre).
+ * Kurucu SAF core modülü (`core/src/context-map/build.ts`), bu uç yalnız sarar.
+ */
+export const ContextMapNodeSchema = z
+  .object({
+    id: z.string().min(1),
+    kind: z.enum(["session", "run", "project"]),
+    label: z.string(),
+    /** epoch ms */
+    at: z.number().int().nonnegative(),
+    /** Görünüm için ek alanlar (provider/model/cwd) — koşu detayı v1'de buradan gelir. */
+    meta: z.record(z.unknown()),
+  })
+  .strip();
+export type ContextMapNode = z.infer<typeof ContextMapNodeSchema>;
+
+export const ContextMapEdgeSchema = z
+  .object({
+    from: z.string().min(1),
+    to: z.string().min(1),
+    kind: z.enum(["project", "same_day"]),
+  })
+  .strip();
+export type ContextMapEdge = z.infer<typeof ContextMapEdgeSchema>;
+
+export const ContextMapResponseSchema = z
+  .object({
+    nodes: z.array(ContextMapNodeSchema),
+    edges: z.array(ContextMapEdgeSchema),
+  })
+  .strip();
+export type ContextMapResponse = z.infer<typeof ContextMapResponseSchema>;

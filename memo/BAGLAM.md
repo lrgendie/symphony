@@ -70,6 +70,12 @@ protokol WS/REST üzerinden konuşulur.
   ReportResponse` — `routerStats`'tan `successTable` + eşik-tabanlı `findings` (yalnız kanıtlı
   VE `score<0.5`). Sıfır adapter/fetch erişimi (lokallik kabul maddesi) — girdi daemon'da
   ÇOKTAN çekilmiş veridir
+- `context-map/build.ts` — SAF, testli (ADR-016 Karar 6, Dilim Z4): `buildContextMap({runs,
+  sessions, limit}): ContextMapResponse` — sessions+runs birleşiminden en-yeni `limit` (vars.
+  500) öğeden düğüm (session/run/proje[cwd, ADR-015 basename kuralı]) + kenar (run→proje,
+  aynı-takvim-günü ARDIŞIK zincir "same_day") üretir. Model bağı kenar DEĞİL, düğüm meta'sında
+  (görsel kanal). `store.ts`'e yeni okuma metodu GEREKMEDİ — `listSessions`/`recentAgentRuns`
+  yeniden kullanılır
 - `router/hardware.ts` — nvidia-smi: `detectVramGb` (router) + `sampleGpus`/`parseGpuCsv` (saf,
   testli) → GPU vitalleri (util/VRAM/ısı). Daemon 2sn poll → `hardware.updated` yayını
   (`DaemonOptions.sampleHardware`, testte kapalı)

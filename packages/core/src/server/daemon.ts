@@ -37,6 +37,7 @@ import {
   type RouterStats,
 } from "../router/stats.js";
 import { buildReport } from "../report/build.js";
+import { buildContextMap } from "../context-map/build.js";
 import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent } from "../agent/definition.js";
 import { registerMcpServer } from "../agent/mcp.js";
@@ -482,6 +483,30 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       topErrors: store.topErrorCodesSince(from, to),
       feedback: store.feedbackSummarySince(from, to),
     });
+  });
+
+  // Bağlam haritası (ADR-016 Karar 6, Dilim Z4): mevcut sessions/agent_runs'ın deterministik
+  // grafı — embedding YOK, hiçbir provider çağrısı yapmaz. `limit`: sessions+runs biriminden
+  // en-yeni N (vars./tavan 500) — `/api/history/sessions`'la AYNI clamp deseni.
+  app.get("/api/context-map", async (request) => {
+    const rawLimit = Number((request.query as { limit?: string }).limit ?? 500);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 500) : 500;
+    const runs = store.recentAgentRuns(limit).map((row) => ({
+      id: row.id,
+      cwd: row.cwd,
+      task: row.task,
+      provider: row.provider,
+      model: row.model,
+      at: row.started_at,
+    }));
+    const sessions = store.listSessions(limit).map((s) => ({
+      id: s.sessionId,
+      title: s.title,
+      provider: s.provider,
+      model: s.model,
+      at: s.updatedAt,
+    }));
+    return buildContextMap({ runs, sessions, limit });
   });
 
   // ---- WebSocket ----
