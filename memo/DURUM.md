@@ -3,7 +3,113 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Opus — iptal teşhisi: O1'in AbortSignal şüphesi ÇÜRÜTÜLDÜ, 321 test)
+**Son güncelleme:** 2026-07-10 (Fable — **ADR-016: Faz 6 Zeka Katmanı tasarımı TAMAM**, dilimler Z1-Z5 hazır)
+
+## Faz 6 — Zeka Katmanı: TASARIM TAMAM (2026-07-10, Fable — ADR-016) → dilimler Z1..Z5
+
+Kullanıcı sıralamayı bağladı (önce router zekası, sonra harita; açık geri bildirim DAHİL),
+**ADR-016 yazıldı** (`docs/kararlar/KARARLAR.md` — BAĞLAYICI kaynak; buradaki özet taslaktır,
+çelişkide ADR kazanır — P2'nin dersi). PROTOKOL.md'ye planlı yüzeyler işlendi (`feedback.submit`
+Z2, `GET /api/report` Z3, `GET /api/context-map` Z4), ROADMAP Faz 6 maddeleri ADR'ye bağlandı
+(hafıza maddesi ADR-013 ile KAPANDI → `[x]`). Kararların özü:
+- **Skor = sorgu-zamanı agregasyon** (fiziksel tablo/göç YOK): `agent_runs` başarı (cancelled
+  HARİÇ; görev türü TS'te `classifyTask` ile), `requests` tur hızı (koşu süresi DEĞİL — insan
+  beklemesi içerir), `feedback` açık sinyal. Pencere 30 gün.
+- **Router v2 = kural iskeleti + skor düzeltmesi:** MIN_SAMPLES=3 (kanıt yoksa v1 BİREBİR);
+  `score=(ok+2·iyi+1)/(runs+2·(iyi+kötü)+2)`; v2 aday üretmez, yalnız demote(<0.5)/promote(en
+  yüksek ≥0.5) + reason'a kanıt yazar. `RouterContext.stats?` opsiyonel → SAF korunur. Protokolsüz.
+- **Geri bildirim:** `feedback.submit {subject:"run"|"chat", id, verdict:"good"|"bad", note?}`
+  (ADDITIVE) + göç v5 `feedback` tablosu + TUI tek tuş (bloklamaz) + `symphony feedback`.
+- **Rapor:** deterministik, LLM YOK; REST `GET /api/report` + `symphony report` → Türkçe
+  markdown (`~/.symphony/reports/`). Lokallik testle kanıtlanır (provider çağrısı yok).
+- **Bağlam Haritası:** MEVCUT verinin grafı; embedding YOK (RAG ertelemesi sürüyor); REST
+  `GET /api/context-map`; kenarlar deterministik (koşu→proje[cwd-basename] + aynı-gün
+  komşuluk); model = renk/filtre (kenar değil); d3-force ile 2D AYRI görünüm (three.js'e
+  bindirme reddedildi). Ebeveyn-çocuk kenarı v1'de yok (agent_runs'ta parent sütunu yok).
+
+### 📋 Dilim Z1 — routerStats + router v2 karışımı (protokolsüz) — SIRADAKİ
+
+**Önce oku (yalnız bunlar):** ADR-016 Karar 1+2 · `router/router.ts` (tamamı, kısa) ·
+`store.ts`'te `usageQuery`/`recentAgentRuns` civarı · `daemon.ts` 180-195 (pickModel) ve
+613-635 (router.suggest handler'ı).
+1. **`store.ts`:** iki YENİ okuma metodu (göç YOK):
+   - `runsSince(sinceMs)`: `agent_runs WHERE started_at>=? AND state IN ('completed','failed')`
+     → `{task, provider, model, ok: state==='completed', costUsd}[]` (cancelled bilinçle dışarıda).
+   - `turnStatsSince(sinceMs)`: `requests WHERE started_at>=? AND status='ok' GROUP BY
+     provider, model` → `{provider, model, avgDurationMs, turns}[]`.
+2. **YENİ `router/stats.ts` (SAF, testli):** `MIN_SAMPLES=3` · `STATS_WINDOW_DAYS=30` ·
+   `RouterStats` tipi (`(provider,model,kind)` → `{runs, ok, iyi, kötü, avgCostUsd,
+   avgTurnMs?}`) · `computeRouterStats(runRows, turnRows, feedbackRows)` — `classifyTask`'ı
+   router.ts'ten import eder, koşuları türe ayırıp gruplar; Z1'de `feedbackRows` HEP `[]`
+   (tablo Z2'de — arayüz şimdiden hazır) · `scoreOf(entry)` (ADR formülü).
+3. **`router.ts`:** `RouterContext.stats?: RouterStats`. `suggestModels` sonunda karışım:
+   her öneri için `(provider, model, kind)` kanıdı ara; `runs>=MIN_SAMPLES` ise —
+   `score<0.5` → listenin sonuna; en yüksek skorlu (≥0.5) → başa; reason'ı kanıtla YENİDEN yaz
+   ("son N koşuda %X başarı" + varsa "ort. Ys/tur" + "ort. $Z/koşu"). Kanıt yoksa v1 aynen.
+4. **`daemon.ts`:** yardımcı `buildRouterStats()` (store'dan iki satır kümesi + computeRouterStats;
+   feedback boş) — HEM `router.suggest` handler'ına HEM `pickModel`'e `stats` geçir.
+5. **CLI `commands/agent.ts` ("otomatik öneri" yüzeyi):** `--model` VERİLMEDİYSE agent.start'tan
+   ÖNCE `router.suggest {task}` isteği at, ilk öneriyi `🧭 yönlendirici: <model> — <reason>`
+   satırıyla bas (engine pickModel AYNI fonksiyon+stats'la aynı seçimi yapar — determinizm),
+   sonra normal akış. İstek başarısızsa sessizce atla (öneri süsü, koşuyu bloklamaz).
+6. **Test:** stats.test (classify+gruplama, cancelled dışarıda, skor formülü, feedback ağırlığı
+   sahte satırlarla) · router.test'e karışım senaryoları (kanıtsız → v1 BİREBİR [mevcut testler
+   zaten bunu korur — stats geçirme]; kanıtlı düşük skor demote; kanıtlı yüksek skor promote +
+   reason sayıları; MIN_SAMPLES sınırı) · store.test'e iki okuma metodu · daemon router.suggest
+   cevabında kanıtlı reason (seed'li DB ile).
+7. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
+
+### 📋 Dilim Z2 — geri bildirim (`feedback.submit` + göç v5 + TUI/CLI yüzeyi)
+
+1. PROTOKOL'deki `(planlandı — Dilim Z2)` işaretini kaldır; `shared/requests.ts`'e
+   `FeedbackSubmitPayloadSchema` + events'e `feedback.submit.ok {}`.
+2. Göç v5: `feedback(id INTEGER PK, at, subject_kind CHECK('run','chat'), subject_id, verdict
+   CHECK('good','bad'), note)`. `store.recordFeedback` + `feedbackSince(sinceMs)`.
+3. `daemon.ts` handler: subject_id'yi doğrula (`agent_runs`/`sessions`) — yoksa
+   `VALIDATION_FEEDBACK_SUBJECT_UNKNOWN`; `buildRouterStats` artık `feedbackSince` geçirir
+   (koşu→model eşlemesi: feedback.subject_id → agent_runs satırı → provider/model/kind).
+4. TUI `agent-run.tsx`: koşu bitince tek satır "bu koşu iyi miydi? (g/k, geç: başka tuş)" —
+   g/k `feedback.submit` atar, HER DURUMDA akış devam eder (bloklamaz). CLI:
+   `symphony feedback <runId> iyi|kötü [-n not]` (iyi→good çevirisi CLI'de).
+5. Test: göç + record/list · daemon doğrulama (bilinmeyen id hata) · stats'a feedback etkisi
+   (kötü işaretli model skoru düşer) · TUI tuşu (mevcut agent-run.test deseni).
+
+### 📋 Dilim Z3 — rapor (REST `GET /api/report` + `symphony report`)
+
+1. PROTOKOL işaretini kaldır; `shared/rest.ts`'e `ReportResponseSchema`.
+2. YENİ `core/src/report/build.ts` (SAF): girdi = usageQuery satırları + routerStats + telemetri
+   özeti + feedback özeti → `Report` nesnesi; eşik bulguları (kanıtlı score<0.5 → öneri cümlesi).
+   **routerStats'ı YENİDEN KULLAN — ikinci gerçek üretme (ADR-016 Karar 5).**
+3. `daemon.ts`: `GET /api/report?from&to` (Bearer; varsayılan son 7 gün).
+4. CLI `commands/report.ts`: REST'ten çek → Türkçe markdown render → stdout + 
+   `~/.symphony/reports/YYYY-Www.md` (paths.ts'e `reportsDir`).
+5. Test: build.ts eşik/özet senaryoları · endpoint 401/200 · **lokallik: rapor üretimi hiçbir
+   adapter/fetch çağırmaz** (kabul maddesi) · markdown render snapshot değil alan kontrolü.
+
+### 📋 Dilim Z4 — bağlam haritası verisi (REST `GET /api/context-map`)
+
+1. PROTOKOL işaretini kaldır; `shared/rest.ts`'e `ContextMapResponseSchema` (nodes/edges).
+2. YENİ `core/src/context-map/build.ts` (SAF, testli): girdi = sessions + agent_runs satırları
+   → düğümler (session/run/project[cwd-basename, ADR-015 kuralı]) + kenarlar (run→project,
+   aynı-gün komşuluk). `limit` (vars. 500, en yeniden).
+3. `store.ts`: harita için okuma metodları (mevcutlar yetmiyorsa) — göç YOK.
+4. `daemon.ts`: endpoint (Bearer). Test: kurucu senaryoları (proje kenarı, aynı-gün zinciri,
+   limit) + endpoint.
+
+### 📋 Dilim Z5 — masaüstü harita görünümü (d3-force)
+
+1. `d3-force` ekle → **önce `docs/GEREKSINIMLER.md` envanterine işle** (yalnız simülasyon;
+   render bizim SVG/Canvas). `ui` paketine bağımlılık.
+2. `ui/src/scene/` DEĞİL — yeni `ui/src/map/ContextMap.tsx`: dashboard'dan AYRI görünüm
+   (basit sekme/geçiş state'i App.tsx'te), `GET /api/context-map`'ten çek (roadmap
+   `fetchRoadmap` deseni: hata → null → görünüm boş mesajı), kuvvet-yönlü 2D yerleşim,
+   düğüm rengi = tür, tıkla → yan panel detay (session: history REST; run: meta).
+3. **ÖNCE `docs/TASARIM.md` §3 oku** (görsel anayasa); palet mevcut marka renkleri.
+4. Test: veri→görünüm dönüşümünün SAF kısmı (ui vitest, store.test deseni — jsdom YOK,
+   render testi beklenmez); görsel doğrulama KULLANICIYA (`desktop:dev`).
+
+**Dilim sırası Z1→Z2→Z3→Z4→Z5; her dilim sonrası `pnpm build && pnpm test && pnpm lint` +
+DURUM güncelle. Z1-Z3 protokol dokunuşları küçük; Z4-Z5 haritanın kendisi.**
 
 ## Teşhis: "AbortSignal streamText'i kesmiyor" ŞÜPHESİ ÇÜRÜTÜLDÜ (2026-07-10, Opus)
 

@@ -26,6 +26,8 @@
 | `GET /api/memory` | Bearer | Kullanıcı profili: `{ content, chars, truncated, updatedAt }`; dosya yoksa boş iskelet |
 | `PUT /api/memory` | Bearer | Profilin TAM içeriğini değiştirir (gövde: `{ content }`) — yalnız insan arayüzünden çağrılır; agent araç yüzeyinde bu uca giden yol YOKTUR (ADR-013 yazma kısıtı) |
 | `GET /api/roadmap?dir=<yol>` | Bearer | `<dir>/ROADMAP.md`'yi ayrıştırıp `{ phases: RoadmapPhase[] }` döner (ADR-015 Karar 3); `dir` eksikse 400, dosya yoksa 404 — istemci (masaüstü webview) dosya sistemine erişemediği için daemon okur |
+| `GET /api/report?from=<ms>&to=<ms>` | Bearer | *(planlandı — Dilim Z3, ADR-016 Karar 5)* Kullanım raporu agregasyonu: toplam token/maliyet (gün+model kırılımı), model×görev-türü başarı tablosu, en sık hata kodları, geri bildirim özeti, eşik bulguları. Deterministik — bu uç hiçbir provider çağrısı yapmaz |
+| `GET /api/context-map?limit=<n>` | Bearer | *(planlandı — Dilim Z4, ADR-016 Karar 6)* Bağlam haritası grafı: `{ nodes: [{id, kind: "session"\|"run"\|"project", label, at, meta}], edges: [{from, to, kind: "project"\|"same_day"}] }` — mevcut sessions/agent_runs verisinden deterministik türetim, vars. son 500 düğüm |
 
 Kalıcı geçmiş SQLite'tadır ve YALNIZ REST ile sorgulanır (§6: olay replay'i yok).
 Cevap şemaları `shared`'dadır: `HistorySessionSummarySchema`, `HistoryMessageSchema`,
@@ -79,7 +81,8 @@ Tüm WS mesajları tek zarf tipindedir:
 | `models.list` | `{}` | Tüm sağlayıcıların kullanılabilir modelleri |
 | `agents.list` | `{}` | Kayıtlı agent tanımları (`~/.symphony/agents/*.md`). Cevap: `agents.list.ok { agents: AgentSummary[] }` |
 | `providers.status` | `{}` | Sağlayıcı sağlık durumları |
-| `router.suggest` | `{ task, constraints?: { maxCostUsd?, preferLocal? } }` | "Bu iş için hangi model?" önerisi |
+| `router.suggest` | `{ task, constraints?: { maxCostUsd?, preferLocal? } }` | "Bu iş için hangi model?" önerisi. v2 (ADR-016 Karar 2): cevap şeması AYNI — skor kanıtı `reason` metninin içinde taşınır ("son N koşuda %X başarı...") |
+| `feedback.submit` | `{ subject: "run"\|"chat", id, verdict: "good"\|"bad", note? }` | *(planlandı — Dilim Z2, ADR-016 Karar 4)* Açık kullanıcı geri bildirimi; router v2 skorlarını besler. `id` doğrulanır (`agent_runs`/`sessions`), yoksa `VALIDATION_FEEDBACK_SUBJECT_UNKNOWN`. Cevap: `feedback.submit.ok {}` |
 | `usage.query` | `{ from?, to?, groupBy? }` | Token/maliyet raporu |
 | `mcp.addServer` | `{ name, command, args? }` | Eklenti sistemi (ROADMAP Faz 3, SPEC-AGENT §2.1): MCP sunucusuna canlı bağlanıp doğrular, `~/.symphony/mcp-servers.json`'a kaydeder. Cevap: `mcp.addServer.ok { name, tools: string[] }`; bağlantı başarısızsa `AGENT_MCP_CONNECT_FAILED` ile `error` — dosyaya YAZILMAZ |
 

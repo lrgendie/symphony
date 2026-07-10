@@ -342,3 +342,100 @@ Adım adım talimat `memo/DURUM.md`'de; uygulama Sonnet'te.
 (ör. hep aynı tek dizinden çalışılıyorsa panel değer katmaz) P1 geri alınmaz ama v2 adlandırma
 öne çekilir; parser sözleşmesi kullanıcının gerçek proje roadmap'lerini karşılayamazsa Karar 3
 genişletmesi (dönüştürücü agent) yeniden değerlendirilir.
+
+## ADR-016 — Faz 6 Zeka Katmanı: skor-destekli router v2, geri bildirim, deterministik rapor, bağlam haritası (2026-07-10, Fable)
+**Bağlam:** ROADMAP Faz 6 — "öğrenen router v2", "otomatik şeffaf öneri", "kullanıcı hafızası",
+"kendini geliştirme döngüsü (haftalık rapor)", "geri bildirim sinyalleri", "Bağlam Haritası".
+Kullanıcı sıralamayı bağladı: **önce router zekası, sonra harita; açık geri bildirim DAHİL.**
+Mevcut zemin: router v1 zaten "v2 skorları buraya oturur, arayüz aynı kalır" öngörüsüyle SAF
+yazılmış (`router.ts`); öğrenmenin hammaddesi SQLite'ta birikmiş durumda (`requests`: model
+başına tur gecikmesi/hata/maliyet; `agent_runs`: görev metni + completed/failed + maliyet).
+
+**Karar 1 — Öğrenme verisi = MEVCUT tablolar; sorgu-zamanı agregasyon; fiziksel skor tablosu YOK.**
+`store.routerStats(sinceMs)`: SQL'le çek, görev türünü TS'te `classifyTask(agent_runs.task)` ile
+sorgu zamanında sınıflandır, `(provider, model, taskKind)` başına `{runs, ok, avgTurnMs,
+avgCostUsd, iyi, kötü}` döndür. Gerekçeler: (a) kişisel kullanım hacminde satır sayısı küçük —
+TS'te sınıflandırmak ucuz; (b) sınıflandırıcı geliştikçe GEÇMİŞ veri de yeni kurallarla yeniden
+yorumlanır (sütunda donmuş `task_kind` bunu yapamaz); (c) göç yok, bakılacak ikinci gerçek yok.
+İnce kurallar: **hız metriği `requests.duration_ms`'ten gelir** (`agent_runs` süresi insan
+beklemesini — awaiting_permission/awaiting_user — içerir, model hızını ölçmez); **cancelled
+koşular skora GİRMEZ** (kullanıcı vazgeçti — ne başarı ne başarısızlık); pencere son 30 gün
+(sabit; config anahtarı gerçek talep doğarsa eklenir).
+*Reddedilen:* ayrı skor tablosu/materialization — senkron tutulacak ikinci gerçek + göç, kazanım yok.
+
+**Karar 2 — Router v2 = kural İSKELETİ + skor DÜZELTMESİ; deterministik, LLM/bandit YOK.**
+`RouterContext.stats?` opsiyonel alan (SAF fonksiyon korunur; testte sahte stats). Kurallar:
+- **MIN_SAMPLES = 3:** aynı görev türünde aynı model için ≥3 koşu yoksa o model hakkında kanıt
+  YOK sayılır → v1 davranışı BİREBİR (soğuk başlangıç garantisi; ilk kurulum asla bozulmaz).
+- **Skor formülü (Laplace düzeltmeli + açık geri bildirim 2× ağır):**
+  `effOk = ok + 2·iyi`, `effRuns = runs + 2·(iyi+kötü)`, `score = (effOk + 1) / (effRuns + 2)`.
+  Bir "kötü" işareti iki başarısız koşuya denk — açık sinyal örtükten güvenilir öğretmendir.
+- **v2 YENİ aday üretmez** — v1'in ürettiği öneri listesini yeniden sıralar + gerekçelendirir:
+  kanıtlı ve `score < 0.5` olan öneri listenin SONUNA iner (demote); kanıtlı ve en yüksek skorlu
+  (≥ 0.5) öneri BAŞA çıkar (promote); reason string kanıtı GÖSTERİR ("son N koşuda %X başarı,
+  ort. Ys/tur, ort. $Z/koşu") — ROADMAP kabul maddesinin ("gerekçesini gösteriyor") karşılığı.
+  Kanıt yoksa v1 reason aynen kalır.
+Tüketiciler: daemon `router.suggest` işleyicisi + engine `pickModel` — ikisi de
+`store.routerStats()` geçirir. **Protokol DEĞİŞMEZ** (`reason` alanı zaten zorunlu) → Z1 protokolsüz.
+*Reddedilen:* bandit/RL ya da LLM-hakem skorlama — tek kişilik veri hacminde istatistiksel
+anlamı yok, determinizmi ve test edilebilirliği öldürür.
+
+**Karar 3 — Faz 6 "kullanıcı hafızası" maddesi ADR-013 ile KAPANDI; RAG yine ertelendi.**
+Profil enjeksiyonu + REST yüzeyi + damıtıcı (M1-M3) kabul maddesini ("hafızaya yazılan tercih
+yeni oturumda agent bağlamında görülüyor") zaten karşılıyor — Faz 6'da yeni hafıza işi YOK,
+ROADMAP maddesi nota bağlanır. Bağlam Haritası v1 kenarları embedding GEREKTİRMEZ (Karar 6) →
+ADR-013'ün RAG geri dönüş koşulu ("kullanıcı 'şunu konuşmuştuk'u arıyorsa") aynen açık kalır.
+
+**Karar 4 — Geri bildirim = `feedback.submit` (ADDITIVE WS isteği) + `feedback` tablosu (göç v5).**
+Payload: `{ subject: "run"|"chat", id, verdict: "good"|"bad", note? }` → `feedback.submit.ok {}`
+(wire değerleri tanımlayıcıdır → İngilizce; kullanıcıya görünen her şey Türkçe). `id` doğrulanır
+(`agent_runs`/`sessions`'ta yoksa `VALIDATION_FEEDBACK_SUBJECT_UNKNOWN`). Tablo:
+`feedback(id, at, subject_kind, subject_id, verdict, note)`. Yüzeyler v1: (a) TUI'de agent koşusu
+bitince tek tuşluk opsiyonel satır (g=iyi / k=kötü, herhangi başka girişte sessizce geçilir —
+akışı ASLA bloklamaz), (b) `symphony feedback <runId> iyi|kötü [-n not]` (geçmişten işaretleme).
+Masaüstü yüzeyi v2 (protokol hazır, eklemesi ucuz). Skora bağlanma: Karar 2 formülündeki iyi/kötü.
+*Reddedilen:* beğeni/geri-alma olaylarını örtük yakalama (ROADMAP "çıktıyı geri alma" sinyali) —
+geri-alma mekanizması yok; uydurma vekil sinyal (ör. dosyayı elle değiştirdi = kötü) yanıltıcı.
+
+**Karar 5 — Haftalık rapor = deterministik agregasyon; LLM YOK; REST `GET /api/report` (ADDITIVE).**
+`GET /api/report?from=<ms>&to=<ms>` (Bearer) → JSON: toplam token/maliyet (gün ve model kırılımı),
+model×görev-türü başarı tablosu (**Karar 1'deki routerStats ile AYNI kaynaktan — ikinci gerçek
+üretme**), en sık hata kodları (telemetry), geri bildirim özeti, eşik-tabanlı bulgular. CLI
+`symphony report [--from --to]` (vars. son 7 gün): JSON'u Türkçe markdown'a çevirir,
+`~/.symphony/reports/YYYY-Www.md`'ye yazar + stdout'a basar. "Öneri" cümleleri deterministik
+eşiklerden üretilir (ör. kanıtlı `score<0.5` model+tür çifti → "X, Y işlerinde son N koşuda %Z
+başarı — bu tür için bulut önerilir"). **Lokallik kabul maddesi:** rapor/skor yolunda HİÇBİR
+provider çağrısı yoktur; test bunu doğrular (rapor üretimi adapter/fetch çağırmaz).
+Zamanlanmış üretim YOK — daemon'a zamanlayıcı açmak Faz 8'in haftalık döngüsüyle birleşir;
+v1'de komut isteğe bağlı koşar (raporun penceresi haftalık → kabul maddesi karşılanır).
+*Reddedilen:* rapor taslağını LLM'e yazdırmak — deterministik sayıların üstüne halüsinasyon
+riski eklemek; istenirse v2'de damıtıcı deseniyle (taslak dosyası + insan onayı) gelir.
+
+**Karar 6 — Bağlam Haritası v1 = MEVCUT verinin deterministik grafı; embedding YOK;
+REST `GET /api/context-map` (ADDITIVE); masaüstünde AYRI görünüm; d3-force.**
+- **Düğümler:** `sessions` (sohbet), `agent_runs` (koşu), koşu cwd'lerinden türetilen sanal
+  PROJE düğümleri (ADR-015 Karar 1'in basename kuralı). `limit` parametresi, vars. son 500.
+- **Kenarlar v1 (deterministik):** koşu→proje (cwd) + aynı-gün zamansal komşuluk (aynı takvim
+  günü içinde ardışık öğeler zayıf kenarla — "compound" hissinin kaynağı). Model bağı kenar
+  DEĞİL görsel kanal (düğüm rengi/filtre) — her şeyin tek modele bağlandığı çöp graf önlenir.
+  Ebeveyn-çocuk koşu kenarı v1'de YOK: `agent_runs`'ta parent sütunu yok; gerçek talep doğarsa
+  v6 göçüyle gelir (canlı olaydaki `parentRunId` DB'ye yazılmıyor — bilinçli sınır, not düşüldü).
+- **Cevap:** `{ nodes: [{id, kind: "session"|"run"|"project", label, at, meta}], edges:
+  [{from, to, kind: "project"|"same_day"}] }` — kurucu SAF core modülü (`core/src/context-map/`),
+  testli; daemon yalnız sarar.
+- **Görsel (TASARIM §3 bağlayıcı):** masaüstünde dashboard'dan AYRI görünüm (sekme/geçiş);
+  2D kuvvet-yönlü yerleşim; tıkla→detay (oturum dökümü mevcut history REST'inden; koşu detayı
+  v1'de `meta`dan). Bağımlılık: **d3-force** (yalnız simülasyon; render bizim) —
+  GEREKSINIMLER.md'ye işlenir. *Reddedilen:* tesseract sahnesine (three.js) bindirmek — sahne
+  sanattır, harita okunabilir bir araçtır; 2D'de etkileşim ucuz, okunabilirlik yüksek.
+  *Reddedilen:* embedding'li anlamsal kenarlar — ADR-013'teki RAG erteleme gerekçesi aynen.
+
+**Dikey dilimler (Kural 7; sıra kullanıcı kararı — önce zeka, sonra harita):**
+Z1 routerStats + router v2 karışımı + tüketiciler (protokolsüz) → Z2 geri bildirim (PROTOKOL +
+göç v5 + TUI/CLI yüzeyi) → Z3 rapor (REST + CLI markdown) → Z4 bağlam haritası verisi (REST +
+SAF kurucu) → Z5 masaüstü harita görünümü (d3-force + TASARIM §3). Adım adım talimat
+`memo/DURUM.md`'de; uygulama Sonnet'te.
+
+**Geri dönüş koşulları:** skor düzeltmesi kötü öneriler üretirse `stats` geçirilmez (arayüz
+opsiyonel — tek satırla v1'e dönüş); geri bildirim tuşu sürtünme yaratırsa TUI satırı kalkar,
+komut kalır; harita 500 düğümde performansı boğarsa limit düşürülür, sanallaştırma v2'ye.

@@ -242,24 +242,34 @@ symphony/
 - **Çıktı:** Tek komutla çok-agent'lı iş akışı, dashboard'da orkestra gibi izlenir. ✅ masaüstünde çocuk koşular `↳` ile ebeveyninin altında girintili (O3, `orderRunsForDisplay`)
 - **Kabul testi:** İki agent aynı anda farklı görevlerde koşup dashboard'da ayrı izlenebiliyor ✅ (O1-f + O3 store testleri) · şef agent bir görevi en az iki alt göreve bölüp farklı modellere dağıtıyor ✅ (O1-a testi + BUGÜNKÜ canlı `symphony agent sef` koşusu, Claude Haiku→qwen3:8b karışımı) · agent tanımı dosyası yeni makineye kopyalanınca aynen çalışıyor ✅ (Faz 3'ten beri, davranış değişmedi).
 
-### Faz 6 — Zeka Katmanı: Seni Tanıyan Symphony (15–17. hafta)
+### Faz 6 — Zeka Katmanı: Seni Tanıyan Symphony (15–17. hafta) — tasarım ✅ ADR-016 (2026-07-10), dilimler Z1→Z5
 - [ ] **Model yönlendirici v2 (öğrenen):** Faz 1'den beri biriken kayıtlardan (hangi model hangi görevde başarılı/hızlı/ucuz oldu) skor tablosu; "bu işi kime verelim?" sorusuna veriyle cevap
+      *(ADR-016 Karar 1/2 — fiziksel tablo değil sorgu-zamanı agregasyon; kural iskeleti + skor düzeltmesi; Dilim Z1)*
 - [ ] Soru sorulduğunda otomatik öneri: "Bu görev için yerel Qwen yeterli (ücretsiz, ~3sn) — ama en yüksek kalite istersen Claude öneririm (~$0.04)" gibi şeffaf gerekçeli seçenek sunma
-- [ ] **Kullanıcı hafızası:** tercihlerini, kod stilini, sık kullandığın projeleri ve düzeltmelerini hatırlayan kalıcı profil (`~/.symphony/memory/`) — her agent bu bağlamla başlar.
+      *(Z1 kapsamında: kanıt `reason` metninde — "son N koşuda %X başarı, ort. Ys/tur, $Z/koşu")*
+- [x] **Kullanıcı hafızası:** tercihlerini, kod stilini, sık kullandığın projeleri ve düzeltmelerini hatırlayan kalıcı profil (`~/.symphony/memory/`) — her agent bu bağlamla başlar.
+      **✅ ADR-013 (M1-M3, 2026-07-09/10) ile ERKEN KARŞILANDI** — profil enjeksiyonu (chat+agent,
+      tek kaynak), REST GET/PUT, `symphony memory show|path|distill`, damıtıcı agent. Kabul
+      maddesi ("hafızaya yazılan tercih yeni oturumda agent bağlamında görülüyor") canlı
+      doğrulandı. ADR-016 Karar 3: Faz 6'da yeni hafıza işi YOK; RAG ertelemesi aynen sürüyor.
       **Kapsam kararı (2026-07-05):** `~/.symphony/memory/profil.md` yalnız KULLANICI/asistan
       (Claude Code gibi bir yazma aracı üzerinden) tarafından yazılır; **agent'lar kendi
       başlarına bu dosyaya YAZAMAZ** — yalnız okur, sistem promptuna eklenir. Gerekçe: bir
       agent'ın kendi güvenini/bağlamını kendi genişletmesi riskli (yanlış/yanıltıcı bir
-      "gerçek" yazarsa sonraki TÜM agent'ları etkiler); bu zaten Faz 6'nın kendi notuyla
-      uyumlu ("kendi güncelleme onayınla uygulanır"). Şimdilik YAPILMADI — vakti gelince
-      (bu faza sıra gelince) yapılacak; bu not sırf kapsam kararını kaybetmemek için düşüldü.
+      "gerçek" yazarsa sonraki TÜM agent'ları etkiler). *(ADR-013 Karar 2 bunu uyguladı.)*
 - [ ] **Kendini geliştirme döngüsü:** haftalık kullanım özeti üzerinden sistemin kendi yönlendirme kurallarını ve agent tanımlarını güncelleme önerisi (onayınla uygulanır)
+      *(ADR-016 Karar 5 — v1: deterministik `symphony report` + eşik-tabanlı öneri cümleleri,
+      Dilim Z3; ZAMANLANMIŞ üretim ve tanım-güncelleme önerisi Faz 8'in döngüsüne bağlandı)*
 - [ ] Geri bildirim sinyalleri: cevabı beğenme/düzeltme, agent çıktısını geri alma gibi olaylar skorlara işlenir
+      *(ADR-016 Karar 4 — `feedback.submit` + TUI tek tuş + `symphony feedback`, Dilim Z2;
+      "çıktıyı geri alma" sinyali HARİÇ: geri-alma mekanizması yok, vekil sinyal yanıltıcı olur)*
 - [ ] **Bağlam Haritası (yaşayan bilgi grafiği):** kullanıcının konuşmaları/projeleri/geliştirmeleri
       zamanla *compound* eden, keşfedilebilir bir nöral graf olarak görünür (Obsidian graph benzeri,
       zamansal). Verisi çoğunlukla MEVCUT SQLite'ta (sessions/messages/agent_runs). Görsel yön:
       `docs/TASARIM.md §3` (kullanıcının referans görseli `Tasarım/`). Faz 4 dashboard + bu hafıza
       birleşince "seni tanıyan yaşayan arayüz" tamamlanır. Ayrı büyük dilim (protokol eki gerekebilir).
+      *(ADR-016 Karar 6 — REST `GET /api/context-map`, deterministik kenarlar (proje/aynı-gün),
+      embedding YOK, d3-force ile 2D ayrı görünüm; dilimler Z4 veri + Z5 masaüstü görünümü)*
 - **Çıktı:** "Şu PDF'leri özetleyecek bir şey lazım" dediğinde donanımına, geçmişine ve bütçene göre doğru modeli öneren; seni tanıdıkça isabeti artan sistem.
 - **Kabul testi:** Router v2 önerileri gerçek kullanım skorlarına dayanıyor ve gerekçesini gösteriyor; kullanıcı hafızasına yazılan bir tercih yeni oturumda agent bağlamında görülüyor; haftalık rapor üretiliyor; tüm öğrenme verisi lokalde kalıyor (dışarı istek testle doğrulanmış şekilde yok).
 
