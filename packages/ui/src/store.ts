@@ -87,6 +87,25 @@ function short(text: string, max = 96): string {
   return oneLine.length > max ? `${oneLine.slice(0, max)}…` : oneLine;
 }
 
+/**
+ * Faz 5 (ADR-014): çocuk koşu satırları ekranda ebeveyninin HEMEN ALTINDA görünsün diye
+ * sıralar — ham `runs` dizisi ekleniş sırasına göredir (`upsertRun` başa ekler), bu yüzden
+ * bir çocuk ebeveyninden ÖNCE gelebilir. Sahipsiz çocuk (ebeveyni artık listede yoksa,
+ * ör. ebeveyn bitip kaldırıldı ama olay sırası nedeniyle çocuk hâlâ görünüyorsa) kaybolmaz,
+ * yalnız gruplanamayıp sona düşer.
+ */
+export function orderRunsForDisplay(runs: ReadonlyArray<ActiveRun>): ActiveRun[] {
+  const topLevel = runs.filter((r) => r.parentRunId === undefined);
+  const topLevelIds = new Set(topLevel.map((r) => r.runId));
+  const ordered: ActiveRun[] = [];
+  for (const parent of topLevel) {
+    ordered.push(parent);
+    ordered.push(...runs.filter((r) => r.parentRunId === parent.runId));
+  }
+  ordered.push(...runs.filter((r) => r.parentRunId !== undefined && !topLevelIds.has(r.parentRunId)));
+  return ordered;
+}
+
 const EMPTY_USAGE: Usage = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
 
 function sumUsage(items: ReadonlyArray<ModelUsage>): Usage {
@@ -217,9 +236,28 @@ export const useStore = create<UiState>((set) => {
           return;
         }
         case "agent.run.started": {
-          const p = payload as { runId: string; agentId: string; task: string; model: string };
-          upsertRun({ runId: p.runId, agentId: p.agentId, task: p.task, state: "queued", model: p.model });
-          pushLog("info", `▶ agent «${p.agentId}» başladı — ${short(p.task, 60)}`);
+          // Faz 5 (ADR-014): parentRunId varsa bu bir şefin run_agent ile başlattığı ÇOCUK koşu.
+          const p = payload as {
+            runId: string;
+            agentId: string;
+            task: string;
+            model: string;
+            parentRunId?: string;
+          };
+          upsertRun({
+            runId: p.runId,
+            agentId: p.agentId,
+            task: p.task,
+            state: "queued",
+            model: p.model,
+            ...(p.parentRunId !== undefined ? { parentRunId: p.parentRunId } : {}),
+          });
+          pushLog(
+            "info",
+            p.parentRunId !== undefined
+              ? `↳ [${p.agentId}] koşu başladı — ${short(p.task, 60)}`
+              : `▶ agent «${p.agentId}» başladı — ${short(p.task, 60)}`,
+          );
           return;
         }
         case "agent.run.state": {

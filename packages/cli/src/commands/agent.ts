@@ -19,32 +19,51 @@ export async function agentRunCommand(
 
   const exitCode = await new Promise<number>((resolveExit) => {
     let runId: string | null = null;
-    const mine = (id: string): boolean => runId !== null && id === runId;
+    // Faz 5 (ADR-014): şef `run_agent` ile çocuk koşular başlatabilir — bunları da "bizim"
+    // sayıp (özellikle izin isteklerini) görebilmek/cevaplayabilmek için runId → agentId izler.
+    const childAgentIds = new Map<string, string>();
+    const mine = (id: string): boolean => runId !== null && (id === runId || childAgentIds.has(id));
+    const label = (id: string): string => {
+      const agentId = childAgentIds.get(id);
+      return agentId !== undefined ? `↳ [${agentId}] ` : "";
+    };
+
+    client.on("agent.run.started", (payload) => {
+      if (payload.parentRunId === undefined || !mine(payload.parentRunId)) return;
+      childAgentIds.set(payload.runId, payload.agentId);
+      console.log(chalk.dim(`↳ [${payload.agentId}] koşu ${payload.runId.slice(0, 8)} başladı`));
+    });
 
     client.on("agent.run.state", (payload) => {
       if (!mine(payload.runId)) return;
-      if (payload.state === "thinking") process.stdout.write(chalk.dim("· düşünüyor…\n"));
+      if (payload.state === "thinking") {
+        process.stdout.write(chalk.dim(`${label(payload.runId)}· düşünüyor…\n`));
+      }
       if (payload.state === "cancelled") {
-        console.log(chalk.yellow("⚠ koşu iptal edildi"));
-        resolveExit(130);
+        if (payload.runId === runId) {
+          console.log(chalk.yellow("⚠ koşu iptal edildi"));
+          resolveExit(130);
+        } else {
+          console.log(chalk.dim(`${label(payload.runId)}⚠ iptal edildi`));
+        }
       }
     });
 
     client.on("agent.tool.started", (payload) => {
-      if (mine(payload.runId)) console.log(chalk.cyan(`▶ ${payload.argsSummary}`));
+      if (mine(payload.runId)) console.log(chalk.cyan(`${label(payload.runId)}▶ ${payload.argsSummary}`));
     });
 
     client.on("agent.tool.completed", (payload) => {
       if (!mine(payload.runId)) return;
       const mark = payload.ok ? chalk.green("✔") : chalk.red("✘");
-      console.log(`${mark} ${payload.tool} (${payload.durationMs}ms) ${chalk.dim(payload.resultSummary.split("\n")[0] ?? "")}`);
+      console.log(`${label(payload.runId)}${mark} ${payload.tool} (${payload.durationMs}ms) ${chalk.dim(payload.resultSummary.split("\n")[0] ?? "")}`);
     });
 
     client.on("agent.tool.requested", (payload) => {
       if (!mine(payload.runId)) return;
       void (async () => {
         console.log(
-          chalk.yellow(`\n🔐 izin isteği: ${payload.tool}`) +
+          chalk.yellow(`\n${label(payload.runId)}🔐 izin isteği: ${payload.tool}`) +
             chalk.dim(` [risk: ${payload.riskClass}]`),
         );
         console.log(chalk.dim(JSON.stringify(payload.args, null, 2)));
@@ -76,6 +95,11 @@ export async function agentRunCommand(
 
     client.on("agent.run.completed", (payload) => {
       if (!mine(payload.runId)) return;
+      if (payload.runId !== runId) {
+        // Çocuk koşusu bitti — şef devam ediyor, TÜM işlemi bitirme.
+        console.log(chalk.dim(`${label(payload.runId)}✔ tamamlandı`));
+        return;
+      }
       console.log(chalk.green("\n✔ koşu tamamlandı\n"));
       console.log(payload.result);
       console.log(
@@ -88,6 +112,10 @@ export async function agentRunCommand(
 
     client.on("agent.run.failed", (payload) => {
       if (!mine(payload.runId)) return;
+      if (payload.runId !== runId) {
+        console.log(chalk.dim(`${label(payload.runId)}✘ başarısız: ${payload.error.code}`));
+        return;
+      }
       console.error(chalk.red(`\n✘ koşu başarısız: ${payload.error.code}`));
       console.error(payload.error.message);
       resolveExit(1);

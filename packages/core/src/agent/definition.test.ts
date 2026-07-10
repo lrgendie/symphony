@@ -88,6 +88,27 @@ Sistem prompt'u burada.`,
     expect(readFileSync(join(agentsDir, "asistan.md"), "utf8")).toBe(asistanBefore); // dokunulmadı
   });
 
+  it("varsayılan damıtıcı tanımı (Dilim M3): salt-OKUR araçlar, asistan ile AYNI", () => {
+    ensureDefaultAgent(agentsDir);
+    const damitici = loadAgentDefinition(agentsDir, "damitici");
+    expect(damitici.tools).toEqual(["read_file", "glob", "grep"]);
+    expect(damitici.tools).not.toContain("write_file");
+    expect(damitici.temperature).toBe(0);
+    expect(damitici.provider).toBeUndefined(); // symphony memory distill kendi pinler
+  });
+
+  it("varsayılan sef tanımı (Faz 5, ADR-014 Karar 6): run_agent VAR, yazma/komut YOK", () => {
+    ensureDefaultAgent(agentsDir);
+    const sef = loadAgentDefinition(agentsDir, "sef");
+    expect(sef.tools).toEqual(["read_file", "glob", "grep", "run_agent"]);
+    // Orkestra şefi enstrüman çalmaz — yazma/komut araçları KESİNLİKLE yok.
+    expect(sef.tools).not.toContain("write_file");
+    expect(sef.tools).not.toContain("edit");
+    expect(sef.tools).not.toContain("run_command");
+    expect(sef.temperature).toBe(0);
+    expect(sef.provider).toBeUndefined(); // model boş → router/istek zamanı pinlenir
+  });
+
   it("liste bozuk tanımı atlar, geçerlileri sıralı verir", () => {
     writeFileSync(join(agentsDir, "bozuk.md"), "frontmatter yok", "utf8");
     const ids = listAgentDefinitions(agentsDir).map((d) => d.id);

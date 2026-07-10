@@ -2,7 +2,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { ensureProfileScaffold, loadProfile, MAX_PROFILE_CHARS, PROFILE_SCAFFOLD } from "./profile.js";
+import {
+  ensureProfileScaffold,
+  formatProfileContext,
+  loadProfile,
+  MAX_PROFILE_CHARS,
+  PROFILE_SCAFFOLD,
+  readProfileSnapshot,
+  writeProfile,
+} from "./profile.js";
 
 let dir: string;
 
@@ -69,5 +77,63 @@ describe("ensureProfileScaffold", () => {
     writeFileSync(f, "## Kimlik\nzaten dolu\n", "utf8");
     ensureProfileScaffold(f);
     expect(readFileSync(f, "utf8")).toBe("## Kimlik\nzaten dolu\n");
+  });
+});
+
+describe("readProfileSnapshot (REST GET /api/memory, Dilim M2)", () => {
+  it("dosya yoksa iskeleti döner, updatedAt null", () => {
+    const snapshot = readProfileSnapshot(file());
+    expect(snapshot.content).toBe(PROFILE_SCAFFOLD);
+    expect(snapshot.chars).toBe(PROFILE_SCAFFOLD.length);
+    expect(snapshot.truncated).toBe(false);
+    expect(snapshot.updatedAt).toBeNull();
+  });
+
+  it("dosya varsa TAM içeriği döner (loadProfile'ın aksine kesmez/iskelet-null yapmaz)", () => {
+    const f = file();
+    writeFileSync(f, "## Kimlik\nDeniz\n", "utf8");
+    const snapshot = readProfileSnapshot(f);
+    expect(snapshot.content).toBe("## Kimlik\nDeniz\n");
+    expect(snapshot.chars).toBe("## Kimlik\nDeniz\n".length);
+    expect(snapshot.updatedAt).not.toBeNull();
+  });
+
+  it("MAX_PROFILE_CHARS aşılırsa truncated:true ama content KESİLMEZ (insan görüntüsü)", () => {
+    const f = file();
+    const long = "a".repeat(MAX_PROFILE_CHARS + 500);
+    writeFileSync(f, long, "utf8");
+    const snapshot = readProfileSnapshot(f);
+    expect(snapshot.truncated).toBe(true);
+    expect(snapshot.content).toBe(long);
+    expect(snapshot.chars).toBe(long.length);
+  });
+});
+
+describe("formatProfileContext (canlı bulgu düzeltmesi, 2026-07-10)", () => {
+  it("profil metnini kapsar VE kimlik karışıklığına karşı açıkça uyarır", () => {
+    const block = formatProfileContext("## Kimlik\nAdım Deniz.\n");
+    expect(block).toContain("Adım Deniz.");
+    // Küçük yerel modelin "ben kimim?" sorusuna profildeki ismi kendi kimliği sanmaması için
+    // metnin bunu KULLANICIya ait olarak, SENİN kimliğin OLMADIĞINI açıkça belirtmesi gerekir.
+    expect(block).toContain("SENİN kimliğin DEĞİL");
+    expect(block).toContain("KULLANICIYA aittir");
+  });
+});
+
+describe("writeProfile (REST PUT /api/memory, Dilim M2)", () => {
+  it("üst dizin yoksa da oluşturup TAM içeriği yazar ve okunabilir snapshot döner", () => {
+    dir = mkdtempSync(join(tmpdir(), "symphony-profile-test-"));
+    const nested = join(dir, "memory", "profil.md");
+    const snapshot = writeProfile(nested, "## Kimlik\nDeniz\n");
+    expect(readFileSync(nested, "utf8")).toBe("## Kimlik\nDeniz\n");
+    expect(snapshot.content).toBe("## Kimlik\nDeniz\n");
+  });
+
+  it("var olan dosyayı TAM değiştirir (üzerine yazar)", () => {
+    const f = file();
+    writeFileSync(f, PROFILE_SCAFFOLD, "utf8");
+    const snapshot = writeProfile(f, "## Kimlik\nyeni içerik\n");
+    expect(readFileSync(f, "utf8")).toBe("## Kimlik\nyeni içerik\n");
+    expect(snapshot.content).toBe("## Kimlik\nyeni içerik\n");
   });
 });

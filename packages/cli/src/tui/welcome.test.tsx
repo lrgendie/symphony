@@ -13,7 +13,9 @@ const totals: Usage = { inputTokens: 1_200, outputTokens: 345, costUsd: 0.0091 }
 
 describe("Welcome (Faz 2.5 kabul testi)", () => {
   it("logo + sürüm/protokol + sağlayıcı durumu + kullanım özetini gösterir", () => {
-    const { lastFrame } = render(<Welcome providers={providers} totals={totals} />);
+    const { lastFrame } = render(
+      <Welcome providers={providers} totals={totals} memoryChars={null} />,
+    );
     const frame = lastFrame() ?? "";
 
     // Logo tek modülden geliyor (ink satır sonu boşluklarını kırpar → trimEnd)
@@ -27,5 +29,14 @@ describe("Welcome (Faz 2.5 kabul testi)", () => {
     expect(frame).toContain("Ctrl+C");
     // Tarih gerçekten bugünün yılını taşıyor (statik metin değil)
     expect(frame).toContain(String(new Date().getFullYear()));
+    // memoryChars:null → profil satırı hiç gösterilmez (ADR-013)
+    expect(frame).not.toContain("profil aktif");
+  });
+
+  it("memoryChars verilince 🧠 profil aktif satırını gösterir", () => {
+    const { lastFrame } = render(
+      <Welcome providers={providers} totals={totals} memoryChars={1234} />,
+    );
+    expect(lastFrame() ?? "").toContain("profil aktif (1.234 karakter)");
   });
 });

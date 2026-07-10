@@ -23,8 +23,8 @@
 | `POST /api/chat` | Bearer | Streaming sohbet (gövde: `chat.start` şeması; cevap: SSE) — curl kabul testlerinin ucu |
 | `GET /api/history/sessions?limit=50` | Bearer | Son sohbet oturumları (yeniden eskiye): `{ sessions: HistorySessionSummary[] }` |
 | `GET /api/history/sessions/:id` | Bearer | Bir oturumun tam dökümü: `{ session, messages: HistoryMessage[] }`; yoksa 404 |
-| `GET /api/memory` | Bearer | **(planlandı — Dilim M2, ADR-013; henüz uygulanmadı)** Kullanıcı profili: `{ content, chars, truncated, updatedAt }`; dosya yoksa boş iskelet |
-| `PUT /api/memory` | Bearer | **(planlandı — Dilim M2, ADR-013; henüz uygulanmadı)** Profilin TAM içeriğini değiştirir (gövde: `{ content }`) — yalnız insan arayüzünden çağrılır; agent araç yüzeyinde bu uca giden yol YOKTUR (ADR-013 yazma kısıtı) |
+| `GET /api/memory` | Bearer | Kullanıcı profili: `{ content, chars, truncated, updatedAt }`; dosya yoksa boş iskelet |
+| `PUT /api/memory` | Bearer | Profilin TAM içeriğini değiştirir (gövde: `{ content }`) — yalnız insan arayüzünden çağrılır; agent araç yüzeyinde bu uca giden yol YOKTUR (ADR-013 yazma kısıtı) |
 
 Kalıcı geçmiş SQLite'tadır ve YALNIZ REST ile sorgulanır (§6: olay replay'i yok).
 Cevap şemaları `shared`'dadır: `HistorySessionSummarySchema`, `HistoryMessageSchema`,
@@ -33,7 +33,7 @@ Cevap şemaları `shared`'dadır: `HistorySessionSummarySchema`, `HistoryMessage
 **Kullanıcı profili (hafıza, ADR-013):** `~/.symphony/memory/profil.md` içeriği daemon
 tarafından her agent koşusu ve chat isteğinde system bağlamına eklenir (sunucu tarafı;
 kalıcı oturum geçmişine YAZILMAZ). Protokol mesajlarını değiştirmez — istemciler profili
-görmez/taşımaz; yönetimi yalnız yukarıdaki REST uçları (M2) ve doğrudan dosya düzenlemesiyledir.
+görmez/taşımaz; yönetimi yalnız yukarıdaki REST uçları ve doğrudan dosya düzenlemesiyledir.
 
 ## 2. Zarf (envelope)
 
@@ -96,7 +96,7 @@ eş zamanlılığının kaynağı budur).
 |---|---|---|
 | `chat.delta` | `{ sessionId, text }` | Streaming metin parçası |
 | `chat.completed` | `{ sessionId, usage: { inputTokens, outputTokens, costUsd } }` | |
-| `agent.run.started` | `{ runId, agentId, task, model, cwd }` | |
+| `agent.run.started` | `{ runId, agentId, task, model, cwd, parentRunId? }` | `parentRunId` (Faz 5, ADR-014): koşu bir şef agent'ın `run_agent` aracıyla başlatıldıysa ebeveynin runId'si — istemciler hiyerarşiyi bununla kurar (olay sırası bus'ta sıralı: çocuğun `started`'ı her çocuk olayından önce gelir) |
 | `agent.run.state` | `{ runId, state }` | Durum makinesi geçişi (bkz. §5) |
 | `agent.delta` | `{ runId, text }` | Streaming asistan metni parçası (ADR-012; `chat.delta`'nın koşu-anahtarlı ikizi) |
 | `agent.step.thinking` | `{ runId, summary? }` | Model düşünüyor |
@@ -120,6 +120,10 @@ queued → thinking → executing_tool → thinking → ... → completed
 ```
 
 Geçerli geçişler yalnız bunlardır; `agent.run.state` başka değer taşıyamaz.
+**Agent hiyerarşisi (Faz 5, ADR-014):** Snapshot'taki `ActiveRun` kaydında opsiyonel `parentRunId`
+bulunur; devretme (`run_agent` aracı) tamamen motor içindedir, İSTEMCİDEN devretme başlatan yeni bir
+mesaj YOKTUR. Çocuk koşunun izin istekleri normal `agent.tool.requested` olarak (çocuğun runId'siyle)
+yayınlanır ve her istemciden cevaplanabilir.
 `awaiting_permission` süresiz bekler (timeout yok — insan kararı beklenir); iptal edilebilir.
 **Konuşmalı koşu (ADR-012):** `conversational: true` başlatılan koşu, tur araç çağrısı OLMADAN
 bitince `completed` yerine `awaiting_user`'a geçer ve sonraki `agent.say`'i bekler (thinking'e döner).

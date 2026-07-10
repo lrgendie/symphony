@@ -6,6 +6,7 @@ import { modelsCommand } from "./commands/models.js";
 import { statusCommand } from "./commands/status.js";
 import { watchCommand } from "./commands/watch.js";
 import { historyCommand } from "./commands/history.js";
+import { memoryDistillCommand, memoryPathCommand, memoryShowCommand } from "./commands/memory.js";
 import { agentsCommand } from "./commands/agents.js";
 import { agentRunCommand } from "./commands/agent.js";
 import { addCommand } from "./commands/add.js";
@@ -59,6 +60,28 @@ program
   .command("history [oturum]")
   .description("Sohbet geçmişi: oturum listesi ya da tek oturumun dökümü (id ön eki yeter)")
   .action((oturum?: string) => historyCommand(oturum).catch(fail));
+
+const memory = program
+  .command("memory")
+  .description("Kullanıcı profili (~/.symphony/memory/profil.md, ADR-013)");
+
+memory
+  .command("show", { isDefault: true })
+  .description("Profili göster: içerik + karakter + truncated uyarısı")
+  .action(wrap(memoryShowCommand));
+
+memory
+  .command("path")
+  .description("Profil dosyasının yolunu yazdırır (kendi editörünle aç)")
+  .action(() => memoryPathCommand());
+
+memory
+  .command("distill <arşiv-dizini>")
+  .description("Arşiv dizininden salt-okur agent ile profil TASLAĞI üretir (canlı profile dokunmaz)")
+  .option("--bulut", "yerel model şartını bilinçli olarak geç (arşiv buluta gönderilebilir)")
+  .action((dizin: string, opts: { bulut?: boolean }) =>
+    memoryDistillCommand(dizin, opts).catch(fail),
+  );
 
 // Argümansız `symphony` → TUI (model seçici + sohbet)
 program.action(

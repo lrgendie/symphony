@@ -7,7 +7,7 @@ import {
 } from "@symphony/shared";
 import { daemon, type PermissionDecision } from "./daemon/client";
 import { LivingScene } from "./scene/LivingScene";
-import { useStore, type ConnStatus, type LogTone, type ModelUsage } from "./store";
+import { orderRunsForDisplay, useStore, type ConnStatus, type LogTone, type ModelUsage } from "./store";
 
 /**
  * Faz 4 dilim 1-2 — "Şef Paneli": bağlantı durumu, sağlayıcı sağlığı, aktif agent
@@ -116,8 +116,9 @@ export function App(): React.JSX.Element {
           <p className="dim empty">Şu an çalışan agent yok. Terminalde `symphony agent …` başlat.</p>
         ) : (
           <ul className="runs">
-            {runs.map((r) => (
-              <li key={r.runId} className="run">
+            {orderRunsForDisplay(runs).map((r) => (
+              <li key={r.runId} className={r.parentRunId !== undefined ? "run run-child" : "run"}>
+                {r.parentRunId !== undefined && <span className="run-child-arrow">↳</span>}
                 <span className={`state state-${r.state}`}>{r.state}</span>
                 <span className="run-agent">{r.agentId}</span>
                 {r.model !== undefined && <span className="dim">{r.model}</span>}

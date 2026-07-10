@@ -211,3 +211,76 @@ gelecek özellik belgelenmez).
 **Geri dönüş koşulu:** Profil enjeksiyonu model davranışını ölçülebilir bozarsa (kabul testleri /
 kullanıcı gözlemi) `memory.enabled=false` anında kapatır; dosya-tabanlı yaklaşım çok-makine
 senkronunda yetersiz kalırsa Faz 7 sync ile birlikte yeniden değerlendirilir.
+
+## ADR-014 — Çoklu agent orkestrasyonu: motor-içi devretme aracı `run_agent` (2026-07-10, Fable)
+**Bağlam:** ROADMAP Faz 5 — "şef" agent görevi alt görevlere bölüp uygun agent'lara/modellere
+dağıtacak; birden çok agent paralel izlenebilecek; basit işler ucuz/yerel modele gidecek.
+Mevcut altyapı zaten çok şey veriyor: `engine.runs` Map'i koşuları runId'yle bağımsız tutar
+(iki `agent.start` ZATEN paralel koşar ve snapshot'ta ayrı görünür); agent tanımları dosya
+olarak taşınabilir (Faz 3); kural-tabanlı router v1 var. Eksik olan tek çekirdek yetenek:
+bir agent'ın BAŞKA bir agent'ı çalıştırıp sonucunu alabilmesi.
+
+**Karar 1 — Devretme, motor-içi DİNAMİK ARAÇTIR: `run_agent { agent, task, model?, provider? }`.**
+MCP araçları deseniyle birebir: araç spec'i koşu başına motor tarafından üretilir (`execute`
+engine'i closure'lar), `AGENT_TOOLS` sabitine girmez ama frontmatter `tools:` enum'una girer —
+yalnız listesinde `run_agent` olan agent devredebilir. Çocuk koşu = motor içinde başlatılan
+normal bir agent koşusu (kendi runId'si, kendi `agent.run.*` olayları, kendi SQLite kaydı);
+aracın dönüşü = çocuğun nihai `result` metni (MAX_OUTPUT_CHARS'a kırpılır). Çocuk `failed`/
+`cancelled` biterse bu ARAÇ HATASIDIR, şefin koşusunu düşürmez (SPEC §4 "araç hatası ≠ koşu
+hatası" — şef rota değiştirebilir; AGENT_TOOL_LOOP sigortası sonsuz denemeyi keser).
+**Reddedilenler:**
+- *Yeni protokol mesajı (`agent.delegate`):* devretme kararı modelin tool-loop'unun İÇİNDE
+  doğar; onu istemci katmanından geçirmek hem gecikme hem yeni güvenlik yüzeyi ekler, kazanım yok.
+- *Yalnız host/CLI orkestrasyonu (M3 `damitici` deseni):* "şef"i statik bir betiğe indirger —
+  alt görev listesi koşu SIRASINDA modelin kararıyla değişemezdi; ROADMAP'in "üst akıl" kabul
+  testi (görevi kendisi bölüp dağıtan agent) karşılanmazdı. M3'te doğru olan desen burada yanlış:
+  damıtmada plan sabitti, orkestrasyonda planın kendisi zekânın çıktısı.
+
+**Karar 2 — Hiyerarşi protokole ADDITIVE girer, PROTOCOL_VERSION=1 korunur:**
+`agent.run.started` olayına ve `ActiveRun` (snapshot) şemasına `parentRunId?` alanı. Olay sırası
+bus'ta sıralı olduğundan istemci, çocuğun `agent.run.started`'ını (parentRunId'li) çocuğun her
+türlü sonraki olayından ÖNCE görür → istemciler "benim koşum + onun çocukları" kümesini
+güvenle kurabilir. Başka mesaj/olay değişmez; `agent.start` isteğine dokunulmaz (devretme
+istemciden başlatılmaz).
+
+**Karar 3 — Güvenlik değişmezleri (SPEC §8) çocuklarda da AYNEN geçerli, TEK kapıdan:**
+- Çocuğun araç çağrıları AYNI izin motorundan geçer ve KENDİ runId'siyle `agent.tool.requested`
+  yayınlar; kullanıcı her istemciden cevaplayabilir. İzin isteği şefe DEĞİL kullanıcıya gider —
+  şef, kullanıcının izin yetkisini devralamaz.
+- `run_agent`'ın kendi risk sınıfı HEDEFE göre dinamiktir: hedef agent'ın araç seti tamamen
+  `safe` sınıfındaysa (ör. asistan/damitici: read_file/glob/grep) devretme de `safe` → izin
+  kutusu çıkmaz; sette `mutating`/`destructive` üretebilecek araç varsa (write_file/edit/
+  run_command/MCP) devretme `mutating` → sorulur, `permissionTarget` = hedef agentId
+  (kullanıcı "run_agent coder'a daima izin" kuralını kalıcılaştırabilir; `destructive` DEĞİL
+  çünkü çocuğun her yıkıcı adımı zaten ayrıca soracak).
+- Jail: çocuk, ebeveynin `cwd`'sini BİREBİR devralır; `run_agent` cwd/extraDirs parametresi
+  ALMAZ (v1) — şef, kendi hapsinden geniş bir hapis dağıtamaz.
+**Karar 4 — Derinlik ve hacim sigortaları:**
+- Derinlik = 1: `parentRunId`'si olan koşuya `run_agent` aracı HİÇ verilmez (çocuk devredemez;
+  sonsuz zincir yapısal olarak imkânsız — sayaç değil, aracın yokluğu).
+- Koşu başına en çok `MAX_CHILD_RUNS = 8` çocuk; aşımı araç hatası döner.
+- Çocuklar DAİMA tek-seferlik (`conversational` yok — `awaiting_user`'a park eden çocuk, şefin
+  araç çağrısını süresiz bloklardı). Çocuklar sıralı koşar (v1; paralel çocuk v2 adayı).
+- İptal zinciri: ebeveyn iptali önce çocukları iptal eder (kayıt `childRunIds` tutar);
+  öksüz koşu kalmaz.
+- Çocuk koşular M1 profil enjeksiyonunu NORMAL alır (damitici istisnası hariç — o kendi
+  kuralını korur).
+
+**Karar 5 — Maliyet stratejisi v1 = mevcut kural-tabanlı router + şef prompt'u; öğrenen router Faz 6'dır.**
+`run_agent.model/provider` boşsa çözüm zinciri agent.start ile AYNI: çocuk tanımının model'i →
+o da boşsa `pickModel(task)` (router). Şefin sistem prompt'u basit/mekanik alt görevleri yerel
+modele, muhakeme isteyenleri buluta yönlendirmesini söyler ve `model`/`provider` parametreleriyle
+pinleyebilir. Router v2 (geçmiş skorlardan öğrenen) bu ADR'nin kapsamı DIŞI — Faz 6.
+
+**Karar 6 — Varsayılan "sef" agent'ı** (dördüncü default; `ensureDefaultAgent`): araçlar
+`[read_file, glob, grep, run_agent]` (çalışma alanını inceleyip plan yapabilir, kendisi dosya
+YAZAMAZ — yazma işini coder'a devretmek zorundadır: orkestra şefi enstrüman çalmaz), model boş
+(router). Prompt: görevi ≥2 anlamlı alt göreve böl, her birine uygun agent+model seç, sonuçları
+sentezle, nihai cevabı araçsız yaz.
+
+**Ertelenenler (bilinçli, v2+):** paralel çocuk koşuları · gerçek görev kuyruğu (kapasite bekleyen
+koşular) · derinlik>1 · agent'lar arası doğrudan mesajlaşma · çocuğa ayrı cwd verme.
+
+**Geri dönüş koşulu:** `run_agent` izin/jail kabul testlerinden herhangi birini kırarsa ya da
+şef koşuları maliyet görünürlüğünü bulanıklaştırırsa (kullanıcı hangi paranın nereye gittiğini
+izleyemezse) dilim geri alınır; host-orkestrasyon (reddedilen 2. seçenek) yedek plandır.

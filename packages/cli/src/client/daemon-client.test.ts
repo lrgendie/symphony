@@ -74,6 +74,21 @@ describe("DaemonClient", () => {
     expect(DaemonError.name).toBe("DaemonError");
     client.close();
   });
+
+  it("getMemory/putMemory: profil REST roundtrip (ADR-013, Dilim M2)", async () => {
+    const client = makeClient();
+    await client.open();
+    const before = await client.getMemory();
+    expect(before.content).toContain("Kullanıcı Profili"); // iskelet (henüz doldurulmadı)
+
+    const after = await client.putMemory("## Kimlik\nAdım Deniz, TypeScript tercih ederim.\n");
+    expect(after.content).toBe("## Kimlik\nAdım Deniz, TypeScript tercih ederim.\n");
+    expect(after.truncated).toBe(false);
+
+    const reread = await client.getMemory();
+    expect(reread.content).toBe(after.content); // yazma kalıcı
+    client.close();
+  });
 });
 
 describe("daemon keşfi ve otomatik başlatma", () => {

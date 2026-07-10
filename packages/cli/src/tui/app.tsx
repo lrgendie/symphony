@@ -7,6 +7,7 @@ import type {
   ProviderHealth,
   Usage,
 } from "@symphony/shared";
+import { getSymphonyPaths, loadProfile } from "@symphony/core";
 import { connectToDaemon, type DaemonClient } from "../client/daemon-client.js";
 import { AgentRun } from "./agent-run.js";
 import { Chat, type HistoryEntry } from "./chat.js";
@@ -211,12 +212,14 @@ export function App(props: {
   totals: Usage;
   cwd: string;
   lastSession: HistorySessionSummary | null;
+  /** Enjekte edilen profil karakter sayısı (ADR-013); null → satır gösterilmez. */
+  memoryChars: number | null;
 }): JSX.Element {
   const [persona, setPersona] = useState<Persona | null>(null);
 
   return (
     <Box flexDirection="column" padding={1}>
-      <Welcome providers={props.providers} totals={props.totals} />
+      <Welcome providers={props.providers} totals={props.totals} memoryChars={props.memoryChars} />
       {persona === null && <PersonaPicker agents={props.agents} onPick={setPersona} />}
       {persona?.kind === "chat" && (
         <ChatFlow client={props.client} models={props.models} lastSession={props.lastSession} />
@@ -251,6 +254,8 @@ export async function runTui(): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  // Aynı kural motorun enjeksiyon kontrolüyle: dosya yok/boş/yalnız iskelet → null (satır gizlenir).
+  const profile = loadProfile(getSymphonyPaths().profileFile);
   const instance = render(
     <App
       client={client}
@@ -260,6 +265,7 @@ export async function runTui(): Promise<void> {
       totals={usage.totals}
       cwd={process.cwd()}
       lastSession={sessions[0] ?? null}
+      memoryChars={profile?.text.length ?? null}
     />,
   );
   await instance.waitUntilExit();

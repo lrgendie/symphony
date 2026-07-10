@@ -40,6 +40,25 @@ const EST_OUTPUT_TOKENS = 1000;
 /** 7-8B q4 model ~5 GB VRAM ister; altındaysa yerel öneri geriye düşer. */
 const LOCAL_COMFORT_VRAM_GB = 5;
 
+/**
+ * Canlı bulgu (2026-07-10): görüntü-özel (vision-language) yerel modeller (ör. Qwen-VL ailesi)
+ * Ollama'nın OpenAI-uyumlu ucunda araç-çağırma (tool-calling) isteklerinde GÜVENİLİR ÇALIŞMIYOR —
+ * `AGENT_...` koşuları "No output generated" ile ilk turda başarısız oluyor. Symphony henüz
+ * görüntü GİRDİSİ almıyor (protokolde yok, bkz. docs), o yüzden bu modellerin metin/agent
+ * görevlerinde YANLIŞLIKLA seçilmesi (`ModelInfo` sırası Ollama'nın döndürdüğü sıraya bağlı,
+ * kullanıcı hangi modeli ne zaman kurduğuna göre değişir) saf bir regresyondur — elenir.
+ * Hiç metin-uyumlu yerel model YOKSA (yalnız vision modelleri kuruluysa) yine de kullanılır —
+ * hiç öneri vermemek bundan daha kötüdür.
+ */
+// Sınır önce yalnız HARF değildir (rakam bitişik olabilir: "qwen2.5vl" gibi sürüm+sonek
+// ayraçsız birleşebiliyor); sonra harf/rakam değildir. Sınama canlı vakayla doğrulandı.
+const VISION_MODEL_PATTERN = /(^|[^a-z])vl([^a-z0-9]|$)|vision|llava|moondream/i;
+
+function preferTextCapable(models: ModelInfo[]): ModelInfo[] {
+  const textOnly = models.filter((m) => !VISION_MODEL_PATTERN.test(m.id));
+  return textOnly.length > 0 ? textOnly : models;
+}
+
 // Kelime kümeleri (regex \b değil: JS'te \b ASCII'dir, "özet" gibi Türkçe
 // karakterle başlayan kelimelerde sınır bulamaz). Eşleşme kelime-tam yapılır.
 const CODE_WORDS = new Set([
@@ -121,7 +140,7 @@ export function suggestModels(
   context: RouterContext,
 ): RouterSuggestion[] {
   const kind = classifyTask(task);
-  const locals = context.models.filter((m) => m.local);
+  const locals = preferTextCapable(context.models.filter((m) => m.local));
   const clouds = [...context.models.filter((m) => !m.local)].sort(
     (a, b) => cloudQualityRank(a) - cloudQualityRank(b),
   );

@@ -11,7 +11,12 @@ export const CLI_VERSION = "0.1.0";
  * sağlayıcı durumu + kalıcı kullanım özeti + kısayol ipuçları.
  * Claude Code'un açılış karşılamasının Symphony kimliğiyle karşılığı.
  */
-export function Welcome(props: { providers: ProviderHealth[]; totals: Usage }): JSX.Element {
+export function Welcome(props: {
+  providers: ProviderHealth[];
+  totals: Usage;
+  /** Profil enjekte ediliyorsa karakter sayısı (ADR-013); yoksa/boşsa null → satır gösterilmez. */
+  memoryChars: number | null;
+}): JSX.Element {
   const now = new Date();
   const date = now.toLocaleDateString("tr-TR", {
     weekday: "long",
@@ -58,6 +63,9 @@ export function Welcome(props: { providers: ProviderHealth[]; totals: Usage }): 
           toplam kullanım: {totalTokens.toLocaleString("tr-TR")} token · $
           {props.totals.costUsd.toFixed(4)}
         </Text>
+        {props.memoryChars !== null && (
+          <Text dimColor>🧠 profil aktif ({props.memoryChars.toLocaleString("tr-TR")} karakter)</Text>
+        )}
         <Text dimColor>↑/↓ model · Enter seç · Esc cevabı iptal · Ctrl+C çıkış</Text>
       </Box>
     </Box>

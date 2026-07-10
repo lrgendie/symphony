@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { streamText, tool as defineTool, type ModelMessage } from "ai";
 import type { Logger } from "pino";
+import { z } from "zod";
 import {
   canTransition,
   ERROR_CODE_PATTERN,
@@ -14,6 +15,7 @@ import {
   type Usage,
 } from "@symphony/shared";
 import type { DataStore } from "../db/store.js";
+import { formatProfileContext } from "../memory/profile.js";
 import { computeCostUsd } from "../providers/pricing.js";
 import { extractCacheTokens, parseRateLimits } from "../providers/telemetry.js";
 import type { ProviderAdapter } from "../providers/types.js";
@@ -32,8 +34,10 @@ import { PermissionEngine } from "./permissions.js";
 import {
   AGENT_TOOLS,
   maskSecrets,
+  TOOL_NAMES,
   type AgentToolSpec,
   type ToolContext,
+  type ToolName,
   type ToolPreview,
 } from "./tools.js";
 
@@ -94,7 +98,16 @@ interface ActiveRunRecord {
   resumeFrom: string | null;
   /** Kalıcılığa giden TEMİZ transcript (yalnız user/assistant metin turları; araç mesajları HARİÇ). */
   transcript: ChatMessage[];
+  /** Faz 5 (ADR-014): devreden koşunun runId'si — yalnız `run_agent` ile başlatılan çocuklarda dolu. */
+  parentRunId: string | undefined;
+  /** Faz 5 (ADR-014): `run_agent` ile başlattığı çocukların runId'leri (iptal kaskadı + MAX_CHILD_RUNS). */
+  childRunIds: string[];
+  /** Faz 5 (ADR-014): yalnız çocuk koşularda dolu — `finish()` koşu ne şekilde biterse bitsin çağırır. */
+  onChildFinish: ((outcome: ChildOutcome) => void) | null;
 }
+
+/** Faz 5 (ADR-014): `run_agent` aracının beklediği çocuk-koşu sonucu. */
+type ChildOutcome = { ok: true; text: string } | { ok: false; error: AgentError };
 
 /** AI SDK v7 araç çağrısının motorun kullandığı kesiti (invalid = şemadan geçmedi). */
 interface RawToolCall {
@@ -116,6 +129,42 @@ interface ToolOutcome {
 const TOOL_LOOP_LIMIT = 3;
 /** Onay anında dosya bu kadar kez değişirse çağrı PERMISSION_STALE_DIFF ile düşer (SPEC §6). */
 const STALE_DIFF_LIMIT = 3;
+/** Faz 5 (ADR-014 Karar 4): koşu başına en çok bu kadar `run_agent` çocuğu. */
+const MAX_CHILD_RUNS = 8;
+/**
+ * Faz 5 (ADR-014 §9): `run_agent` tek bir statik araçtan (30sn) çok daha uzun sürebilir —
+ * çocuk kendi başına birden çok model turu atabilir. 2026-07-10 canlı bulgusu (küçük yerel
+ * model bir turu ~15dk döngüye soktu) bu tavanın gerçek bir güvenlik ağı olduğunu gösterdi:
+ * süre dolunca çocuk `cancel()` ile durdurulur, şef araç HATASI alır (koşusu düşmez).
+ */
+const RUN_AGENT_TIMEOUT_MS = 300_000;
+/** run_agent risk sınıfı için: hedefin araç seti TAMAMEN salt-okur mu (ADR-014 Karar 3). */
+const SAFE_RUN_AGENT_TOOLS = new Set<string>(["read_file", "glob", "grep"]);
+
+const RunAgentArgsSchema = z
+  .object({
+    agent: z.string().min(1).describe("Devredilecek agent'ın id'si (~/.symphony/agents/<id>.md)"),
+    task: z.string().min(1).describe("Alt-agent'a verilecek görev metni"),
+    model: z.string().min(1).optional().describe("İsteğe bağlı: modeli pinle (provider ile birlikte)"),
+    provider: z.string().min(1).optional().describe("İsteğe bağlı: sağlayıcıyı pinle (model ile birlikte)"),
+  })
+  .strip();
+
+/** Faz 5 (ADR-014 Karar 1): `run_agent`'ın motor içi başlatma parametreleri (dış `agent.start`
+ * isteğinden AYRI — `parentRunId`/`onChildFinish` yalnız engine'in kendi çağrılarında dolar,
+ * hiçbir wire mesajından gelemez). */
+interface StartParams {
+  agentId: string;
+  task: string;
+  cwd: string;
+  extraDirs?: string[] | undefined;
+  model?: string | undefined;
+  provider?: string | undefined;
+  conversational?: boolean | undefined;
+  sessionId?: string | undefined;
+  parentRunId?: string | undefined;
+  onChildFinish?: ((outcome: ChildOutcome) => void) | undefined;
+}
 
 export class AgentEngine {
   private readonly runs = new Map<string, ActiveRunRecord>();
@@ -137,6 +186,7 @@ export class AgentEngine {
       task: run.task,
       state: run.state,
       model: run.model,
+      ...(run.parentRunId !== undefined ? { parentRunId: run.parentRunId } : {}),
     }));
   }
 
@@ -147,18 +197,39 @@ export class AgentEngine {
   }
 
   async start(payload: RequestPayload<"agent.start">): Promise<{ runId: string; sessionId: string }> {
-    const definition = loadAgentDefinition(this.deps.agentsDir, payload.agentId);
-    // SPEC §3: extraDirs agent.start'ta İNSANIN açıkça verdiği dizinlerdir —
-    // istekte yer almaları açık onaydır; jail bunları köklere ekler.
-    const jail = new WorkspaceJail(payload.cwd, payload.extraDirs ?? []);
+    return this.startInternal({
+      agentId: payload.agentId,
+      task: payload.task,
+      cwd: payload.cwd,
+      extraDirs: payload.extraDirs,
+      model: payload.model,
+      provider: payload.provider,
+      conversational: payload.conversational,
+      sessionId: payload.sessionId,
+    });
+  }
 
-    const provider = payload.provider ?? definition.provider;
-    const model = payload.model ?? definition.model;
+  /**
+   * Faz 5 (ADR-014 Karar 1): `start()` (wire isteği) VE `run_agent` aracı (motor içi devretme)
+   * AYNI kapıdan geçer — `parentRunId`/`onChildFinish` yalnız ikincisinde dolar, dışarıdan
+   * asla verilemez (payload şemasında bu alanlar yok).
+   */
+  private async startInternal(
+    params: StartParams,
+  ): Promise<{ runId: string; sessionId: string }> {
+    const definition = loadAgentDefinition(this.deps.agentsDir, params.agentId);
+    // SPEC §3: extraDirs agent.start'ta İNSANIN açıkça verdiği dizinlerdir — istekte yer
+    // almaları açık onaydır; jail bunları köklere ekler. Çocuk koşular extraDirs ALMAZ
+    // (ADR-014 Karar 3: şef kendi hapsinden geniş bir hapis dağıtamaz).
+    const jail = new WorkspaceJail(params.cwd, params.extraDirs ?? []);
+
+    const provider = params.provider ?? definition.provider;
+    const model = params.model ?? definition.model;
     let resolved: { provider: string; model: string };
     if (provider !== undefined && model !== undefined) {
       resolved = { provider, model };
     } else if (provider === undefined && model === undefined) {
-      const picked = await this.deps.pickModel(payload.task);
+      const picked = await this.deps.pickModel(params.task);
       if (picked === null) {
         throw new AgentError(
           "PROVIDER_NONE_AVAILABLE",
@@ -187,7 +258,7 @@ export class AgentEngine {
     const run: ActiveRunRecord = {
       runId: randomUUID(),
       agentId: definition.id,
-      task: payload.task,
+      task: params.task,
       provider: resolved.provider,
       model: resolved.model,
       cwd: jail.cwd,
@@ -200,14 +271,21 @@ export class AgentEngine {
       pending: null,
       startedAt: Date.now(),
       trustedForRun: new Set(),
-      conversational: payload.conversational ?? false,
+      // Faz 5 (ADR-014 Karar 4): çocuklar DAİMA tek-seferlik — run_agent bu alanı hiç geçmez.
+      conversational: params.conversational ?? false,
       nextUser: null,
       // Konuşma kalıcılığı (2.3b): sessionId istekte verilirse o oturuma devam; yoksa yeni üret.
-      sessionId: payload.sessionId ?? randomUUID(),
-      resumeFrom: payload.sessionId ?? null,
+      sessionId: params.sessionId ?? randomUUID(),
+      resumeFrom: params.sessionId ?? null,
       transcript: [],
+      parentRunId: params.parentRunId,
+      childRunIds: [],
+      onChildFinish: params.onChildFinish ?? null,
     };
     this.runs.set(run.runId, run);
+    if (params.parentRunId !== undefined) {
+      this.runs.get(params.parentRunId)?.childRunIds.push(run.runId);
+    }
     this.deps.store.createAgentRun({
       id: run.runId,
       agentId: run.agentId,
@@ -223,6 +301,7 @@ export class AgentEngine {
       task: run.task,
       model: run.model,
       cwd: run.cwd,
+      ...(run.parentRunId !== undefined ? { parentRunId: run.parentRunId } : {}),
     });
 
     void this.runLoop(run, definition, adapter, jail).catch((error: unknown) => {
@@ -240,6 +319,10 @@ export class AgentEngine {
     const run = this.runs.get(runId);
     if (run === undefined) {
       throw new AgentError("AGENT_UNKNOWN_RUN", `Aktif koşu bulunamadı: ${runId}`);
+    }
+    // Faz 5 (ADR-014 Karar 4): ebeveyn iptali çocukları da kapsar — öksüz koşu kalmaz.
+    for (const childId of run.childRunIds) {
+      this.runs.get(childId)?.abort.abort();
     }
     run.abort.abort();
   }
@@ -290,6 +373,92 @@ export class AgentEngine {
     pending.resolve(payload.decision);
   }
 
+  /**
+   * Faz 5 (ADR-014 §9): motor-içi dinamik araç — `AGENT_TOOLS`'ta YOK, yalnız `run.parentRunId
+   * === undefined` VE tanımı listeleyen koşularda `runLoop` tarafından specs'e eklenir.
+   */
+  private makeRunAgentSpec(run: ActiveRunRecord): AgentToolSpec {
+    return {
+      name: "run_agent",
+      description:
+        "Başka bir agent'ı (agentId ile) bağımsız bir koşu olarak çalıştırır, kendi çalışma " +
+        "dizinini (cwd) devralır ve o koşunun NİHAİ cevabını döner. model/provider verilmezse " +
+        "hedefin kendi varsayılanı ya da router kullanılır.",
+      inputSchema: RunAgentArgsSchema,
+      timeoutMs: RUN_AGENT_TIMEOUT_MS,
+      riskClass: (args) => {
+        const parsed = RunAgentArgsSchema.safeParse(args);
+        if (!parsed.success) return "mutating";
+        try {
+          const target = loadAgentDefinition(this.deps.agentsDir, parsed.data.agent);
+          return isReadOnlyAgent(target) ? "safe" : "mutating";
+        } catch {
+          // Tanım yüklenemedi (yok/bozuk) — temkinli davran, sor (ADR-014 Karar 3).
+          return "mutating";
+        }
+      },
+      permissionTarget: (args) => {
+        const parsed = RunAgentArgsSchema.safeParse(args);
+        return parsed.success ? parsed.data.agent : "bilinmeyen-agent";
+      },
+      argsSummary: (args) => {
+        const parsed = RunAgentArgsSchema.safeParse(args);
+        return parsed.success
+          ? `run_agent ${parsed.data.agent}: ${parsed.data.task.slice(0, 80)}`
+          : "run_agent (geçersiz argüman)";
+      },
+      execute: async (args, _ctx, signal) => {
+        const parsed = RunAgentArgsSchema.parse(args);
+        if (run.childRunIds.length >= MAX_CHILD_RUNS) {
+          throw new AgentError(
+            "AGENT_MAX_CHILD_RUNS",
+            `Koşu başına en çok ${MAX_CHILD_RUNS} alt-agent çalıştırılabilir`,
+          );
+        }
+        let childRunId: string | null = null;
+        const outcome = await new Promise<ChildOutcome>((resolve) => {
+          // Zaman aşımı/ebeveyn iptali bu sinyali tetikler (executeToolCall run.abort.signal'ı
+          // zaten combined signal'a katıyor) — çocuğu da durdurup öksüz koşu bırakmıyoruz.
+          const onAbort = (): void => {
+            if (childRunId !== null) this.cancel(childRunId);
+          };
+          signal.addEventListener("abort", onAbort, { once: true });
+          this.startInternal({
+            agentId: parsed.agent,
+            task: parsed.task,
+            cwd: run.cwd,
+            ...(parsed.model !== undefined ? { model: parsed.model } : {}),
+            ...(parsed.provider !== undefined ? { provider: parsed.provider } : {}),
+            parentRunId: run.runId,
+            onChildFinish: (childOutcome) => {
+              signal.removeEventListener("abort", onAbort);
+              resolve(childOutcome);
+            },
+          })
+            .then((ok) => {
+              childRunId = ok.runId;
+              if (signal.aborted) this.cancel(ok.runId);
+            })
+            .catch((error: unknown) => {
+              signal.removeEventListener("abort", onAbort);
+              resolve({
+                ok: false,
+                error:
+                  error instanceof AgentError
+                    ? error
+                    : new AgentError(
+                        "INTERNAL_AGENT_ERROR",
+                        error instanceof Error ? error.message : String(error),
+                      ),
+              });
+            });
+        });
+        if (!outcome.ok) throw outcome.error;
+        return outcome.text;
+      },
+    };
+  }
+
   // ---- Koşu ömrü ----
 
   private async runLoop(
@@ -320,9 +489,17 @@ export class AgentEngine {
       // MCP istemcisi (ADR-007, SPEC-AGENT §2): koşu başında bağlan, finally'de kapat —
       // hata olursa (AGENT_MCP_*) aşağıdaki catch tarafından normal akışla işlenir.
       mcpConnections = await connectMcpServers(this.deps.mcpServersFile, definition.mcpServers);
+      const staticToolNames = definition.tools.filter((name): name is ToolName =>
+        (TOOL_NAMES as readonly string[]).includes(name),
+      );
       const specs = [
-        ...definition.tools.map((name) => AGENT_TOOLS[name]),
+        ...staticToolNames.map((name) => AGENT_TOOLS[name]),
         ...mcpConnections.flatMap((connection) => connection.tools),
+        // Faz 5 (ADR-014 Karar 1+4): yalnız listesinde run_agent OLAN VE kendisi bir çocuk
+        // OLMAYAN (derinlik-1 sigortası) koşu bu aracı alır — çocuğa asla verilmez.
+        ...(run.parentRunId === undefined && definition.tools.includes("run_agent")
+          ? [this.makeRunAgentSpec(run)]
+          : []),
       ];
       const sdkTools = Object.fromEntries(
         specs.map((spec) => [
@@ -332,7 +509,13 @@ export class AgentEngine {
       );
       const languageModel = await adapter.languageModel(run.model);
       // AI SDK v7: system mesajı messages içinde YASAK — instructions seçeneğiyle verilir.
-      const instructions = buildSystemPrompt(definition, jail, this.deps.loadMemoryProfile());
+      // Canlı bulgu (2026-07-10): "damitici" (M3, arşiv damıtma) profil enjeksiyonundan
+      // BİLİNÇLİ OLARAK MUAF — amacı arşivi TEMİZ okumaktır; mevcut profil enjekte edilirse
+      // taslak, arşivden gelen yeni bilgiyle ZATEN bilinen profili ayırt edilemez şekilde
+      // karıştırır (canlı testte gözlemlendi: taslakta arşivde hiç geçmeyen, yalnız mevcut
+      // profildeki ifadeler çıktı).
+      const memoryProfile = definition.id === "damitici" ? null : this.deps.loadMemoryProfile();
+      const instructions = buildSystemPrompt(definition, jail, memoryProfile);
       // Resume (2.3b): sessionId istekte verildiyse önceki user/assistant metinlerini bağlama
       // tohumla. Yalnız metin turları (system daemon'ın talimatıdır; araç mesajları geçmişte yok).
       const seeded: ChatMessage[] =
@@ -820,6 +1003,18 @@ export class AgentEngine {
         },
       });
     }
+    // Faz 5 (ADR-014): yalnız çocuk koşularda dolu — devreden `run_agent` çağrısını uyandırır.
+    // completed→sonuç metni; failed/cancelled→araç HATASI (şefin koşusu düşmez, SPEC §4).
+    if (run.onChildFinish !== null) {
+      if (state === "completed") {
+        run.onChildFinish({ ok: true, text: extra?.result ?? "" });
+      } else {
+        const code = extra?.code ?? (state === "cancelled" ? "AGENT_CANCELLED" : "INTERNAL_AGENT_ERROR");
+        const message =
+          extra?.message ?? (state === "cancelled" ? "Alt-agent koşusu iptal edildi" : "bilinmeyen hata");
+        run.onChildFinish({ ok: false, error: new AgentError(code, message) });
+      }
+    }
     if (run.usage.inputTokens + run.usage.outputTokens > 0) {
       this.deps.bus.broadcast("usage.updated", {
         provider: run.provider,
@@ -862,6 +1057,14 @@ export class AgentEngine {
   }
 }
 
+/** run_agent risk sınıfı için: hedefin araç seti TAMAMEN salt-okur mu (ADR-014 Karar 3). */
+function isReadOnlyAgent(definition: AgentDefinition): boolean {
+  return (
+    definition.mcpServers.length === 0 &&
+    definition.tools.every((name) => SAFE_RUN_AGENT_TOOLS.has(name))
+  );
+}
+
 function buildSystemPrompt(
   definition: AgentDefinition,
   jail: WorkspaceJail,
@@ -873,7 +1076,7 @@ function buildSystemPrompt(
     "Yalnız bu dizin ağacında çalışabilirsin; dışına çıkma girişimleri reddedilir.\n" +
     "Görev bittiğinde son cevabını araç çağrısı OLMADAN, kısa bir özet olarak yaz." +
     // ADR-013: kullanıcı profili yalnız bağlam — agent'lar bu dosyayı asla yazamaz.
-    (profile !== null ? `\n\n## Kullanıcı profili (salt-okunur bağlam)\n${profile}` : "")
+    (profile !== null ? `\n\n${formatProfileContext(profile)}` : "")
   );
 }
 

@@ -70,46 +70,99 @@ export function AgentRun(props: {
   // eski oturuma sessizce devam ETMEMELİ — bu yüzden state'e alınıp reset'te undefined'a düşürülür.
   const [sessionId, setSessionId] = useState<string | undefined>(props.initialSessionId);
   const runIdRef = useRef<string | null>(null);
+  // Faz 5 (ADR-014): şef `run_agent` ile çocuk koşular başlatabilir — runId → agentId izlenir
+  // ki çocuğun araç aktivitesi/izin isteği de bu ekranda görünsün ve cevaplanabilsin.
+  const childAgentIdsRef = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     if (task === null || cwd === null) return;
+    childAgentIdsRef.current = new Map();
     const mine = (id: string): boolean => runIdRef.current !== null && id === runIdRef.current;
+    const mineOrChild = (id: string): boolean => mine(id) || childAgentIdsRef.current.has(id);
 
     const offs = [
+      props.client.on("agent.run.started", (payload) => {
+        if (payload.parentRunId === undefined || !mineOrChild(payload.parentRunId)) return;
+        childAgentIdsRef.current.set(payload.runId, payload.agentId);
+        setLog((l) => [
+          ...l,
+          { kind: "started", tool: "run_agent", summary: `↳ [${payload.agentId}] başladı` },
+        ]);
+      }),
       props.client.on("agent.run.state", (payload) => {
+        // Yalnız KENDİ koşumuzun durumu ekranın thinking/awaiting/outcome'unu sürer —
+        // çocuğun kendi durum geçişleri ayrı bir akış (v1 kapsamı, log'daki tool olayları yeter).
         if (!mine(payload.runId)) return;
         setThinking(payload.state === "thinking");
         setAwaiting(payload.state === "awaiting_user");
         if (payload.state === "cancelled") setOutcome({ kind: "cancelled" });
       }),
       // Akışlı asistan metni (ADR-012): tur boyunca birikir, araç başlayınca sıfırlanır.
+      // Yalnız KENDİ koşumuz — çocuğun metni karışırsa ekran anlaşılmaz olur.
       props.client.on("agent.delta", (payload) => {
         if (!mine(payload.runId)) return;
         setStreaming((s) => s + payload.text);
       }),
       props.client.on("agent.tool.started", (payload) => {
-        if (!mine(payload.runId)) return;
-        setStreaming("");
-        setLog((l) => [...l, { kind: "started", tool: payload.tool, summary: payload.argsSummary }]);
-      }),
-      props.client.on("agent.tool.completed", (payload) => {
-        if (!mine(payload.runId)) return;
+        if (!mineOrChild(payload.runId)) return;
+        const childId = childAgentIdsRef.current.get(payload.runId);
+        if (childId === undefined) setStreaming(""); // yalnız KENDİ aracımız streaming'i keser
         setLog((l) => [
           ...l,
-          { kind: "completed", tool: payload.tool, summary: payload.resultSummary, ok: payload.ok },
+          {
+            kind: "started",
+            tool: payload.tool,
+            summary: childId !== undefined ? `↳ [${childId}] ${payload.argsSummary}` : payload.argsSummary,
+          },
+        ]);
+      }),
+      props.client.on("agent.tool.completed", (payload) => {
+        if (!mineOrChild(payload.runId)) return;
+        const childId = childAgentIdsRef.current.get(payload.runId);
+        setLog((l) => [
+          ...l,
+          {
+            kind: "completed",
+            tool: payload.tool,
+            summary: childId !== undefined ? `↳ [${childId}] ${payload.resultSummary}` : payload.resultSummary,
+            ok: payload.ok,
+          },
         ]);
       }),
       props.client.on("agent.tool.requested", (payload) => {
-        if (!mine(payload.runId)) return;
+        // Çocuğun İZİN İSTEĞİ de burada gösterilir/cevaplanabilir (requestId global — SPEC §5).
+        if (!mineOrChild(payload.runId)) return;
         setPending(payload);
       }),
       props.client.on("agent.run.completed", (payload) => {
-        if (!mine(payload.runId)) return;
+        if (!mineOrChild(payload.runId)) return;
+        if (payload.runId !== runIdRef.current) {
+          // Çocuk koşusu bitti — şef devam ediyor, TÜM koşuyu bitirme.
+          const childId = childAgentIdsRef.current.get(payload.runId);
+          setLog((l) => [
+            ...l,
+            { kind: "completed", tool: "run_agent", summary: `↳ [${childId ?? "?"}] tamamlandı`, ok: true },
+          ]);
+          return;
+        }
         setPending(null);
         setOutcome({ kind: "completed", result: payload.result, usage: payload.usage });
       }),
       props.client.on("agent.run.failed", (payload) => {
-        if (!mine(payload.runId)) return;
+        if (!mineOrChild(payload.runId)) return;
+        if (payload.runId !== runIdRef.current) {
+          const childId = childAgentIdsRef.current.get(payload.runId);
+          setLog((l) => [
+            ...l,
+            {
+              kind: "completed",
+              tool: "run_agent",
+              summary: `↳ [${childId ?? "?"}] başarısız: ${payload.error.code}`,
+              ok: false,
+            },
+          ]);
+          return;
+        }
         setPending(null);
         setOutcome({ kind: "failed", errorCode: payload.error.code, errorMessage: payload.error.message });
       }),
@@ -283,7 +336,9 @@ export function AgentRun(props: {
       {thinking && streaming.length === 0 && pending === null && outcome === null && (
         <Text dimColor>· düşünüyor…</Text>
       )}
-      {pending !== null && <PermissionBox permission={pending} />}
+      {pending !== null && (
+        <PermissionBox permission={pending} agentLabel={childAgentIdsRef.current.get(pending.runId)} />
+      )}
       {awaiting && pending === null && outcome === null && (
         <Box flexDirection="column" marginTop={1}>
           <Text dimColor>↵ devam yaz (aynı koşu sürer) · Esc: koşuyu bitir</Text>
@@ -346,12 +401,12 @@ function AgentModelPicker(props: {
   );
 }
 
-function PermissionBox(props: { permission: PendingPermission }): JSX.Element {
+function PermissionBox(props: { permission: PendingPermission; agentLabel?: string }): JSX.Element {
   const canAlways = props.permission.riskClass !== "destructive";
   return (
     <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} marginY={1}>
       <Text color="yellow" bold>
-        🔐 izin isteği: {props.permission.tool}{" "}
+        🔐 izin isteği{props.agentLabel !== undefined ? ` [${props.agentLabel}]` : ""}: {props.permission.tool}{" "}
         <Text dimColor>[risk: {props.permission.riskClass}]</Text>
       </Text>
       <Text dimColor>{JSON.stringify(props.permission.args)}</Text>

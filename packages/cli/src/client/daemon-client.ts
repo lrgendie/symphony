@@ -9,12 +9,14 @@ import {
   createMessage,
   HistorySessionDetailResponseSchema,
   HistorySessionsResponseSchema,
+  MemoryGetResponseSchema,
   parseMessage,
   PROTOCOL_VERSION,
   type EventPayload,
   type EventType,
   type HistorySessionDetailResponse,
   type HistorySessionSummary,
+  type MemoryGetResponse,
   type REQUEST_PAYLOAD_SCHEMAS,
   type RequestType,
   type Snapshot,
@@ -337,6 +339,35 @@ export class DaemonClient {
   async sessionDetail(sessionId: string): Promise<HistorySessionDetailResponse | null> {
     const raw = await this.getHistory(`/api/history/sessions/${encodeURIComponent(sessionId)}`);
     return raw === null ? null : HistorySessionDetailResponseSchema.parse(raw);
+  }
+
+  // ---- REST kullanıcı profili (PROTOKOL §1.1, ADR-013 — Dilim M2) ----
+
+  /** Kullanıcı profilinin TAM içeriği + karakter/kesim durumu. */
+  async getMemory(): Promise<MemoryGetResponse> {
+    const raw = await this.getHistory("/api/memory");
+    return MemoryGetResponseSchema.parse(raw);
+  }
+
+  /** Profilin TAM içeriğini değiştirir — yalnız insan arayüzünden çağrılır. */
+  async putMemory(content: string): Promise<MemoryGetResponse> {
+    const response = await fetch(`http://127.0.0.1:${this.options.port}/api/memory`, {
+      method: "PUT",
+      headers: {
+        authorization: `Bearer ${this.options.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ content }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => null)) as { message?: string } | null;
+      throw new DaemonError(
+        "INTERNAL_MEMORY_PUT_FAILED",
+        body?.message ?? `Profil yazma başarısız (HTTP ${response.status})`,
+      );
+    }
+    return MemoryGetResponseSchema.parse(await response.json());
   }
 
   close(): void {

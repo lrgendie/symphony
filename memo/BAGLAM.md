@@ -65,6 +65,9 @@ protokol WS/REST üzerinden konuşulur.
   CHECK'ine awaiting_user — tablo yeniden kurma; migrate() göç sırasında FK'yı kapatır).
   `saveConversation` (2.3b): tam mesaj listesini sessions/messages'a REPLACE eder — chat.start
   (`saveChatTurn` buna delege) VE konuşmalı-agent (engine) aynı kalıcılık modelini paylaşır
+- `memory/profile.ts` — SAF, testli, `core/index.ts`'ten dışa açık (ADR-013): `loadProfile`/
+  `ensureProfileScaffold` (M1, enjeksiyon — kesiyor/scaffold'u null sayıyor) AYRI amaçlı
+  `readProfileSnapshot`/`writeProfile` (M2, REST GET/PUT — TAM içerik, `truncated` yalnız uyarı)
 - `secrets/secret-store.ts` — OS keychain + env yedek; anahtar DİSKE YAZILMAZ
 - `config/paths.ts` — `~/.symphony` yol haritası (SYMPHONY_HOME ile taşınır)
 - `config/config.ts` — config.json yükleme
@@ -73,7 +76,8 @@ protokol WS/REST üzerinden konuşulur.
   - `jail.ts` — `WorkspaceJail`: path.resolve+realpath+kök kapsama; kaçış = PERMISSION_JAIL
   - `permissions.ts` — `PermissionEngine`: deny > allow > risk varsayılanı; always_allow kalıcılaştırma
   - `definition.ts` — `~/.symphony/agents/*.md` frontmatter ayrıştırma + varsayılan agent'lar
-    (`ensureDefaultAgent` → coder [tam araç] + asistan [salt-okur: read_file/glob/grep]; her biri bağımsız)
+    (`ensureDefaultAgent` → coder [tam araç] + asistan [salt-okur] + damitici [salt-okur, M3
+    arşiv damıtma — asistan ile AYNI araç seti, `symphony memory distill` çalıştırır]; her biri bağımsız)
   - `tools.ts` — 6 araç (read_file/write_file/edit/glob/grep/run_command) + diff/hash + maskeleme
   - `mcp.ts` — MCP istemcisi (ADR-007): `~/.symphony/mcp-servers.json` kayıt defteri
     (stdio), sunucu araçlarını `AgentToolSpec`'e sarar (`mcp__<sunucu>__<araç>`, hep `mutating`)
@@ -86,14 +90,24 @@ protokol WS/REST üzerinden konuşulur.
     tohumlar; `start()` `{runId, sessionId}` döner. **Akışlı** (`streamText`, ADR-012): asistan metni
     `agent.delta {runId,text}` ile token-token yayılır. Test mock'ları `doStream` kullanır
     (`scriptToStream`; AI SDK v3 stream part'ları). Birleşik sohbet-agent modu buradan büyüyecek
-    (2.2 awaiting_user+agent.say çok-tur, 2.3 birleşik TUI — bkz. ADR-012 + DURUM Dilim 2)
+    (2.2 awaiting_user+agent.say çok-tur, 2.3 birleşik TUI — bkz. ADR-012 + DURUM Dilim 2).
+    M1 profil enjeksiyonu (`loadMemoryProfile`) TÜM agent'lara uygulanır — TEK istisna:
+    `definition.id === "damitici"` (M3) hiç almaz (canlı bulgu: aksi hâlde arşiv damıtması
+    zaten bilinen profille kirlenir, "arşivden yeni ne çıktı" ayrımı kaybolur)
 
 ### packages/cli/src — symphony komutu
 - `index.ts` — commander kayıtları; argümansız → TUI
 - `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`) +
   REST geçmiş sorguları (`listSessions`/`sessionDetail` — Bearer token, shared şema, 404→null)
-- `commands/` — status/models/watch/history/agents/agent/add (her komut tek dosya)
+- `commands/` — status/models/watch/history/memory/agents/agent/add (her komut tek dosya)
   - `add.ts` — `symphony add <npm-paketi>`: eklenti sistemi, `mcp.addServer` isteği atar
+  - `memory.ts` — commander alt-komut grubu (`index.ts`'te `memory show|path|distill`, show
+    varsayılan): `memoryShowCommand` (REST `getMemory`) · `memoryPathCommand` (dosya yolu YAZAR,
+    daemon'a bağlanmaz) · `memoryDistillCommand` (M3, ADR-013 Karar 5) — arşiv dizinini
+    `listArchiveFilesByRecency`ile (SAF, mtime sıralı) tarar, `resolveDistillModel`ile yerel
+    modeli PİNLER (--bulut yoksa), `agentId:"damitici"` ile tek-seferlik agent koşusu başlatır,
+    sonucu `writeDistillDraft`ile `profil.taslak.md`ye yazar — **`profil.md`ye YAZMA yolu HİÇ
+    YOK** (kasıtlı, ADR-013): canlı profil yalnız insan eliyle (editör ya da REST PUT) değişir.
 - `tui/` — Ink: app.tsx (akış: karşılama→PERSONA seçici→konuşma), welcome.tsx, logo.ts
   - `persona-picker.tsx` — **birleşik giriş (Dilim 2.3a)**: "kiminle konuşmak istersin?" — Sohbet
     (chat.start, resume) + kayıtlı agent'lar TEK listede. `Persona = {kind:"chat"} | {kind:"agent",agent}`.

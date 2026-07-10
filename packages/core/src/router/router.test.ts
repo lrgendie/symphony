@@ -16,6 +16,7 @@ const haiku: ModelInfo = {
 };
 const qwen: ModelInfo = { provider: "ollama", id: "qwen3:8b", local: true, contextWindow: 40_960 };
 const qwenCoder: ModelInfo = { provider: "ollama", id: "qwen2.5-coder:7b", local: true };
+const qwenVl: ModelInfo = { provider: "ollama", id: "qwen2.5vl:7b", local: true };
 
 const fullContext: RouterContext = { models: [opus, haiku, qwen], vramGb: 8 };
 
@@ -76,5 +77,23 @@ describe("suggestModels", () => {
 
   it("hiç model yoksa boş liste döner (daemon hataya çevirir)", () => {
     expect(suggestModels("herhangi bir iş", undefined, { models: [], vramGb: null })).toEqual([]);
+  });
+
+  it("canlı bulgu (2026-07-10): vision modeli (qwen2.5vl) metin/agent görevlerinde ATLANIR — listede olsa bile önerilmez", () => {
+    // qwenVl DİZİDE ÖNCE geliyor (Ollama'nın gerçek dünyada döndürebileceği sıra) — router
+    // yine de onu değil, metin-uyumlu qwen'i önermeli (aksi hâlde AGENT_... "No output
+    // generated" ile başarısız oluyordu, canlı test edildi).
+    const context: RouterContext = { models: [qwenVl, qwen], vramGb: 8 };
+    const result = suggestModels("yeni bir klasör oluştur", undefined, context);
+    const local = result.find((s) => s.local);
+    expect(local?.model).toBe("qwen3:8b");
+    expect(result.some((s) => s.model === "qwen2.5vl:7b")).toBe(false);
+  });
+
+  it("yalnız vision modeli kuruluysa (metin-uyumlu yerel YOK) yine de o kullanılır — hiç öneri yoktan iyidir", () => {
+    const context: RouterContext = { models: [qwenVl], vramGb: 8 };
+    const result = suggestModels("bir özet yaz", undefined, context);
+    const local = result.find((s) => s.local);
+    expect(local?.model).toBe("qwen2.5vl:7b");
   });
 });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { Snapshot } from "@symphony/shared";
-import { useStore } from "./store.js";
+import type { ActiveRun, Snapshot } from "@symphony/shared";
+import { orderRunsForDisplay, useStore } from "./store.js";
 
 /**
  * Store, WS olaylarını UI durumuna çeviren tek mantık noktası; burada saf olarak
@@ -62,6 +62,22 @@ describe("ui store", () => {
     store.handleEvent("agent.run.completed", { runId: RUN, result: "ok", usage: { inputTokens: 1, outputTokens: 1, costUsd: 0.001 } });
     expect(useStore.getState().runs).toHaveLength(0);
     expect(useStore.getState().log[0]?.tone).toBe("good");
+  });
+
+  it("Faz 5 (ADR-014): agent.run.started parentRunId'yi runs'a taşır (çocuk koşu)", () => {
+    const CHILD = "55555555-5555-4555-8555-555555555555";
+    const store = useStore.getState();
+    store.handleEvent("agent.run.started", { runId: RUN, agentId: "sef", task: "büyük iş", model: "m" });
+    store.handleEvent("agent.run.started", {
+      runId: CHILD,
+      agentId: "coder",
+      task: "alt iş",
+      model: "m",
+      parentRunId: RUN,
+    });
+    const runs = useStore.getState().runs;
+    expect(runs.find((r) => r.runId === RUN)?.parentRunId).toBeUndefined();
+    expect(runs.find((r) => r.runId === CHILD)?.parentRunId).toBe(RUN);
   });
 
   it("görev sonuçlanması converge sinyalini (lastCompletedAt) günceller — agent VE sohbet", () => {
@@ -292,5 +308,36 @@ describe("ui store", () => {
     store.handleEvent("agent.run.state", { runId: RUN, state: "cancelled" });
     expect(useStore.getState().runs).toHaveLength(0); // ZOMBİ satır yok
     expect(useStore.getState().runStreams[RUN]).toBeUndefined();
+  });
+});
+
+describe("orderRunsForDisplay (Faz 5, ADR-014)", () => {
+  const CHILD = "66666666-6666-4666-8666-666666666666";
+  const OTHER_TOP = "77777777-7777-4777-8777-777777777777";
+
+  function run(runId: string, overrides: Partial<ActiveRun> = {}): ActiveRun {
+    return { runId, agentId: "a", task: "t", state: "thinking", ...overrides };
+  }
+
+  it("çocuk, ekleniş sırası ne olursa olsun ebeveyninin HEMEN ALTINA taşınır", () => {
+    // upsertRun başa ekler — çocuk pratikte ebeveyninden ÖNCE gelebilir (gerçek senaryo).
+    const ordered = orderRunsForDisplay([run(CHILD, { parentRunId: RUN }), run(RUN)]);
+    expect(ordered.map((r) => r.runId)).toEqual([RUN, CHILD]);
+  });
+
+  it("birden çok üst-düzey koşu + çocuklar doğru gruplanır (üst-düzeylerin KENDİ ARALARINDAKİ sırası korunur)", () => {
+    const ordered = orderRunsForDisplay([
+      run(CHILD, { parentRunId: RUN }),
+      run(OTHER_TOP),
+      run(RUN),
+    ]);
+    // Üst-düzeyler dizideki göreli sırayla (OTHER_TOP önce, RUN sonra) kalır; RUN'ın hemen
+    // ardından KENDİ çocuğu (CHILD) gelir.
+    expect(ordered.map((r) => r.runId)).toEqual([OTHER_TOP, RUN, CHILD]);
+  });
+
+  it("sahipsiz çocuk (ebeveyni listede yok) kaybolmaz, sona düşer", () => {
+    const ordered = orderRunsForDisplay([run(CHILD, { parentRunId: "yok-boyle-runid" })]);
+    expect(ordered.map((r) => r.runId)).toEqual([CHILD]);
   });
 });

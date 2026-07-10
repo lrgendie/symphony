@@ -12,6 +12,15 @@ import { TOOL_NAMES } from "./tools.js";
  * düz dizi `[a, b]` — şartnamedeki alanlara yetiyor, bağımlılık eklemiyor.
  */
 
+/**
+ * Frontmatter `tools:` listesi statik araçların (TOOL_NAMES) ÜSTÜNE `run_agent`'ı da kabul eder
+ * (Faz 5, ADR-014). `run_agent` DİNAMİK bir motor aracıdır — `AGENT_TOOLS`'ta YOK, `engine.ts`
+ * koşu başına üretir; yalnız bunu listeleyen agent devredebilir, TEK katman derinliğinde (çocuk
+ * koşuya asla verilmez — bu kontrol engine.ts'te, tanım seviyesinde değil).
+ */
+export const AGENT_FRONTMATTER_TOOL_NAMES = [...TOOL_NAMES, "run_agent"] as const;
+export type AgentFrontmatterToolName = (typeof AGENT_FRONTMATTER_TOOL_NAMES)[number];
+
 export const AgentFrontmatterSchema = z
   .object({
     name: z.string().min(1),
@@ -20,7 +29,8 @@ export const AgentFrontmatterSchema = z
     model: z.string().min(1).optional(),
     // ADR-008: varsayılan 0; yükseltmek agent tanımında bilinçli istisnadır.
     temperature: z.number().min(0).max(2).default(0),
-    tools: z.array(z.enum(TOOL_NAMES)).min(1).default([...TOOL_NAMES]),
+    // Varsayılan run_agent İÇERMEZ (default: [...TOOL_NAMES]) — devretme bilinçli opt-in'dir.
+    tools: z.array(z.enum(AGENT_FRONTMATTER_TOOL_NAMES)).min(1).default([...TOOL_NAMES]),
     // MCP istemcisi (ADR-007, SPEC §2): ~/.symphony/mcp-servers.json'daki hangi
     // sunucuların araçları bu agent'a bağlanacak; boşsa hiçbiri.
     mcpServers: z.array(z.string().min(1)).default([]),
@@ -168,9 +178,75 @@ Kurallar:
 - Bilmediğini uydurma; emin değilsen açıkça söyle.
 `;
 
+// Arşiv damıtma (ADR-013 Karar 5, Dilim M3): `symphony memory distill` bu agent'ı çalıştırır.
+// Salt-okur (asistan ile AYNI araç seti) — profil dosyasına YAZAMAZ, yalnız TASLAK üretir;
+// canlı profile alma kararı her zaman kullanıcının (CLI, agent.run.completed.result'ı
+// profil.taslak.md'ye yazar, profil.md'ye hiç dokunmaz).
+const DEFAULT_DAMITICI_DEFINITION = `---
+name: damıtıcı
+description: Arşiv dizinini okuyup kullanıcı profili TASLAĞI üretir (salt-okur, canlı profile yazamaz)
+# model/provider boş → symphony memory distill yerel model şartını KENDİSİ pinler
+temperature: 0
+tools: [read_file, glob, grep]
+maxSteps: 50
+---
+Sen Symphony'nin arşiv damıtma agent'ısın. Görevin, sana verilen bir arşiv dizinindeki
+konuşma dökümlerini okuyup KALICI bir kullanıcı profili TASLAĞI üretmektir.
+
+Kurallar:
+- Yalnız OKU (read_file/glob/grep) — hiçbir dosyayı değiştiremezsin, ihtiyacın da yok.
+- Görev metninde sana dosyaların okuma SIRASI verilecek (en yeniden en eskiye); bu sırayı
+  izle. Görevde verilen karakter bütçesi dolunca durabilirsin — dizindeki HER dosyayı
+  okumak ZORUNDA değilsin.
+- Yalnız TEKRAR EDEN, KALICI gerçekleri damıt: kullanıcının kimliği, üslup/dil tercihleri,
+  teknik tercihleri, projeleri, kalıcı düzeltme/öğrenimleri. Tek seferlik/geçici detayları
+  (o günkü hata mesajı, o anki görev vb.) YAZMA. Dökümdeki her ifadeye güvenme — yalnız
+  KULLANICIYA ait, tutarlı şekilde tekrar eden bilgileri damıt (asistan/agent cevapları
+  kullanıcının gerçeği DEĞİLDİR).
+- Çıktını TAM olarak şu başlıklarla, bu sırayla yaz:
+  ## Kimlik
+  ## Üslup ve dil tercihleri
+  ## Teknik tercihler
+  ## Projeler
+  ## Düzeltmeler ve öğrenimler
+- Görev metninde verilen karakter bütçesini AŞMA.
+- Son cevabını araç çağrısı OLMADAN, doğrudan damıtılmış profil metni olarak yaz — başka
+  açıklama/giriş cümlesi ekleme.
+`;
+
+// Çoklu agent orkestrasyonu (Faz 5, ADR-014 Karar 6): "sef" görevi alt görevlere bölüp
+// `run_agent` ile uygun agent'lara dağıtır. Yazma/komut araçları BİLİNÇLİ OLARAK yok —
+// orkestra şefi enstrüman çalmaz, yazma gerektiren her şeyi coder'a devretmek ZORUNDADIR.
+const DEFAULT_SEF_DEFINITION = `---
+name: sef
+description: Görevi alt görevlere bölüp uygun agent'lara ve modellere dağıtan orkestra şefi
+# model/provider boş → istekte verilmezse router seçer
+temperature: 0
+tools: [read_file, glob, grep, run_agent]
+maxSteps: 50
+---
+Sen Symphony'nin orkestra şefisin. Görevin, sana verilen görevi anlamlı alt görevlere bölüp
+her birini \`run_agent\` aracıyla uygun bir agent'a devretmektir — dosya YAZMA/komut ÇALIŞTIRMA
+araçların YOK (bilinçli olarak); yazma/komut gerektiren her alt görevi "coder"a, salt-okuma/
+analiz gerektiren alt görevleri "asistan"a devret.
+
+Kurallar:
+- Göreve gerçekten BÖLÜNMESİ gerekiyorsa böl (en az 2 anlamlı alt görev); basit/tek adımlık
+  bir görevi yapay yere parçalama — doğrudan tek bir agent'a devret.
+- Her run_agent çağrısında görevi NET ve KENDİ BAŞINA anlaşılır yaz (alt-agent senin
+  bağlamını görmez, yalnız verdiğin task metnini görür).
+- Model seçimi: basit/mekanik alt görevler için model/provider verme (varsayılan yerel/ucuz
+  modele düşer) ya da bilinçli olarak yerel bir model pinle; derin muhakeme/kalite gerektiren
+  alt görevlerde bilinçli olarak bulut model (provider/model) pinle.
+- Alt görevlerin sonuçlarını SENTEZLE — parça parça yapıştırma, tutarlı tek bir cevap üret.
+- Son cevabını araç çağrısı OLMADAN, sentezlenmiş nihai sonuç olarak yaz.
+`;
+
 const DEFAULT_AGENT_DEFINITIONS: ReadonlyArray<{ id: string; body: string }> = [
   { id: "coder", body: DEFAULT_CODER_DEFINITION },
   { id: "asistan", body: DEFAULT_ASISTAN_DEFINITION },
+  { id: "damitici", body: DEFAULT_DAMITICI_DEFINITION },
+  { id: "sef", body: DEFAULT_SEF_DEFINITION },
 ];
 
 /**

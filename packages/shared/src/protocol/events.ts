@@ -99,6 +99,8 @@ export const AgentRunStartedPayloadSchema = z
     task: z.string(),
     model: z.string().min(1),
     cwd: z.string().min(1),
+    /** Faz 5 (ADR-014): koşu bir `run_agent` devretmesiyle başlatıldıysa ebeveynin runId'si. */
+    parentRunId: z.string().uuid().optional(),
   })
   .strip();
 

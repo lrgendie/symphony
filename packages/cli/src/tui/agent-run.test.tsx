@@ -476,3 +476,68 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
     expect(exited).toBe(true);
   });
 });
+
+describe("AgentRun — Faz 5 (ADR-014): run_agent çocuk koşu görünürlüğü", () => {
+  const CHILD_RUN_ID = "44444444-4444-4444-8444-444444444444";
+
+  it("çocuğun aktivitesi + izin isteği ekranda görünür ve cevaplanabilir; çocuğun completed'ı TÜM koşuyu bitirmez", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="sef" cwd="/ws" models={models} onExit={() => {}} />,
+    );
+    await skipCwdAndModel(stdin);
+    stdin.write("büyük görev");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    // Şef, "coder" agent'ına devretti (run_agent → engine.ts agent.run.started parentRunId).
+    fake.emit("agent.run.started", {
+      runId: CHILD_RUN_ID,
+      agentId: "coder",
+      task: "alt görev",
+      model: "fake-1",
+      cwd: "/ws",
+      parentRunId: RUN_ID,
+    });
+    await tick();
+    expect(lastFrame()).toContain("[coder]"); // çocuk aktivitesi ekranda
+
+    // Çocuğun KENDİ izin isteği (write_file, mutating) — KENDİ runId'siyle gelir.
+    fake.emit("agent.tool.requested", {
+      runId: CHILD_RUN_ID,
+      requestId: "child-req-1",
+      tool: "write_file",
+      args: { path: "a.txt" },
+      riskClass: "mutating",
+    });
+    await tick();
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("izin isteği");
+    expect(frame).toContain("[coder]"); // hangi agent'ın isteği olduğu görünür
+
+    stdin.write("e"); // onayla — requestId GLOBAL, mevcut permission.respond akışı yeter
+    await tick();
+    const respond = fake.requests.find((r) => r.type === "permission.respond");
+    expect(respond?.payload).toEqual({ requestId: "child-req-1", decision: "allow" });
+
+    // Çocuk tamamlandı — şef DEVAM ediyor, TÜM koşu bitmez.
+    fake.emit("agent.run.completed", {
+      runId: CHILD_RUN_ID,
+      result: "çocuk sonucu",
+      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+    });
+    await tick();
+    expect(lastFrame()).not.toContain("koşu tamamlandı");
+
+    // Şefin KENDİ koşusu bitince gerçek sonuç ekranı görünür.
+    fake.emit("agent.run.completed", {
+      runId: RUN_ID,
+      result: "şefin nihai sentezi",
+      usage: { inputTokens: 5, outputTokens: 5, costUsd: 0.001 },
+    });
+    await tick();
+    expect(lastFrame()).toContain("koşu tamamlandı");
+    expect(lastFrame()).toContain("şefin nihai sentezi");
+  });
+});

@@ -320,6 +320,19 @@ Test agent'ısın.`,
     "utf8",
   );
   writeFileSync(
+    join(home, "agents", "damitici.md"),
+    `---
+name: damıtıcı
+description: test damıtıcı agent
+provider: fake
+model: fake-1
+tools: [read_file]
+maxSteps: 3
+---
+Damıtıcı test agent'ısın.`,
+    "utf8",
+  );
+  writeFileSync(
     join(home, "agents", "mcpli.md"),
     `---
 name: mcpli
@@ -331,6 +344,73 @@ tools: [read_file]
 mcpServers: [tanimsiz-sunucu]
 ---
 Test agent'ısın.`,
+    "utf8",
+  );
+  // Faz 5 (ADR-014) test fixture'ları: şef + iki devretme hedefi (biri tamamen salt-okur →
+  // run_agent risk sınıfı "safe", diğeri write_file taşır → "mutating").
+  writeFileSync(
+    join(home, "agents", "orkestra.md"),
+    `---
+name: orkestra
+description: test şef agent
+provider: fake
+model: fake-1
+tools: [read_file, glob, grep, run_agent]
+maxSteps: 5
+---
+Test şef agent'ısın.`,
+    "utf8",
+  );
+  writeFileSync(
+    join(home, "agents", "okur.md"),
+    `---
+name: okur
+description: test salt-okur devretme hedefi
+provider: fake
+model: fake-1
+tools: [read_file, glob, grep]
+maxSteps: 3
+---
+Test salt-okur agent'ısın.`,
+    "utf8",
+  );
+  writeFileSync(
+    join(home, "agents", "yazar.md"),
+    `---
+name: yazar
+description: test yazma-yetkili devretme hedefi
+provider: fake
+model: fake-1
+tools: [read_file, write_file]
+maxSteps: 3
+---
+Test yazma-yetkili agent'ısın.`,
+    "utf8",
+  );
+  writeFileSync(
+    join(home, "agents", "kirilgan.md"),
+    `---
+name: kirilgan
+description: test - kolayca AGENT_MAX_STEPS ile başarısız olan devretme hedefi
+provider: fake
+model: fake-1
+tools: [read_file]
+maxSteps: 1
+---
+Test agent'ısın.`,
+    "utf8",
+  );
+  writeFileSync(
+    join(home, "agents", "orkestra-genis.md"),
+    `---
+name: orkestra-genis
+description: test - MAX_CHILD_RUNS testi için yüksek maxSteps'li şef
+provider: fake
+model: fake-1
+tools: [read_file, glob, grep, run_agent]
+maxSteps: 20
+---
+Test şef agent'ısın.`,
     "utf8",
   );
   START.cwd = workspace;
@@ -529,6 +609,18 @@ describe("AgentEngine (SPEC-AGENT §4-§6)", () => {
     await engine.start(START);
     await bus.waitFor("agent.run.completed");
     expect(JSON.stringify(adapter.prompts[0])).toContain("Kullanıcının adı Deniz");
+  });
+
+  it("canlı bulgu (2026-07-10): damitici agent'ı profil enjeksiyonundan MUAFTIR", async () => {
+    const { engine, bus, adapter } = makeEngine(
+      [turn([text("cevap")])],
+      "Kullanıcının adı Deniz, TypeScript tercih eder.",
+    );
+    await engine.start({ ...START, agentId: "damitici" });
+    await bus.waitFor("agent.run.completed");
+    // Damıtıcı arşivi TEMİZ okumalı — mevcut profil onun kendi context'ine sızmamalı
+    // (aksi hâlde taslak, arşivden gelen bilgiyle zaten bilineni ayırt edilemez karıştırır).
+    expect(JSON.stringify(adapter.prompts[0])).not.toContain("Kullanıcının adı Deniz");
   });
 
   it("ADR-013: loadMemoryProfile() null dönerse prompt'ta profil bölümü YOKTUR", async () => {
@@ -820,5 +912,206 @@ describe("AgentEngine — konuşma kalıcılığı (Dilim 2.3b)", () => {
 
     engine.cancel(runId);
     await waitState(bus, "cancelled", 1);
+  });
+});
+
+describe("AgentEngine — Faz 5 (ADR-014): run_agent çoklu agent devretme", () => {
+  it("şef çocuğu çalıştırır, sonucu kendi cevabında kullanır; parentRunId + iki ayrı completed; salt-okur hedefe izin İSTENMEZ", async () => {
+    const { engine, bus, adapter } = makeEngine([
+      turn([toolCall("run_agent", { agent: "okur", task: "bana bir bilgi ver" })]),
+      turn([text("çocuktan gelen bilgi")]),
+      turn([text("Nihai cevap: çocuktan gelen bilgi")]),
+    ]);
+    const { runId: parentRunId } = await engine.start({
+      agentId: "orkestra",
+      cwd: workspace,
+      task: "devret",
+    });
+
+    await waitUntil(() =>
+      bus.emitted.some(
+        (e) => e.type === "agent.run.started" && (e.payload as { agentId: string }).agentId === "okur",
+      ),
+    );
+    const childStarted = bus.emitted.find(
+      (e) => e.type === "agent.run.started" && (e.payload as { agentId: string }).agentId === "okur",
+    )?.payload as { runId: string; parentRunId?: string };
+    expect(childStarted.parentRunId).toBe(parentRunId);
+
+    await waitState(bus, "completed", 2); // şef + çocuk
+    const completedEvents = bus.emitted.filter((e) => e.type === "agent.run.completed");
+    expect(completedEvents).toHaveLength(2);
+    const parentCompleted = completedEvents.find(
+      (e) => (e.payload as { runId: string }).runId === parentRunId,
+    )?.payload as { result: string };
+    expect(parentCompleted.result).toContain("çocuktan gelen bilgi");
+    expect(JSON.stringify(adapter.prompts)).toContain("çocuktan gelen bilgi");
+
+    // Hedef (okur) tamamen salt-okur → run_agent riski "safe", izin İSTENMEDİ.
+    expect(bus.emitted.some((e) => e.type === "agent.tool.requested")).toBe(false);
+  });
+
+  it("yazma-yetkili hedefe devrederken izin ister — ŞEFİN runId'siyle, çocuk izin öncesi DOĞMAZ", async () => {
+    const { engine, bus } = makeEngine([
+      turn([toolCall("run_agent", { agent: "yazar", task: "bir şey yaz" })]),
+      turn([text("çocuk cevabı")]),
+      turn([text("Nihai cevap")]),
+    ]);
+    const { runId: parentRunId } = await engine.start({
+      agentId: "orkestra",
+      cwd: workspace,
+      task: "devret",
+    });
+
+    const requested = await bus.waitFor("agent.tool.requested");
+    expect(requested.tool).toBe("run_agent");
+    expect(requested.riskClass).toBe("mutating");
+    expect(requested.runId).toBe(parentRunId); // izin isteği ŞEFİN runId'siyle
+    expect((requested.args as { agent: string }).agent).toBe("yazar");
+    expect(engine.activeRuns().some((r) => r.agentId === "yazar")).toBe(false); // çocuk henüz YOK
+
+    engine.respond({ requestId: requested.requestId, decision: "allow" }, "cli");
+    await waitState(bus, "completed", 2);
+
+    const parentCompleted = bus.emitted.find(
+      (e) => e.type === "agent.run.completed" && (e.payload as { runId: string }).runId === parentRunId,
+    )?.payload as { result: string };
+    expect(parentCompleted.result).toContain("Nihai cevap");
+  });
+
+  it("çocuk koşusu failed olursa şefin koşusu DEVAM eder (araç HATASI, koşu hatası DEĞİL)", async () => {
+    const { engine, bus } = makeEngine([
+      turn([toolCall("run_agent", { agent: "kirilgan", task: "adım aş" })]),
+      turn([toolCall("read_file", { path: "mevcut.txt" })]), // çocuk adım 1 (maxSteps=1, henüz sınırda değil)
+      turn([toolCall("read_file", { path: "mevcut.txt" })]), // çocuk adım 2 → AGENT_MAX_STEPS
+      turn([text("çocuk başarısız oldu ama ben tamamlandım")]),
+    ]);
+    const { runId: parentRunId } = await engine.start({
+      agentId: "orkestra",
+      cwd: workspace,
+      task: "devret",
+    });
+
+    await waitState(bus, "completed", 1); // yalnız şef tamamlanır (çocuk failed)
+    const parentCompleted = bus.emitted.find(
+      (e) => e.type === "agent.run.completed" && (e.payload as { runId: string }).runId === parentRunId,
+    )?.payload as { result: string };
+    expect(parentCompleted.result).toContain("tamamlandım");
+
+    const childFailed = bus.emitted.find(
+      (e) => e.type === "agent.run.failed" && (e.payload as { runId: string }).runId !== parentRunId,
+    )?.payload as { error: { code: string } } | undefined;
+    expect(childFailed?.error.code).toBe("AGENT_MAX_STEPS");
+
+    const toolCompleted = bus.emitted.find(
+      (e) => e.type === "agent.tool.completed" && (e.payload as { tool: string }).tool === "run_agent",
+    )?.payload as { ok: boolean; resultSummary: string } | undefined;
+    expect(toolCompleted?.ok).toBe(false); // araç hatası olarak döndü
+    expect(toolCompleted?.resultSummary).toContain("AGENT_MAX_STEPS");
+  });
+
+  it("koşu başına en çok MAX_CHILD_RUNS(8) çocuk — aşım araç HATASI, koşu düşmez", async () => {
+    const script: GenerateResult[] = [];
+    for (let i = 0; i < 8; i++) {
+      script.push(turn([toolCall("run_agent", { agent: "okur", task: `görev ${i}` })]));
+      script.push(turn([text(`çocuk ${i} cevabı`)]));
+    }
+    script.push(turn([toolCall("run_agent", { agent: "okur", task: "dokuzuncu" })])); // 9. deneme
+    script.push(turn([text("limite takıldım ama tamamlandım")]));
+
+    const { engine, bus } = makeEngine(script);
+    const { runId: parentRunId } = await engine.start({
+      agentId: "orkestra-genis",
+      cwd: workspace,
+      task: "çok devret",
+    });
+
+    await waitState(bus, "completed", 9, 8000); // 8 çocuk + şef
+    const parentCompleted = bus.emitted.find(
+      (e) => e.type === "agent.run.completed" && (e.payload as { runId: string }).runId === parentRunId,
+    )?.payload as { result: string };
+    expect(parentCompleted.result).toContain("limite takıldım");
+
+    const childStartedCount = bus.emitted.filter(
+      (e) => e.type === "agent.run.started" && (e.payload as { agentId: string }).agentId === "okur",
+    ).length;
+    expect(childStartedCount).toBe(8); // 9. denemede ÇOCUK HİÇ DOĞMADI
+
+    const failedToolCall = bus.emitted.find(
+      (e) =>
+        e.type === "agent.tool.completed" &&
+        (e.payload as { tool: string }).tool === "run_agent" &&
+        (e.payload as { ok: boolean }).ok === false &&
+        (e.payload as { resultSummary: string }).resultSummary.includes("AGENT_MAX_CHILD_RUNS"),
+    );
+    expect(failedToolCall).toBeDefined();
+  }, 10_000);
+
+  it("ebeveyn iptali çocuğu da cancelled yapar (öksüz koşu kalmaz)", async () => {
+    // Not: deferredTurn() ile ham streamText tüketimi ortasında sıkışan bir koşuyu iptal
+    // etmek bu test altyapısında GÜVENİLİR değil (bağımsız doğrulandı — motorun/mock'un
+    // kendi sınırı, run_agent'la ilgisiz). Kanıtlanmış iptal edilebilir durum
+    // awaiting_permission'dır (requestPermission kendi abort dinleyicisini kurar) —
+    // çocuğu oraya düşürüyoruz (write_file, "yazar" hedefi).
+    const { engine, bus } = makeEngine([
+      turn([toolCall("run_agent", { agent: "yazar", task: "bir şey yaz" })]),
+      turn([toolCall("write_file", { path: "cocuk-yazisi.txt", content: "x" })]),
+    ]);
+    const { runId: parentRunId } = await engine.start({
+      agentId: "orkestra",
+      cwd: workspace,
+      task: "devret",
+    });
+
+    // 1) Şefin run_agent isteği (yazar → mutating) — onayla, çocuk doğsun.
+    const runAgentRequest = await bus.waitFor("agent.tool.requested");
+    expect(runAgentRequest.tool).toBe("run_agent");
+    engine.respond({ requestId: runAgentRequest.requestId, decision: "allow" }, "cli");
+
+    // 2) Çocuğun KENDİ write_file izin isteğini bekle (ikinci agent.tool.requested).
+    let childRequest: { payload: unknown } | undefined;
+    for (let i = 0; i < 100; i++) {
+      const events = bus.emitted.filter((e) => e.type === "agent.tool.requested");
+      if (events.length >= 2) {
+        childRequest = events[1];
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    if (childRequest === undefined) throw new Error("çocuğun izin isteği zamanında gelmedi");
+    const childPayload = childRequest.payload as { tool: string; runId: string };
+    expect(childPayload.tool).toBe("write_file");
+    expect(childPayload.runId).not.toBe(parentRunId); // çocuğun KENDİ runId'si
+
+    engine.cancel(parentRunId);
+    await waitState(bus, "cancelled", 2); // şef + çocuk
+
+    expect(engine.activeRuns()).toHaveLength(0);
+    expect(existsSync(join(workspace, "cocuk-yazisi.txt"))).toBe(false); // iptal edilen yazma hiç olmadı
+  });
+
+  it("kabul testi: iki üst-düzey koşu eşzamanlı çalışır, snapshot'ta AYRI görünür (parentRunId yok)", async () => {
+    const { engine, bus } = makeEngine([
+      turn([toolCall("write_file", { path: "e1.txt", content: "x" })]),
+      turn([toolCall("write_file", { path: "e2.txt", content: "y" })]),
+    ]);
+    const { runId: run1 } = await engine.start({ agentId: "yazar", cwd: workspace, task: "görev 1" });
+    const { runId: run2 } = await engine.start({ agentId: "yazar", cwd: workspace, task: "görev 2" });
+
+    let requested: typeof bus.emitted = [];
+    for (let i = 0; i < 100; i++) {
+      requested = bus.emitted.filter((e) => e.type === "agent.tool.requested");
+      if (requested.length >= 2) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(requested).toHaveLength(2);
+
+    const active = engine.activeRuns();
+    expect(active).toHaveLength(2);
+    expect(active.map((r) => r.runId).sort()).toEqual([run1, run2].sort());
+    expect(active.every((r) => r.parentRunId === undefined)).toBe(true);
+
+    engine.cancelAll();
+    await waitState(bus, "cancelled", 2);
   });
 });

@@ -198,6 +198,15 @@ body {
   background: var(--panel-2);
   border-radius: 8px;
 }
+/* Faz 5 (ADR-014): run_agent ile devredilen çocuk koşu — ebeveyninin altında girintili. */
+.run-child {
+  margin-left: 22px;
+  background: transparent;
+  border: 1px dashed var(--line);
+}
+.run-child-arrow {
+  color: var(--dim);
+}
 .state {
   font-size: 11px;
   padding: 1px 8px;

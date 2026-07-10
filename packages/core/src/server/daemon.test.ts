@@ -267,6 +267,45 @@ describe("symphonyd", () => {
     ws.close();
   });
 
+  it("kullanıcı profili (ADR-013, Dilim M2): auth'suz 401 · GET/PUT roundtrip", async () => {
+    const unauthorizedGet = await fetch(`http://127.0.0.1:${daemon.port}/api/memory`);
+    expect(unauthorizedGet.status).toBe(401);
+    const unauthorizedPut = await fetch(`http://127.0.0.1:${daemon.port}/api/memory`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ content: "x" }),
+    });
+    expect(unauthorizedPut.status).toBe(401);
+
+    const auth = { headers: { authorization: `Bearer ${daemon.token}` } };
+    // Bu daemon'ın home'unda henüz kimse dokunmadı → iskelet (ensureProfileScaffold, daemon açılışı).
+    const scaffoldRes = await fetch(`http://127.0.0.1:${daemon.port}/api/memory`, auth);
+    expect(scaffoldRes.status).toBe(200);
+    const scaffold = (await scaffoldRes.json()) as {
+      content: string;
+      chars: number;
+      truncated: boolean;
+      updatedAt: number | null;
+    };
+    expect(scaffold.content).toContain("Kullanıcı Profili");
+    expect(scaffold.chars).toBe(scaffold.content.length);
+    expect(scaffold.truncated).toBe(false);
+    expect(scaffold.updatedAt).not.toBeNull();
+
+    const putRes = await fetch(`http://127.0.0.1:${daemon.port}/api/memory`, {
+      method: "PUT",
+      headers: { authorization: `Bearer ${daemon.token}`, "content-type": "application/json" },
+      body: JSON.stringify({ content: "## Kimlik\nAdım Deniz.\n" }),
+    });
+    expect(putRes.status).toBe(200);
+    const putBody = (await putRes.json()) as { content: string; chars: number };
+    expect(putBody.content).toBe("## Kimlik\nAdım Deniz.\n");
+
+    const afterGet = await fetch(`http://127.0.0.1:${daemon.port}/api/memory`, auth);
+    const after = (await afterGet.json()) as { content: string };
+    expect(after.content).toBe("## Kimlik\nAdım Deniz.\n"); // yazma kalıcı
+  });
+
   it("başarısız sohbet SQLite'a istek kaydı + telemetri düşürür; usage.query cevaplar", async () => {
     const { reply, ws } = await roundTrip(
       createMessage("hello", {

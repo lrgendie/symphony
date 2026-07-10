@@ -202,13 +202,22 @@ symphony/
 4. ✅ **Token güvenilirlik hatası** (2026-07-07) — `token.ts loadExistingToken`: daemon restart'ında
    diskteki geçerli 64-hex token yeniden kullanılır; masaüstü/CLI artık kopmuyor (+5 test).
 
-### Faz 5 — Orkestrasyon: Çoklu Agent (12–14. hafta)
-- [ ] Görev kuyruğu: birden çok agent'ı paralel çalıştırma, birbirine iş devretme
-- [ ] Agent tanımları dosya olarak: `~/.symphony/agents/*.md` (rol + araçlar + model) → taşınabilir
-- [ ] "Şef" agent: görevi alt görevlere bölüp uygun agent'lara/modellere dağıtan üst akıl
-- [ ] Maliyet stratejisi: basit işleri yerel/ucuz modele, zor işleri Claude'a yönlendirme
-- **Çıktı:** Tek komutla çok-agent'lı iş akışı, dashboard'da orkestra gibi izlenir.
-- **Kabul testi:** İki agent aynı anda farklı görevlerde koşup dashboard'da ayrı izlenebiliyor; şef agent bir görevi en az iki alt göreve bölüp farklı modellere dağıtıyor; agent tanımı dosyası yeni makineye kopyalanınca aynen çalışıyor.
+### Faz 5 — Orkestrasyon: Çoklu Agent (12–14. hafta) ✅ 2026-07-10 (v1 kapsamı)
+> **ADR-014** (2026-07-10): devretme = motor-içi dinamik `run_agent` aracı; hiyerarşi
+> `parentRunId?` (ADDITIVE); derinlik-1 + `MAX_CHILD_RUNS=8` sigortaları; varsayılan "sef"
+> agent'ı. Dilimler O1 (çekirdek devretme) → O2 ("sef" + CLI/TUI hiyerarşi) → O3 (masaüstü
+> hiyerarşi) hepsi BİTTİ, testli (286 test) VE canlı doğrulandı (`symphony agent sef "..."` —
+> Claude Haiku şefi, yerel qwen3:8b'ye devretti; biri başarısız oldu ama koşu düşmedi, şef
+> kendi topladığı veriyle telafi etti — "araç hatası ≠ koşu hatası" tasarımının canlı kanıtı).
+> Paralel çocuk + gerçek kapasite-kuyruğu bilinçle v2'ye ertelendi (ADR-014 "Ertelenenler").
+- [x] Görev kuyruğu (devretme kısmı): birbirine iş devretme ✅ `run_agent` (O1) — eşzamanlı
+  bağımsız üst-düzey koşular motor Map'inde zaten çalışıyordu (O1-f testi + canlı kanıtladı).
+  Gerçek KAPASİTE kuyruğu (bekleyen iş listesi) ve PARALEL çocuk koşular v2'ye ertelendi.
+- [x] Agent tanımları dosya olarak: `~/.symphony/agents/*.md` (rol + araçlar + model) → taşınabilir ✅ FİİLEN Faz 3'ten beri (frontmatter+`ensureDefaultAgent`)
+- [x] "Şef" agent: görevi alt görevlere bölüp uygun agent'lara/modellere dağıtan üst akıl ✅ O2 — varsayılan `sef` agent'ı (`read_file/glob/grep/run_agent`, yazma yok)
+- [x] Maliyet stratejisi: basit işleri yerel/ucuz modele, zor işleri Claude'a yönlendirme ✅ v1 = şef prompt'u + mevcut kural-tabanlı router (ADR-014 Karar 5); öğrenen router (v2) Faz 6'da
+- **Çıktı:** Tek komutla çok-agent'lı iş akışı, dashboard'da orkestra gibi izlenir. ✅ masaüstünde çocuk koşular `↳` ile ebeveyninin altında girintili (O3, `orderRunsForDisplay`)
+- **Kabul testi:** İki agent aynı anda farklı görevlerde koşup dashboard'da ayrı izlenebiliyor ✅ (O1-f + O3 store testleri) · şef agent bir görevi en az iki alt göreve bölüp farklı modellere dağıtıyor ✅ (O1-a testi + BUGÜNKÜ canlı `symphony agent sef` koşusu, Claude Haiku→qwen3:8b karışımı) · agent tanımı dosyası yeni makineye kopyalanınca aynen çalışıyor ✅ (Faz 3'ten beri, davranış değişmedi).
 
 ### Faz 6 — Zeka Katmanı: Seni Tanıyan Symphony (15–17. hafta)
 - [ ] **Model yönlendirici v2 (öğrenen):** Faz 1'den beri biriken kayıtlardan (hangi model hangi görevde başarılı/hızlı/ucuz oldu) skor tablosu; "bu işi kime verelim?" sorusuna veriyle cevap

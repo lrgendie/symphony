@@ -28,6 +28,7 @@ Sen Symphony'nin kod agent'ısın. <sistem prompt'u buraya>
 | `read_file`, `glob`, `grep` | `safe` | otomatik izinli |
 | `write_file`, `edit` | `mutating` | **sor** (diff ile) |
 | `run_command` | `mutating` | **sor** (komut metniyle) |
+| `run_agent` (Faz 5, ADR-014) | hedefe göre dinamik (bkz. §9) | hedef salt-okursa otomatik izinli, değilse **sor** |
 | dosya silme, `git push`, ağ yazması içeren komutlar | `destructive` | **sor** — `always_allow` ile kalıcılaştırılamaz |
 
 - Her aracın parametreleri zod ile doğrulanır; doğrulamadan geçmeyen çağrı modele
@@ -146,3 +147,27 @@ her adım (araç, args özeti, süre, hata). Ham dosya içerikleri DEĞİL, öze
    agent değil, yalnız `permission.respond` akışı günceller.
 3. Agent çıktıları loglanırken API anahtarı deseni (`sk-`, `AIza` vb.) maskelenir.
 4. `run_command` ortam değişkenlerinden anahtar içerenleri temizlenmiş bir env ile çalışır.
+
+## 9. Devretme — `run_agent` (Faz 5, ADR-014)
+
+Bir agent, `tools:` listesinde `run_agent` varsa başka bir agent'ı çalıştırıp nihai sonucunu
+araç sonucu olarak alabilir: `run_agent { agent, task, model?, provider? }`.
+
+- **Dinamik araç:** `AGENT_TOOLS` sabitinde değil — koşu başına motor üretir (MCP araçları
+  deseni). Frontmatter enum'una `run_agent` eklenir; yalnız listeleyen agent alır.
+- **Çocuk koşu = normal koşu:** kendi runId'si, kendi olayları (`agent.run.started`
+  `parentRunId` taşır), kendi SQLite kaydı, kendi izin istekleri (KENDİ runId'siyle,
+  kullanıcıya — şef kullanıcının izin yetkisini devralamaz).
+- **Risk sınıfı dinamik:** hedef agent'ın araç seti tamamen `safe` ise devretme `safe`
+  (sorulmaz); aksi hâlde `mutating` (sorulur; `permissionTarget` = hedef agentId —
+  "run_agent coder → daima izin" kalıcılaştırılabilir). `destructive` DEĞİL: çocuğun her
+  yıkıcı adımı zaten kendi izin kutusunu açar.
+- **Jail devri:** çocuk, ebeveynin `cwd`'sini birebir devralır; `run_agent` cwd/extraDirs
+  parametresi almaz — şef kendi hapsinden geniş hapis dağıtamaz.
+- **Sigortalar:** derinlik 1 (parentRunId'li koşuya `run_agent` verilmez); koşu başına en çok
+  `MAX_CHILD_RUNS = 8` çocuk; çocuklar daima tek-seferlik (`conversational` yok) ve sıralı;
+  ebeveyn iptali çocukları da iptal eder. Çocuk `failed`/`cancelled` → araç HATASI (koşu
+  hatası değil, §4 ilkesi) — şef rota değiştirebilir.
+- **Model seçimi:** `model/provider` boşsa çözüm `agent.start` ile aynı zincir: çocuk tanımı →
+  router (`pickModel`). Maliyet stratejisi v1 = şef prompt'u + kural-tabanlı router (ADR-014
+  Karar 5); öğrenen router Faz 6.

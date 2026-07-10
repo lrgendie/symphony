@@ -40,3 +40,22 @@ export const HistorySessionDetailResponseSchema = z
   })
   .strip();
 export type HistorySessionDetailResponse = z.infer<typeof HistorySessionDetailResponseSchema>;
+
+/**
+ * Kullanıcı profili REST uçları (ADR-013, Dilim M2). `content` her zaman dosyanın TAM
+ * (kesilmemiş) içeriğidir — `truncated` yalnız agent bağlamına enjekte edilen kesimin
+ * (MAX_PROFILE_CHARS) bir uyarısıdır, `content`'i etkilemez.
+ */
+export const MemoryGetResponseSchema = z
+  .object({
+    content: z.string(),
+    chars: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+    /** epoch ms — dosyanın son değişim zamanı; dosya hiç yazılmamışsa null */
+    updatedAt: z.number().int().nonnegative().nullable(),
+  })
+  .strip();
+export type MemoryGetResponse = z.infer<typeof MemoryGetResponseSchema>;
+
+export const MemoryPutRequestSchema = z.object({ content: z.string() }).strip();
+export type MemoryPutRequest = z.infer<typeof MemoryPutRequestSchema>;

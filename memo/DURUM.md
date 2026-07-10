@@ -3,7 +3,372 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-09 gece (Sonnet — Dilim M1 BİTTİ ve testli, 255 test)
+**Son güncelleme:** 2026-07-10 (Sonnet — canlı bulgu #3: router vision-modeli yanlış seçiyordu — DÜZELTİLDİ, 288 test)
+
+## Canlı bulgu #3 (2026-07-10, Sonnet): router yeni kurulan vision modelini metin/agent görevlerinde YANLIŞLIKLA seçiyordu — DÜZELTİLDİ
+
+Kullanıcı gerçek bir "sef" görevi denedi (masaüstünde .docx taşıma → güvenli test klasörüne
+indirgendi): `run_agent coder: ...` her denemede İLK model turunda `INTERNAL_AGENT_ERROR: No
+output generated` ile başarısız oldu (3x, `AGENT_TOOL_LOOP` ile koşu düştü — ekran görüntüsüyle
+doğrulandı). **Kök neden bulundu (izole testlerle kanıtlandı):** `router.ts`'in `suggestModels`
+fonksiyonu "general" görevlerde `locals[0]`'ı (Ollama'nın döndürdüğü SIRADAKİ yerel model) seçiyor;
+bu oturumda `qwen2.5vl:7b` (vision-language model) kurulduktan sonra Ollama'nın listeleme sırasında
+BİRİNCİ sıraya geçti. `qwen2.5vl:7b`'nin Ollama'nın OpenAI-uyumlu ucunda tool-calling/araç-çağırma
+GÜVENİLİR ÇALIŞMIYOR — doğrudan `--model qwen2.5vl:7b` ile izole test edilince AYNI "No output
+generated" hatası tekrarlandı, `--model qwen3:8b` ile İZOLE test edilince ise (run_command tool-call
+düzgün üretilip) izin isteğine kadar sorunsuz geldi. Yani run_agent/O1/O2/O3 kodunda hata YOK —
+bu oturumda YENİ kurulan vision modelinin router'ın varsayılan metin-görev seçimini kirletmesiydi.
+- **Düzeltme:** `router.ts`'e `VISION_MODEL_PATTERN` + `preferTextCapable()` — `locals` listesi
+  ("general"/"code"/"quick" hepsinde kullanılan ortak taban) artık vision-modelleri ELER; hiç
+  metin-uyumlu yerel model YOKSA (yalnız vision modelleri kuruluysa) yine de onu kullanır (hiç
+  öneri vermemek bundan kötü). +2 router testi.
+- **Test:** 286→**288**. `pnpm build && pnpm test && pnpm lint` temiz (40 dosya/288 test).
+- **Canlı doğrulama TAMAMLANDI:** daemon restart → aynı görev (model/provider belirtmeden,
+  router'a bırakılarak) tekrar denendi → artık "No output generated" ÇÖKMESİ YOK, model gerçekten
+  bir `run_command` tool-call'u üretti (izin isteği aşamasına geldi).
+- **Ayrı bir gözlem (Symphony hatası DEĞİL, model-kalite nüansı):** router düzeltmesi sonrası bir
+  denemede qwen3:8b, gerçek AI SDK tool-calling YERİNE tool çağrısını DÜZ METİN olarak
+  (`{"name":"run_command","arguments":{...}}` JSON'unu cevap metnine yazarak) "taklit etti" —
+  motor bunu tool çağrısı OLARAK ALGILAMADI (haklı olarak; gerçek tool-call formatı değil), koşu
+  hiçbir şey yapmadan "completed" oldu. Bu, küçük yerel modellerin tool-calling'e bazen tam
+  uymamasının bilinen bir sınırı — Symphony'nin kod tarafında bir hata değil. **Öneri:** yazma
+  gerektiren gerçek görevlerde (dosya taşıma gibi) güvenilirlik için bulut model (Claude Haiku
+  ucuz+hızlı) tercih edilsin; qwen3:8b salt-okur/basit özetleme işlerinde güvenilir kaldı.
+- **Kullanıcıya:** test klasörü (`C:\Users\brkn2\Desktop\sef-test`, 3 dosya) temizlenip orijinal
+  hâline döndürüldü, daemon restart edildi (bulut sağlayıcı, `router.suggest` cache'i yok —
+  hemen etkili). Yeniden denemek istersen `symphony` → sef → bu sefer bulut model (ör. Claude
+  Haiku) seçmen önerilir.
+
+## Faz 5 — TAMAMEN BİTTİ: O1+O2+O3, 286 test, ROADMAP işaretlendi (2026-07-10, Sonnet)
+
+## Faz 5 — Dilim O3 (masaüstü hiyerarşi + ROADMAP kapanışı) BİTTİ (2026-07-10, Sonnet) — Faz 5 TAMAM
+
+- **`ui/store.ts`:** `agent.run.started` olayı artık `parentRunId?`'yi `runs`'a taşıyor (varsa
+  log satırı da `↳ [agentId] koşu başladı` olarak basılır). Yeni saf export
+  `orderRunsForDisplay(runs)`: çocuk koşu satırları ekranda ebeveyninin HEMEN ALTINA taşınır
+  (ham dizi ekleniş sırasına göre karışık olabilir — `upsertRun` başa ekler); sahipsiz çocuk
+  (ebeveyni listede yoksa) kaybolmaz, sona düşer. +4 store testi (parentRunId geçişi, gruplama
+  2 senaryo, sahipsiz çocuk).
+- **`App.tsx`:** koşu listesi artık `orderRunsForDisplay(runs)` ile render ediliyor; çocuk
+  satırları `run-child` sınıfı + `↳` okuyla girintili gösteriliyor.
+- **`index.css`:** `.run-child` (sol girinti + kesikli çerçeve, şeffaf arka plan) + `.run-child-arrow`.
+- **Test:** 282→**286** (store +4). `pnpm build && pnpm test && pnpm lint` temiz (40 dosya/286 test).
+- **ROADMAP Faz 5 TAMAMEN işaretlendi** (`[x]` — devretme/şef/maliyet stratejisi/kabul testleri),
+  hem O1-f/O1-a testleriyle hem bu oturumdaki canlı `symphony agent sef` koşusuyla gerekçelendi.
+  Kuyruk/paralel-çocuk kısmı ADR-014'te bilinçle v2'ye bırakıldığı ROADMAP'e not düşüldü.
+- **Görsel doğrulama KULLANICIYA:** masaüstü değişikliği (`App.tsx`/CSS) Bash'ten görülemez —
+  `pnpm --filter @symphony/desktop desktop:dev` ile bir `symphony agent sef "..."` koşusu
+  başlatıp panelde çocuk koşu satırının ebeveyninin altında girintili+kesikli-çerçeveli
+  göründüğünü teyit etmek kullanıcıya kalıyor (daemon zaten güncel build'de çalışıyor).
+
+**ROADMAP kullanıcı önceliği sırası tükendi (1-2-3-4 + Faz 5 hepsi TAMAM).** Sıradaki: kullanıcının
+O3'ün görsel sonucunu masaüstünde teyit etmesi (isteğe bağlı) + yeni bir ROADMAP fazı/önceliği
+seçimi (Faz 6 "Zeka Katmanı" doğal aday, ya da kullanıcının kendi belirleyeceği bir iş).
+
+## Faz 5 — Dilim O2 ("sef" agent + CLI/TUI hiyerarşi) BİTTİ (2026-07-10, Sonnet)
+
+- **`definition.ts`:** dördüncü default agent **`sef`** (ADR-014 Karar 6) — araçlar
+  `[read_file, glob, grep, run_agent]` (yazma/komut YOK, bilinçli — "orkestra şefi enstrüman
+  çalmaz"), model boş (router/istek zamanı pinlenir). Prompt: göreve gerçekten gerekiyorsa
+  ≥2 alt göreve böl, her `run_agent` çağrısında görevi KENDİ BAŞINA anlaşılır yaz (alt-agent
+  şefin bağlamını görmez), basit iş→yerel/model verme, muhakeme→bilinçli bulut pin, sonuçları
+  SENTEZLE. +1 definition.test.
+- **`cli/commands/agent.ts`** (tek-seferlik `symphony agent`): `mine()` artık bir `childAgentIds`
+  Map'i (`agent.run.started.parentRunId` ile doldurulur) de kapsıyor — çocuğun araç/izin/
+  tamamlanma olayları da görünür, `↳ [agentId]` önekiyle basılır. **Kritik ayrım:** çocuğun
+  `agent.run.completed/failed`'ı TÜM CLI çıktısını bitirmiyor (yalnız `payload.runId === runId`
+  olan üst-düzey koşu `resolveExit` çağırır) — aksi hâlde ilk devretme biter bitmez süreç
+  yanlışlıkla kapanırdı.
+- **`agent-run.tsx`** (TUI): aynı `childAgentIdsRef` deseni. **Özenli ayrım:** `agent.run.state`
+  (thinking/awaiting_user) ve `agent.delta` (akış metni) SADECE üst-düzey koşuya bağlı kalıyor
+  (`mine()`, genişletilmedi) — çocuğun kendi state/metni karışırsa ekran anlaşılmaz olurdu.
+  `agent.tool.*` ve `agent.tool.requested` genişletilmiş `mineOrChild()` kullanıyor — **çocuğun
+  izin isteği görünür VE cevaplanabilir** (`requestId` GLOBAL, mevcut `permission.respond`
+  akışı hiç değişmeden yeterli). `PermissionBox`'a `agentLabel` eklendi. +1 TUI testi (çocuk
+  aktivitesi + izin kutusu + çocuğun completed'ının TÜM koşuyu bitirmediği).
+- **Test:** 280→**282** (definition +1, agent-run.test +1). `pnpm build && pnpm test &&
+  pnpm lint` temiz (40 dosya/282 test).
+- **Canlı doğrulama TAMAMLANDI:** daemon restart → `symphony agent sef "..."` (Claude Haiku,
+  test-arsiv dizininde, göreve bilinçli "run_agent ile asistan'a devret" talimatı verildi).
+  **Sonuç uçtan uca çalıştı:** şef glob/read_file ile keşfetti → `run_agent` ile asistan'a
+  İKİ kez devretti → çocuk koşusu ekranda `↳ [asistan] koşu ... başladı/düşünüyor/tamamlandı`
+  olarak göründü → BİRİNCİ devretme başarılı (sonucu şefin bağlamına gerçekten aktı) →
+  **İKİNCİ devretme iki kez `INTERNAL_AGENT_ERROR` ile başarısız oldu ama şefin koşusu
+  DÜŞMEDİ** — araç hatası olarak aldı, farklı ifadeyle tekrar denedi, sonra KENDİ okuduğu
+  ham veriyle nihai özeti kendisi sentezleyip düzgün bitirdi (12494+1170 token, $0.0183).
+  **Bu, O1'in "araç hatası ≠ koşu hatası" tasarımının canlı kanıtı** — devretme başarısız
+  olsa bile şef akıllıca telafi etti, çökmedi.
+  - **Yan bulgu (kök nedeni bulundu, DÜZELTME GEREKMİYOR):** ikinci devretmenin hatası
+    ("No output generated. Check the stream for errors.") ayrıca izole test edildi —
+    AYNI görev/model (qwen3:8b/ollama) tek başına sorunsuz tamamlandı. Yani hata O1/O2
+    kodunda DEĞİL, art arda hızlı `run_agent` çağrılarının Ollama'yı (muhtemelen model
+    boşaltma/yeniden yükleme zamanlaması) geçici olarak tökezletmesinde — mimari bunu
+    zaten doğru yakalayıp toparladığı için ayrı bir düzeltme AÇILMADI, yalnız not düşüldü.
+
+### ✅ Dilim O3 — masaüstü hiyerarşi + ROADMAP kapanışı — BİTTİ (yukarıda ayrıntı)
+
+- `ui/store.ts`: `parentRunId` sakla (snapshot `ActiveRun`'dan + `agent.run.started`'dan);
+  `ui/App.tsx`: çocuk koşu satırları ebeveynin altında girintili (`↳`). +store.test.
+- ROADMAP Faz 5 kabul kutularını işaretle: iki eşzamanlı koşu ✅ (O1-f testi + bu oturumdaki
+  canlı sef koşusunda dolaylı kanıt), şef ≥2 alt görev dağıtımı ✅ (O1-a testi + BUGÜNKÜ canlı
+  `symphony agent sef` koşusu — gerçek Claude Haiku + yerel qwen3:8b karışımıyla), agent tanımı
+  taşınabilirliği ✅ (Faz 3'ten beri fiilen var). "Görev kuyruğu"nun kuyruk kısmı + paralel
+  çocuklar ADR-014'te bilinçle v2'ye ertelendi — ROADMAP'e not düş.
+- O3 bitince Faz 5 TAMAMEN kapanır; ROADMAP'teki `[ ]` kutucuklarını `[x]`'e çevir.
+
+## Faz 5 — Dilim O1 (çekirdek devretme) BİTTİ (2026-07-10, Sonnet)
+
+ADR-014'ün 6 kararı uygulandı; PROTOKOL.md/SPEC-AGENT.md'deki "planlandı" işaretleri kaldırıldı.
+- **shared:** `ActiveRunSchema.parentRunId?` + `AgentRunStartedPayloadSchema.parentRunId?` (ADDITIVE).
+- **`definition.ts`:** `AGENT_FRONTMATTER_TOOL_NAMES = [...TOOL_NAMES, "run_agent"]` — frontmatter
+  `tools:` artık `run_agent`'ı kabul eder (varsayılan LİSTEDE DEĞİL — bilinçli opt-in).
+- **`engine.ts` (asıl iş):** `start()` ince bir sarmalayıcıya indirgendi; gerçek mantık
+  `startInternal(params)`'a taşındı — hem wire `agent.start` hem `run_agent` aracı AYNI kapıdan
+  geçer, yalnız ikincisi `parentRunId`/`onChildFinish` dolu geçer (wire payload'ında bu alanlar
+  YOK, dışarıdan asla enjekte edilemez). `ActiveRunRecord`'a `parentRunId`/`childRunIds`/
+  `onChildFinish` eklendi. `makeRunAgentSpec(run)` — dinamik `AgentToolSpec` (MCP deseni):
+  risk sınıfı hedefin araç setine göre (`isReadOnlyAgent`: tamamen read_file/glob/grep ve
+  mcpServers boşsa "safe", aksi "mutating"); `permissionTarget`=hedef agentId; `execute()`
+  `startInternal`'ı çağırıp `onChildFinish` callback'iyle çocuğun bitişini bekler (Promise +
+  `AbortSignal` dinleyicisi — zaman aşımı/iptal çocuğu da `cancel()`ler, öksüz koşu kalmaz).
+  `finish()`'e `onChildFinish` tetikleyici eklendi (completed→sonuç metni, failed/cancelled→
+  araç HATASI — SPEC §4 "araç hatası≠koşu hatası" ilkesi ile şefin koşusu düşmez). `cancel()`
+  artık ÖNCE `childRunIds`'i, sonra kendini abort eder (kaskad). `runLoop`'ta specs listesine
+  `run_agent`, YALNIZ `run.parentRunId===undefined` VE tanım listesinde varsa eklenir (derinlik-1
+  sigortası — çocuğa asla verilmez, sayaç değil aracın yokluğu). `MAX_CHILD_RUNS=8` sabit sayaçla.
+- **Test:** 274→**280** (definition +0 [O2'de "sef" testi gelecek] · engine +6: (a) şef→çocuk→
+  sonuç + parentRunId + iki completed + salt-okur hedefte izin YOK, (b) yazma-yetkili hedefte
+  izin ŞEFİN runId'siyle + çocuk izin-öncesi doğmaz, (c) çocuk failed→şef DEVAM eder (araç hatası),
+  (d) MAX_CHILD_RUNS aşımı→araç hatası (9. deneme çocuk doğurmaz), (e) ebeveyn iptali→çocuk da
+  cancelled, (f) iki üst-düzey koşu snapshot'ta ayrı+parentRunId yok). `pnpm build && pnpm test
+  && pnpm lint` temiz (40 dosya/280 test).
+- **⚠️ Canlı bulgu (test yazarken, kod DEĞİL test tasarımı sorunu):** `deferredTurn()` (ham
+  `streamText` akışı ortasında sonsuza dek asılı kalan sahte model turu) ile sıkışmış bir koşuyu
+  `cancel()`'lemek bu mock altyapısında GÜVENİLİR ÇALIŞMIYOR — bağımsız bir standalone script'le
+  doğrulandı (run_agent'la İLGİSİZ, iki DÜZ üst-düzey `deferredTurn` koşusu da aynı şekilde
+  takılıyor). Mevcut TÜM geçen cancel testleri yalnız `awaiting_user`/`awaiting_permission`
+  durumlarını iptal ediyor (bunların KENDİ açık `abort` dinleyicisi var — `waitForUser`/
+  `requestPermission`); ham `for await (const chunk of result.textStream)` tüketimi AI SDK'nın
+  `abortSignal`'ı gerçekten kesintiye uğratmıyor GİBİ görünüyor. Testler (e)/(f) bu yüzden
+  `awaiting_permission`'a düşecek şekilde (write_file ile) yeniden tasarlandı — ÇALIŞTI. **Bu,
+  canlı bulgu #1'in (qwen3:8b'nin 15dk döngüye girmesi) kök nedenine dair bir İPUCU OLABİLİR**:
+  gerçek bir model akış ortasında takılırsa, KULLANICININ Esc/Ctrl+C'si de aynı şekilde
+  İŞLEMEYEBİLİR. Doğrulanmadı, ayrı bir araştırma gerektirir — kapsam dışı bırakıldı, ama
+  ÖNEMLİ bir gözlem olarak buraya not düşüldü (ileride `run_command`'ın execa `cancelSignal`
+  deseni gibi, streamText tüketimine de MANUEL bir abort-check eklemek gerekebilir).
+- **Canlı doğrulama BEKLİYOR (daemon restart gerekir):** henüz "sef" varsayılan agent'ı yok
+  (O2'de gelecek) — bu dilimde canlı deneme için kullanıcı KENDİ agent tanımına `run_agent`
+  eklemeli (`~/.symphony/agents/<ad>.md` frontmatter `tools:` listesine `run_agent` yazıp bir
+  hedef agent id'si vererek `symphony agent <ad> "..."` ile deneyebilir) — pratik değil, O2'yi
+  bekleyip gerçek "sef" ile denemek daha mantıklı.
+
+## Faz 5 — Çoklu agent orkestrasyonu: TASARIM TAMAM (2026-07-10, Fable — ADR-014) → uygulama dilimleri O1/O2/O3
+
+Sonnet'in hazırladığı 5 açık soru karara bağlandı, **ADR-014 yazıldı** (`docs/kararlar/KARARLAR.md`);
+PROTOKOL.md (+`agent.run.started.parentRunId?`, §5 hiyerarşi notu) ve SPEC-AGENT.md (§2 tablo satırı
++ YENİ §9 Devretme) "planlandı — Dilim O1" işaretleriyle güncellendi. Kararların özü:
+- **Devretme = motor-içi dinamik araç `run_agent {agent, task, model?, provider?}`** (MCP araç
+  deseni: spec koşu başına motor tarafından üretilir, execute engine'i closure'lar). Yeni protokol
+  MESAJI yok; host-orkestrasyon reddedildi (şefin planı koşu SIRASINDA modelin kararıyla değişmeli).
+- **Hiyerarşi ADDITIVE:** `ActiveRun.parentRunId?` (snapshot) + `agent.run.started.parentRunId?`.
+- **Güvenlik:** çocuğun araç çağrıları AYNI izin kapısından KENDİ runId'siyle kullanıcıya sorulur;
+  `run_agent` risk sınıfı hedefe göre dinamik (hedefin araç seti tamamen safe → safe, aksi →
+  mutating, permissionTarget=hedef agentId); çocuk jail = ebeveyn cwd birebir (cwd/extraDirs
+  parametresi YOK).
+- **Sigortalar:** derinlik 1 (parentRunId'li koşuya run_agent aracı hiç verilmez), MAX_CHILD_RUNS=8,
+  çocuklar daima tek-seferlik + sıralı, ebeveyn iptali çocukları da iptal eder.
+- **Maliyet v1:** model boşsa çocuk tanımı → router (`pickModel`) — agent.start ile aynı zincir;
+  şef prompt'u basit işleri yerele yönlendirmeyi söyler. Öğrenen router Faz 6, KARIŞTIRMA.
+- **Varsayılan "sef" agent'ı** (4. default): araçlar `[read_file, glob, grep, run_agent]` — kendisi
+  yazamaz, yazma işini coder'a devretmek ZORUNDA (şef enstrüman çalmaz).
+
+### ✅ Dilim O1 — çekirdek devretme (shared + engine) — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
+
+**Önce oku (yalnız bunlar):** ADR-014 + SPEC-AGENT §9 + `engine.ts` (start/runLoop/izin kapısı/
+cancel + MCP araçlarının specs'e nasıl eklendiği) + `engine.test.ts` (FakeAdapter/turn deseni).
+1. PROTOKOL.md + SPEC-AGENT.md'deki `(planlandı — Dilim O1)` işaretlerini kaldır.
+2. `shared/common.ts` `ActiveRunSchema.parentRunId?` + `events.ts` agent.run.started şemasına
+   `parentRunId?` (adı muhtemelen `AgentRunStartedPayloadSchema`).
+3. `tools.ts`: `AGENT_TOOLS`'a DOKUNMA (statik 6 araç kalır). `definition.ts` frontmatter
+   `tools:` enum'unu `[...TOOL_NAMES, "run_agent"]` olarak genişlet (AgentDefinition.tools tipi
+   de genişler; engine statik araçları `AGENT_TOOLS[name]` ile alırken `run_agent`'ı FİLTRELER).
+4. `engine.ts`:
+   - `ActiveRunRecord`'a `parentRunId?` + `childRunIds: string[]`.
+   - `start()`'ı iç `startInternal(payload, parent?)`'a ayır; dıştaki imza DEĞİŞMEZ. Çocuk:
+     cwd=parent.cwd, conversational=false, model/provider araç argümanından (boşsa tanım→router).
+   - Koşu bitişini içeriden bekleyebilmek için kayda bir deferred (`finish()` resolve eder) —
+     `runLoop`'un finish yollarının ÜÇÜNDE de (completed/failed/cancelled) çözülmeli.
+   - Dinamik `makeRunAgentSpec(run)`: yalnız `run.parentRunId === undefined` VE tanım listesinde
+     `run_agent` varsa specs'e eklenir. `riskClass(args)`: hedef tanımı yükle → araçları tamamen
+     safe ise "safe", değilse "mutating" (tanım yüklenemezse "mutating"). `permissionTarget` =
+     hedef agentId. `execute`: MAX_CHILD_RUNS kontrolü → startInternal → deferred bekle → sonuç
+     metni döndür (truncate MAX_OUTPUT_CHARS); çocuk failed/cancelled → AgentError fırlat (araç
+     hatası olarak modele döner, koşu düşmez).
+   - `cancel()`: önce `childRunIds`'i iptal et, sonra kendini.
+   - `agent.run.started` broadcast'ine + `activeRuns()`/snapshot'a parentRunId.
+5. **Test (engine.test.ts; FakeAdapter script'i SIRALI tüketilir — şef ve çocuk aynı fake
+   provider'ı kullanır, script sırası: şef-tur1(run_agent çağrısı) → çocuk-tur1(metin) →
+   şef-tur2(nihai metin)):** (a) şef→çocuk→sonuç şef prompt'unda görünür + çocuğun
+   agent.run.started'ı parentRunId taşır + iki ayrı completed; (b) salt-okur hedefe devretme
+   İZİNSİZ akar, yazma-araçlı hedefe devretme `agent.tool.requested` (tool=run_agent, ŞEFİN
+   runId'siyle) üretir; (c) çocuk failed → şef koşusu DEVAM eder; (d) MAX_CHILD_RUNS aşımı araç
+   hatası; (e) ebeveyn iptali çocuğu da cancelled yapar; (f) İKİ eşzamanlı üst-düzey koşu
+   snapshot'ta ayrı görünür (ROADMAP kabul maddesinin otomatik karşılığı — yoksa ekle).
+6. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
+
+### ✅ Dilim O2 — "sef" varsayılan agent + CLI/TUI hiyerarşi — BİTTİ (yukarıda ayrıntı; orijinal talimat arşivlendi)
+
+### 📋 Dilim O3 — masaüstü hiyerarşi + ROADMAP kapanışı (orijinal talimat; yukarıda "SIRADAKİ" bölümünde güncel özeti var)
+
+- `ui/store.ts`: `parentRunId` sakla (snapshot `ActiveRun`dan + `agent.run.started`dan);
+  `ui/App.tsx`: çocuk koşu satırları ebeveynin altında girintili (`↳`). +store.test.
+- ROADMAP Faz 5 kabul kutularını işaretle: iki eşzamanlı koşu (O1-f testi + canlı), şef ≥2 alt
+  görev dağıtımı (O1-a testi + canlı sef koşusu), agent tanımı taşınabilirliği (Faz 3'ten beri
+  fiilen var — nota bağla). "Görev kuyruğu"nun kuyruk kısmı ile paralel çocuklar ADR-014'te
+  bilinçle v2'ye ertelendi — ROADMAP'e not düş.
+
+**Dilim sırası O1→O2→O3; her dilim sonrası `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.**
+
+## Canlı bulgu #2 (2026-07-10, Sonnet): damıtıcı, M1'in enjeksiyonuyla KİRLENİYORDU — DÜZELTİLDİ ve canlı doğrulandı
+
+M3'ü canlı test ederken (küçük sahte arşiv: 2 dosya, sahte "Barkın/TypeScript/Rust/PowerShell"
+içerikli), taslakta arşivde HİÇ geçmeyen ifadeler çıktı ("Akıcı, eğitimsel anlatım tercih eder") —
+kullanıcının GERÇEK `profil.md`'sindeki cümlelerle neredeyse birebir. Kök neden: `engine.ts`
+`buildSystemPrompt` çağrısı M1'den beri HER agent koşusuna profili enjekte ediyor, `damitici` için
+istisna YOKTU — arşivi damıtırken kendi bağlamına zaten mevcut profil de karışıyordu, taslağı
+"arşivden yeni ne çıktı" sorusuna cevap olmaktan çıkarıyordu.
+- **Düzeltme:** `engine.ts`'te `definition.id === "damitici"` ise `loadMemoryProfile()` hiç
+  çağrılmıyor — damıtıcı artık yalnız arşivi görüyor. +1 test (`engine.test.ts`: damitici
+  agent'ıyla koşuda enjekte edilen profil metni prompt'ta YOK).
+- **Test:** 273→**274**. `pnpm build && pnpm test && pnpm lint` temiz.
+- **Canlı doğrulama TAMAMLANDI (bu oturumda):** daemon restart → AYNI sahte arşivle tekrar
+  `symphony memory distill` → taslak bu kez TEMİZ (yalnız arşiv içeriği: TypeScript/Rust/Python/
+  PowerShell/Symphony/Türkçe-kısa-net — canlı profilden hiçbir sızıntı YOK) → canlı `profil.md`
+  koşu boyunca bayt-bayt değişmedi (elle `cat` ile teyit edildi) → test taslağı temizlendi
+  (`profil.taslak.md` silindi, gerçek veri değildi). **GPU/döngü riski de gözlenmedi** (iki koşu
+  da birkaç saniyede bitti, canlı bulgu #1'deki tıkanma tekrarlanmadı — küçük/kısa arşivle sınırlı
+  test, büyük arşivde risk hâlâ teorik olarak açık).
+
+## Öncelik #3 — Uzun-dönem hafıza: Dilim M3 (arşiv damıtma) BİTTİ (2026-07-10, Sonnet)
+
+ADR-013 Karar 5. Protokolsüz — mevcut `agent.start`/`agent.run.completed` yeniden kullanıldı,
+PROTOKOL.md'ye dokunulmadı.
+- **`core/agent/definition.ts`:** üçüncü varsayılan agent **`damitici`** (id ASCII; frontmatter
+  `name: damıtıcı`) — asistan ile AYNI salt-okur araç seti (`read_file/glob/grep`, write/run YOK),
+  `provider`/`model` BOŞ (CLI kendi pinler, aşağıda). Sistem prompt'u: çıktı biçimi (5 sabit
+  başlık), "yalnız kalıcı/tekrar eden gerçek, tek seferlik detay değil" kuralı, karakter bütçesi.
+- **`core/config/paths.ts`:** `profileDraftFile` (`memory/profil.taslak.md`) — canlı `profileFile`
+  ile AYNI dizinde ama apayrı dosya.
+- **YENİ `cli/commands/memory.ts` genişletmesi** (eski tek fonksiyon `memoryCommand` → üç fonksiyona
+  bölündü: `memoryShowCommand`/`memoryPathCommand`/`memoryDistillCommand`, `index.ts`'te commander
+  alt-komut grubuna taşındı: `memory show|path|distill`, `show` varsayılan):
+  - `listArchiveFilesByRecency(dir)` (SAF): dosyaları en yeniden en eskiye sıralar (node_modules/
+    .git hariç, recursive). **Tasarım notu:** `glob` aracı mtime döndürmüyor (SPEC'te yok) — CLI
+    bunu KENDİSİ hesaplayıp görev metnine "bu sırayla oku" olarak yazıyor; asıl OKUMA yine agent'ın
+    kendi `read_file` çağrılarıyla (izin/jail/telemetri bedava, ADR'nin kazanım notu korunuyor).
+  - `resolveDistillModel(client, allowBulut)`: **--bulut verilmediyse `models.list`teki İLK yerel
+    modeli AÇIKÇA pinler** (agent.start'a `provider`/`model` olarak geçer) — router'ın "boşsa
+    bulut da seçebilir" belirsizliğine güvenmiyor, güçlü gizlilik garantisi. Yerel model yoksa hata
+    ("arşiv buluta gönderilmez... --bulut kullan"). `--bulut` verilirse hiç sormaz, router seçsin.
+  - `writeDistillDraft(result)`: `profileDraftFile`'a yazar; `profileFile`'a ASLA dokunmaz (ayrı
+    fonksiyon, testte doğrudan doğrulanıyor).
+  - `memoryDistillCommand`: yukarıdakileri bağlar + `agent.start {agentId:"damitici", cwd:<arşiv>,
+    conversational:false, ...modelOverride}` + `agent.run.completed/failed` dinler
+    (`agentRunCommand`'daki AYNI runId-korelasyon deseni).
+- **Test:** 264→**273** (definition +1 damıtıcı tanımı · YENİ `cli/commands/memory.test.ts` 8:
+  dosya sıralama 2, görev metni 2, model pinleme 3, **taslak-yazma güvenliği 1** — canlı profil
+  dosyasının bayt bayt DEĞİŞMEDİĞİni doğrudan doğrular). `pnpm build && pnpm test && pnpm lint`
+  temiz (40 dosya/273 test).
+  - **Test kapsamı notu (bilinçli karar):** DURUM'un önerdiği "FakeAdapter ile agent.start uçtan
+    uca" testi YERİNE, CLI-katmanındaki YENİ mantığı (dosya sıralama/model pinleme/taslak-yazma
+    güvenliği) doğrudan ve `ai`/`ai/test` bağımlılığı EKLEMEDEN test ettim — agent tool-loop'unun
+    kendisi zaten `engine.test.ts`/`daemon-agent.test.ts`'te kapsamlı test ediliyor, damıtıcı da
+    AYNI motoru/AYNI salt-okur araç setini (asistan ile ortak) kullanıyor; asıl YENİ riskli yüzey
+    CLI'nin kendi dosya G/Ç mantığıydı, onu hedefledim.
+- **Canlı doğrulama TAMAMLANDI** (yukarıdaki "Canlı bulgu #2" bölümü) — küçük sahte arşivle iki
+  koşu, ikinci koşu temiz taslak + değişmeyen canlı profil + GPU takılması yaşanmadı. Büyük/uzun
+  arşivlerde canlı bulgu #1'in (tekrar döngüsü) riski teorik olarak hâlâ açık — kullanıcı ilk
+  gerçek kullanımını yine küçük bir arşivle başlatıp GPU'yu izlemek isteyebilir.
+
+**ROADMAP kullanıcı önceliği #3 (uzun-dönem hafıza/arşiv) TAMAM** (M1+M2+M3 bitti, canlı doğrulandı).
+Sıradaki: kullanıcının GERÇEK bir arşivle deneyi (isteğe bağlı) + (isterse) yerel model genişletmesi
+(qwen2.5-coder:7b + qwen2.5vl:7b — bu oturumda konuşuldu, kuruluma henüz geçilmedi) + yeni bir
+ROADMAP önceliği seçimi.
+
+## Canlı bulgu (2026-07-10, Sonnet): profil enjeksiyonu kimlik karışıklığı yaratıyordu — DÜZELTİLDİ
+
+M2 sonrası kullanıcı profilini gerçekten doldurup TUI'de "asistan" persona'sına "ben kimim?"
+sorduğunda, qwen3:8b **profildeki "Adım X" ifadesini kendi kimliği sanıp** "Ben X, Symphony'nin
+destek görevlisiyim" diye cevapladı. Kök neden: enjekte edilen blok yalnız "## Kullanıcı profili
+(salt-okunur bağlam)" başlığı taşıyordu — modele bunun KONUŞTUĞU KİŞİYE ait olduğunu, KENDİ
+kimliği olmadığını açıkça söylemiyordu. Küçük/yerel modellerde (özellikle `temperature:0`) bu tür
+örtük ayrımlar kolayca kaybolabiliyor.
+- **Düzeltme:** `core/memory/profile.ts`e ORTAK bir SAF fonksiyon eklendi: `formatProfileContext
+  (profile)` — "SENİN kimliğin DEĞİL — yalnızca bağlam" + "KULLANICIYA aittir, sana değil" diye
+  açıkça belirtir. Hem `engine.ts` (agent yolu) hem `daemon.ts` (chat yolu, `runChat`'teki
+  `instructions`) artık BU TEK fonksiyonu kullanıyor — önceden iki dosyada ayrı ayrı yazılmış
+  aynı metin vardı, kayma riski taşıyordu.
+- **Test:** 263→**264** (profile.test +1: blok hem profil metnini içeriyor hem "SENİN kimliğin
+  DEĞİL"/"KULLANICIYA aittir" uyarılarını taşıyor). `pnpm build && pnpm test && pnpm lint` temiz.
+- **Canlı doğrulama BEKLİYOR:** **daemon restart gerekir** (core değişti). Restart sonrası aynı
+  "ben kimim?" sorusu tekrar denenmeli — model artık profildeki ismi KULLANICIya ait bağlam
+  olarak kullanmalı, kendi kimliği sanmamalı.
+- **Yan bulgu (henüz kök nedeni doğrulanmadı, izlenecek):** aynı canlı testte "10 kıta yaz" gibi
+  uzun/yapılandırılmış bir istek qwen3:8b'yi 15+ dakika GPU %96-98/86-87°C'de "yazıyor…" durumunda
+  TIKADI (donmuş değil — `ollama ps` aktif üretim gösteriyordu, ama bitmiyordu). Şüphe: küçük
+  yerel modelde `temperature:0` + uzun/tekrarlı-yapılı metin isteği → tekrar döngüsü (durma
+  token'ı hiç gelmiyor). `engine.ts`'in `streamText` çağrısında (satır ~361) `maxOutputTokens`
+  GİBİ bir güvenlik tavanı YOK — teorik olarak model context'i dolana kadar sürebilir. Kullanıcıya
+  Esc/Ctrl+C ile iptal tavsiye edildi. **Kesin kök neden BULUNMADI** (bu, ayrı bir olası dilim:
+  agent/chat streamText çağrılarına makul bir `maxOutputTokens` tavanı eklemek + tekrar-döngüsü
+  tespiti — kullanıcıyla konuşulup istenirse ayrı iş olarak açılmalı, şimdi kapsam dışı bırakıldı).
+
+## Öncelik #3 — Uzun-dönem hafıza: Dilim M2 (REST + CLI + TUI yüzeyi) BİTTİ (2026-07-10, Sonnet)
+
+M1'in enjeksiyon çekirdeği üzerine insan-arayüzü yüzeyi eklendi (Kural 1 sırası: PROTOKOL →
+shared → core → daemon → cli → TUI):
+- **PROTOKOL.md:** `GET/PUT /api/memory`'deki iki `(planlandı — M2)` işareti kaldırıldı (artık
+  uygulanmış durumu yansıtıyor).
+- **shared/rest.ts:** `MemoryGetResponseSchema {content, chars, truncated, updatedAt}` +
+  `MemoryPutRequestSchema {content}` (`index.ts`'teki `export * from "./protocol/rest.js"`
+  otomatik dışa açtı).
+- **core/memory/profile.ts:** İKİ yeni SAF fonksiyon (M1'in `loadProfile`'ından AYRI amaç):
+  `readProfileSnapshot` (REST GET — dosyanın TAM/kesilmemiş içeriği + `truncated` yalnız bir
+  UYARI bayrağı, `content`'i KESMEZ; `loadProfile` enjeksiyon için kesiyordu, karıştırma) +
+  `writeProfile` (REST PUT — üst dizini oluşturup TAM içeriği yazar). `core/index.ts`'e
+  `export * from "./memory/profile.js"` eklendi (TUI'nin `loadProfile`'ı doğrudan kullanması için).
+- **daemon.ts:** `GET /api/memory` (Bearer; `readProfileSnapshot(paths.profileFile)`) +
+  `PUT /api/memory` (şema doğrulanır → `writeProfile` → güncel snapshot döner). Agent araç
+  yüzeyinde bu uca giden yol YOK (ADR-013 yazma kısıtı korunuyor — yalnız REST).
+- **cli/client/daemon-client.ts:** `getMemory()` (mevcut `getHistory` REST yardımcısını kullanır)
+  + `putMemory(content)` (ayrı `fetch` — PUT gövdesi gerektiriyor).
+- **YENİ `cli/commands/memory.ts`:** `symphony memory` (içerik + karakter sayısı + `truncated`
+  uyarısı gösterir) · `symphony memory path` (dosya yolunu YAZAR — daemon'a bağlanmaz, kullanıcı
+  kendi editörüyle açsın diye). `index.ts`'e `memory [alt]` komutu kaydedildi.
+- **TUI karşılaması (`welcome.tsx`+`app.tsx`):** `Welcome`'a `memoryChars: number | null` prop'u;
+  dolu ise "🧠 profil aktif (N karakter)" satırı. `runTui()` REST'e gitmez — `loadProfile
+  (getSymphonyPaths().profileFile)` ile AYNI dosyayı motorun enjeksiyon kuralıyla (dosya yok/
+  boş/yalnız-iskelet→gizle) doğrudan okur; `profile.text.length` = gerçekten enjekte edilen
+  karakter sayısı (REST'in `chars`'ı FULL içerik olduğundan burada KULLANILMADI — kasıtlı ayrım).
+- **Test:** 255→**263** (daemon.test +1 REST roundtrip/401, daemon-client.test +1 getMemory/
+  putMemory roundtrip, welcome.test +1 satır görünürlüğü, profile.test +5 readProfileSnapshot/
+  writeProfile). `pnpm build && pnpm test && pnpm lint` temiz (39 dosya/263 test).
+- **Canlı doğrulama YAPILDI (2026-07-10, Sonnet + kullanıcı):** eski daemon zaten kapalıydı (port
+  7770 boş); `symphony status` taze build'i başlattı. `curl` ile gerçek daemon'a karşı:
+  `GET/PUT /api/memory` token'sız → 401 (ikisi de) · token'lı `GET` → scaffold (192 karakter) ·
+  `PUT` test içeriğiyle yaz → oku → değişiklik yansıdı · orijinal scaffold GERİ yazıldı
+  (kullanıcının gerçek profil dosyası test verisiyle kirletilmedi). `symphony memory` / `symphony
+  memory path` CLI komutları da aynı canlı daemon'a karşı doğrulandı.
+  **TUI satırı (🧠 profil aktif) KULLANICI TARAFINDAN GÖRSEL TEYİT EDİLDİ** (Notepad'le profil.md
+  dolduruldu, TUI yeniden başlatıldı, satır göründü — "kontrol ettim sorun yok"). **Tuzak notu:**
+  kullanıcı ilk denemede `symphony memory path`i TUI'nin ZATEN AÇIK olduğu aynı cmd penceresine
+  yazdı → komut kabuğa değil TUI'nin input kutusuna gitti ("bir şey olmadı" izlenimi verdi);
+  tek-seferlik CLI komutları (`memory path` gibi) AYRI/boşta bir terminalde çalıştırılmalı, TUI
+  kendi penceresini tam ekran/raw-mode ile kaplıyor. **Kapsam kararı (kullanıcı onayı):** masaüstü
+  (Tauri `desktop:dev`) panelinde profil göstergesi eklenmeyecek — bilinçli olarak TUI-only kaldı,
+  ek iş açılmadı.
+
+**Sıradaki:** 📋 Dilim M3 — arşiv damıtma (aşağıda ayrıntı; henüz başlanmadı).
 
 ## Öncelik #3 — Uzun-dönem hafıza: Dilim M1 (çekirdek enjeksiyon) BİTTİ (2026-07-09, Sonnet)
 
@@ -33,18 +398,7 @@ Tasarım ADR-013'te (`docs/kararlar/KARARLAR.md`, Fable). M1 uygulandı:
   isterse `~/.symphony/memory/profil.md`'yi doldurup **daemon restart** sonrası `symphony`
   ile bir sohbet/agent koşusu başlatarak deneyebilir.
 
-### 📋 Dilim M2 — yüzey (REST + CLI + TUI göstergesi) ← SIRADAKİ
-
-Kural 1 sırası: ÖNCE PROTOKOL.md'deki iki `(planlandı — M2)` işaretini kaldır → `shared/rest.ts`e
-`MemoryGetResponseSchema {content, chars, truncated, updatedAt}` + `MemoryPutRequestSchema
-{content}` → `daemon.ts`e `GET/PUT /api/memory` (Bearer; PUT → dosyaya yaz + iskelet değilse
-doğrudan kabul) → `cli/client/daemon-client.ts`e `getMemory/putMemory` → YENİ
-`cli/commands/memory.ts`: `symphony memory` (göster: içerik + karakter + truncated uyarısı),
-`symphony memory path` (dosya yolu — kullanıcı kendi editörüyle açar). TUI karşılamada tek
-satır: "🧠 profil aktif (N karakter)" (profil null ise gösterme). Test: REST auth'suz 401 ·
-GET/PUT roundtrip · CLI komut çıktısı.
-
-### 📋 Dilim M3 — arşiv damıtma (taslak üreten salt-okur agent; protokolsüz)
+### 📋 Dilim M3 — arşiv damıtma (taslak üreten salt-okur agent; protokolsüz) ← SIRADAKİ
 
 ADR-013 Karar 5. YENİ agent tanımı "damitici" (`definition.ts ensureDefaultAgent`e üçüncü
 varsayılan: araçlar read_file/glob/grep, provider/model BOŞ — router seçer). YENİ
@@ -61,7 +415,7 @@ Test: sahte arşiv dizini + FakeAdapter ile result→taslak dosyası yazılır, 
 Not: arşivin gerçek yolu/formatı kullanıcıdan gelecek — komut dizin alır, format varsaymaz
 (agent read_file/glob ile kendisi gezer).
 
-**Dilim sırası M1→M2→M3; her dilim sonrası `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.**
+**Dilim sırası M1→M2→M3 (M1✅ M2✅); her dilim sonrası `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.**
 
 ## Rapor2 §3 düzeltme paketi (2026-07-09, Sonnet): §3.1-§3.4 BİTTİ ve testli (244 test)
 

@@ -63,6 +63,8 @@ export const ActiveRunSchema = z
     task: z.string(),
     state: AgentRunStateSchema,
     model: z.string().optional(),
+    /** Faz 5 (ADR-014): koşu bir `run_agent` devretmesiyle başlatıldıysa ebeveynin runId'si. */
+    parentRunId: z.string().uuid().optional(),
   })
   .strip();
 export type ActiveRun = z.infer<typeof ActiveRunSchema>;

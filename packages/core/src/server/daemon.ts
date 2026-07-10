@@ -5,6 +5,7 @@ import { pino } from "pino";
 import {
   ChatStartPayloadSchema,
   DAEMON_HOST,
+  MemoryPutRequestSchema,
   PROTOCOL_VERSION,
   createMessage,
   parseMessage,
@@ -30,7 +31,13 @@ import { suggestModels } from "../router/router.js";
 import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent } from "../agent/definition.js";
 import { registerMcpServer } from "../agent/mcp.js";
-import { ensureProfileScaffold, loadProfile } from "../memory/profile.js";
+import {
+  ensureProfileScaffold,
+  formatProfileContext,
+  loadProfile,
+  readProfileSnapshot,
+  writeProfile,
+} from "../memory/profile.js";
 import { EventBus } from "./bus.js";
 import { DeltaBatcher } from "./delta-batcher.js";
 import { generateDaemonToken, loadExistingToken, persistDaemonToken } from "./token.js";
@@ -218,9 +225,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         ...(payload.options.maxTokens !== undefined
           ? { maxTokens: payload.options.maxTokens }
           : {}),
-        ...(profile !== null
-          ? { instructions: `## Kullanıcı profili (salt-okunur bağlam)\n${profile}` }
-          : {}),
+        ...(profile !== null ? { instructions: formatProfileContext(profile) } : {}),
         abortSignal: abort.signal,
       });
       let usageResult;
@@ -388,6 +393,22 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       });
     }
     return detail;
+  });
+
+  // Kullanıcı profili (ADR-013, Dilim M2). Agent araç yüzeyinde bu uca giden yol
+  // YOKTUR — yalnız insan arayüzü (CLI/masaüstü) çağırır.
+  app.get("/api/memory", async () => readProfileSnapshot(paths.profileFile));
+
+  app.put("/api/memory", async (request, reply) => {
+    const parsed = MemoryPutRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        code: "VALIDATION_PAYLOAD",
+        message: "memory.put şemasına uymuyor",
+        details: { issues: parsed.error.issues },
+      });
+    }
+    return writeProfile(paths.profileFile, parsed.data.content);
   });
 
   // ---- WebSocket ----

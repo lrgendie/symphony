@@ -16,6 +16,7 @@ export * from "./agent/permissions.js";
 export * from "./agent/definition.js";
 export * from "./agent/tools.js";
 export * from "./agent/engine.js";
+export * from "./memory/profile.js";
 export * from "./router/hardware.js";
 export * from "./router/router.js";
 export * from "./server/bus.js";
