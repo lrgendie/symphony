@@ -3,7 +3,87 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Sonnet — Dilim Z4 BİTTİ ve testli, 375 test)
+**Son güncelleme:** 2026-07-10 (Sonnet — Dilim Z5 BİTTİ + Canlı bulgu #4 DÜZELTİLDİ, 382 test — Faz 6 TAMAMEN kapandı)
+
+## Canlı bulgu #4 (2026-07-10, Sonnet): ui webview REST'e `fetch()`+Bearer ile erişemiyordu — CORS eksikti, DÜZELTİLDİ
+
+Kullanıcı `desktop:dev`'de Bağlam Haritası sekmesini açtı: **"daemon'a bağlantı yok"**. Daemon
+gerçekte ayaktaydı ve `curl` ile `/api/context-map` sorunsuz 200 dönüyordu — hata yalnız
+tarayıcı/webview kaynaklı `fetch()`'te çıkıyordu.
+
+**Kök neden:** Fastify sunucusunda `@fastify/cors` hiç YOKTU. Özel `authorization` header'ı
+taşıyan bir `fetch()` önce bir CORS **preflight** (`OPTIONS`) gönderir; bu istek token TAŞIMAZ —
+mevcut global Bearer-auth `onRequest` hook'u preflight'ı da 401'liyordu. Hook geçilse bile normal
+cevapta `Access-Control-Allow-Origin` YOK ise tarayıcı cevabı okumaz (bloklar). **Bu Z5'e özgü bir
+regresyon değildi** — `fetchRoadmap` (Dilim P2/P3) AYNI kalıbı kullanıyor ve muhtemelen baştan beri
+aynı şekilde kırıktı; fark edilmemesinin nedeni `RoadmapStrip`'in hata durumunda SESSİZCE hiçbir
+şey göstermemesi (`phases===null → return null`) — ContextMap ise hatayı GÖRÜNÜR bir mesajla
+gösterdiği için gizli kusur ilk kez ortaya çıktı. WS-akışlı her şey (Şef Paneli, model panosu,
+aktif koşular) etkilenmedi çünkü WebSocket el sıkışması CORS preflight'ına tabi DEĞİL.
+
+**Düzeltme:** `packages/core` → `@fastify/cors` eklendi (`docs/GEREKSINIMLER.md`'ye işlendi).
+`daemon.ts`'te `app.register(cors, {...})` — Bearer-auth hook'undan ÖNCE kayıtlı (Fastify
+`onRequest` hook'ları kayıt SIRASINA göre çalışır; CORS eklentisi preflight'ı auth'a hiç
+vardırmadan cevaplar). `origin: true` (isteğin origin'ini yansıtır) BİLİNÇLİ: gerçek güven sınırı
+zaten 256-bit token (yalnız Tauri/dev-token dosyadan okur, hiçbir sayfaya sızmaz) — CORS burada
+ek bir yetkilendirme katmanı değil, yalnız aynı-uygulamanın kendi webview'inin erişebilmesini
+sağlıyor; sabit bir origin listesi Tauri'nin platforma göre değişen origin'iyle (`tauri://…` /
+`https://tauri.localhost`) kırılgan olurdu.
+
+**Test:** 381→**382** (+1: `daemon.test.ts` — preflight `OPTIONS` 401 DEĞİL + `Access-Control-
+Allow-Origin` taşıyor; auth'lu `GET`+`Origin` cevabı da aynı header'ı taşıyor).
+`pnpm build && pnpm test && pnpm lint` temiz (48 dosya/382 test).
+
+**CANLI DOĞRULAMA TAMAMLANDI:** daemon eski kodla ayaktaydı → süreç sonlandırılıp yeniden
+başlatıldı → gerçek tarayıcı-tarzı `curl -X OPTIONS` (Origin + Access-Control-Request-Headers
+başlıklarıyla) **204** + `access-control-allow-origin` döndü (önce 401'di); auth'lu `GET`+`Origin`
+de aynı header'la **200** döndü. Kullanıcının `desktop:dev`'i yeniden açması/daemon'a yeniden
+bağlanması yeterli — masaüstü uygulamasını Bash'ten yeniden başlatamam.
+
+## Faz 6 — Dilim Z5 (masaüstü harita görünümü) BİTTİ (2026-07-10, Sonnet)
+
+ADR-016 Karar 6 (Görsel) + TASARIM.md §3 uygulandı. Protokol dokunulmadı (Z4'ün REST'i
+yeterliydi). **Faz 6 Zeka Katmanı (Z1-Z5) TAMAMEN kapandı.**
+- **`docs/GEREKSINIMLER.md`:** `d3-force` satırı işlendi (yalnız simülasyon; render kendi
+  SVG'imiz) → `ui` paketine `pnpm add d3-force` + `pnpm add -D @types/d3-force`.
+- **YENİ `ui/src/map/layout.ts`** (SAF, testli): `layoutContextMap(graph, width, height):
+  LayoutResult`. Başlangıç konumları DETERMİNİSTİK (indekse göre çember üstünde) — d3'ün
+  rastgelelik ayrıntılarına bağımlı değil, aynı girdi hep aynı yerleşimi üretir (testte
+  doğrulandı). d3-force YALNIZ `forceLink`/`forceManyBody`/`forceCenter`/`forceCollide` ile
+  konum hesaplar (300 tik, d3'ün kendi varsayılan "doğal" süresiyle AYNI), render bileşende SVG.
+  Eksik uçlu kenarlar (var olmayan düğüme referans) sessizce elenir.
+- **`ui/src/daemon/client.ts`:** `fetchContextMap(limit?)` + `fetchSessionDetail(sessionId)` —
+  `fetchRoadmap` ile BİREBİR aynı desen (bağlantı yok/ağ hatası/şema uyuşmazlığı → sessizce
+  `null`, throw etmez).
+- **YENİ `ui/src/map/ContextMap.tsx`:** `ui/src/scene/` DIŞINDA, dashboard'dan AYRI görünüm.
+  Düğüm rengi = TÜR (Z5 talimatının netleştirdiği karar): session=cyan, run=magenta (`.run-agent`
+  ile AYNI ton, mevcut sözleşme), project=violet (tesseract'taki "sinaps kapı düğümü" rolüyle
+  tutarlı, TASARIM §1 paleti). Kenarlar: `project` (belirgin) + `same_day` (zayıf, kesikli —
+  ADR'nin "zayıf kenar" tarifi). Tıkla→yan panel: run/project meta'dan ANINDA (ek istek YOK),
+  session `fetchSessionDetail` ile oturum dökümünü çeker (ADR-016 Karar 6 Görsel maddesi
+  birebir). **Bilinçli kapsam sınırı:** model-bazlı filtre/vurgulama EKLENMEDİ — ADR'nin "model =
+  görsel kanal" notu renk/filtre olarak iki olasılık bırakıyordu, Z5 talimatı somut olarak yalnız
+  "renk=tür" seçti; filtre gerçek ihtiyaç doğarsa ayrı küçük ek olur (Kural 7, dikey dilim).
+- **`App.tsx`:** `[view, setView] = useState<"dashboard"|"map">` — basit sekme (topbar sağında,
+  `view-tabs`). İzin kartları + LivingScene HER İKİ görünümde de görünür kalır (aksiyon
+  gerektiren/durum bildiren öğeler); dashboard panelleri (sağlayıcılar/model panosu/API
+  kapasitesi/aktif koşular/log) yalnız "Şef Paneli" sekmesinde, `ContextMap` yalnız "Bağlam
+  Haritası" sekmesinde. Sekme değişince bileşen unmount/remount olur → her açılışta taze veri
+  (`RoadmapStrip`/roadmap deseniyle aynı ruh: agresif polling yok, ekstra kod da yok).
+  `index.css`: `.map-*`/`.view-tab*` — mevcut palet/panel diliyle tutarlı.
+- **Test:** 375→**381** (+6: `map/layout.test.ts` YENİ — boş graf, sonlu x/y + alanların
+  değişmeden aktarımı, kenar uçlarının düğüm konumuyla eşleşmesi, eksik uçlu kenarın sessizce
+  elenmesi, İKİ AYRI çağrının BİREBİR aynı sonucu [determinizm], tek düğüm sınırı). Component
+  render testi YAZILMADI — ui paketi vitest ortamı `node` (jsdom yok), plan bunu zaten
+  öngörmüştü ("veri→görünüm dönüşümünün SAF kısmı" test edilir). `pnpm build && pnpm test &&
+  pnpm lint` temiz (48 dosya/381 test; `ui:build` prod paketi de sorunsuz derledi).
+- **Görsel doğrulama KULLANICIYA** (`desktop:dev`, Bash'ten görülemez): "Bağlam Haritası"
+  sekmesine geçip düğümlerin (session/run/project, üç ayrı renk) ve kenarların göründüğünü,
+  bir düğüme tıklayınca sağda detay panelinin açıldığını (session için oturum dökümü
+  yüklendiğini) görmek yeterli. Veri yoksa boş mesaj, bağlantı yoksa hata mesajı beklenir.
+
+**Sıradaki: yok — Faz 6 (Zeka Katmanı) tamamen kapandı.** Kullanıcıyla birlikte sıradaki fazın
+(ör. Faz 5 kalanları ya da Faz 7) önceliklendirilmesi bir sonraki oturumda kararlaştırılacak.
 
 ## Faz 6 — Dilim Z4 (bağlam haritası verisi) BİTTİ (2026-07-10, Sonnet)
 
@@ -278,7 +358,7 @@ Z2, `GET /api/report` Z3, `GET /api/context-map` Z4), ROADMAP Faz 6 maddeleri AD
 4. `daemon.ts`: endpoint (Bearer). Test: kurucu senaryoları (proje kenarı, aynı-gün zinciri,
    limit) + endpoint.
 
-### 📋 Dilim Z5 — masaüstü harita görünümü (d3-force) — SIRADAKİ
+### ✅ Dilim Z5 — masaüstü harita görünümü (d3-force) — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 1. `d3-force` ekle → **önce `docs/GEREKSINIMLER.md` envanterine işle** (yalnız simülasyon;
    render bizim SVG/Canvas). `ui` paketine bağımlılık.

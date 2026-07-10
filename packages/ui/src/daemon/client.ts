@@ -1,10 +1,14 @@
 import {
+  ContextMapResponseSchema,
   createMessage,
+  HistorySessionDetailResponseSchema,
   parseMessage,
   PROTOCOL_VERSION,
   RoadmapResponseSchema,
+  type ContextMapResponse,
   type EventPayload,
   type EventType,
+  type HistorySessionDetailResponse,
   type RoadmapPhase,
 } from "@symphony/shared";
 import { getBootstrap } from "../config";
@@ -164,4 +168,46 @@ export async function fetchRoadmap(dir: string): Promise<RoadmapPhase[] | null> 
   if (!res.ok) return null;
   const parsed = RoadmapResponseSchema.safeParse(await res.json());
   return parsed.success ? parsed.data.phases : null;
+}
+
+/**
+ * Bağlam haritası (ADR-016 Karar 6, Dilim Z5) — `fetchRoadmap` ile AYNI desen: istek başına
+ * REST, bağlantı yok/ağ hatası/şema uyuşmazlığı → sessizce `null` (throw etmez, görünüm boş
+ * mesajı gösterir). Sekme her açılışta yeniden çeker (agresif polling yok).
+ */
+export async function fetchContextMap(limit?: number): Promise<ContextMapResponse | null> {
+  const boot = getBootstrap();
+  if (boot === null) return null;
+  const query = limit !== undefined ? `?limit=${limit}` : "";
+  let res: Response;
+  try {
+    res = await fetch(`http://127.0.0.1:${boot.port}/api/context-map${query}`, {
+      headers: { authorization: `Bearer ${boot.token}` },
+    });
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+  const parsed = ContextMapResponseSchema.safeParse(await res.json());
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Bağlam haritasında bir "session" düğümüne tıklanınca tam döküm (ADR-016 Karar 6 Görsel:
+ * "koşu detayı meta'dan, oturum dökümü history REST'inden") — `fetchRoadmap` ile AYNI desen.
+ */
+export async function fetchSessionDetail(sessionId: string): Promise<HistorySessionDetailResponse | null> {
+  const boot = getBootstrap();
+  if (boot === null) return null;
+  let res: Response;
+  try {
+    res = await fetch(`http://127.0.0.1:${boot.port}/api/history/sessions/${sessionId}`, {
+      headers: { authorization: `Bearer ${boot.token}` },
+    });
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+  const parsed = HistorySessionDetailResponseSchema.safeParse(await res.json());
+  return parsed.success ? parsed.data : null;
 }

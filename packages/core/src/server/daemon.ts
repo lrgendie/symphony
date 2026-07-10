@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import { WebSocketServer, WebSocket } from "ws";
 import { pino } from "pino";
 import {
@@ -355,6 +356,22 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   // ---- REST ----
 
   const app = Fastify({ logger: false });
+
+  // CORS (2026-07-10 bulgusu — Dilim Z5): ui webview'i (vite dev origin'i / Tauri'nin kendi
+  // origin'i) `fetch()`'le REST'e Bearer header'ıyla istek atınca tarayıcı bir preflight (OPTIONS)
+  // gönderir; bu eklenti OLMADAN AUTH hook'u preflight'ı 401'ler (preflight token TAŞIMAZ) VE
+  // normal cevapta `Access-Control-Allow-Origin` yoksa tarayıcı cevabı zaten OKUMAZ. Sonuç:
+  // WS akan her şey çalışıyordu ama `fetchRoadmap`/`fetchContextMap` gibi REST-tabanlı istekler
+  // sessizce (roadmap) ya da görünür biçimde (bağlam haritası "daemon'a bağlantı yok") kırıktı.
+  // `origin: true` bilinçli: gerçek güven sınırı zaten 256-bit token (yalnız Tauri/dev-token
+  // dosyadan okur, hiçbir sayfaya sızdırılmaz) — CORS burada ek bir yetkilendirme katmanı değil,
+  // yalnız aynı-uygulamanın kendi webview'inin daemon'a erişebilmesini SAĞLAR. Kayıt SIRASI
+  // önemli: aşağıdaki Bearer-auth hook'undan ÖNCE olmalı ki preflight ona hiç varmadan cevaplansın.
+  await app.register(cors, {
+    origin: true,
+    methods: ["GET", "POST", "PUT", "OPTIONS"],
+    allowedHeaders: ["authorization", "content-type"],
+  });
 
   app.get("/api/health", async () => ({
     ok: true,

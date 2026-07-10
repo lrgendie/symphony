@@ -118,6 +118,29 @@ describe("symphonyd", () => {
     expect(res.status).toBe(401);
   });
 
+  it("CORS (2026-07-10 bulgusu, Dilim Z5): ui webview'inin preflight'ı 401'e TAKILMAZ + auth'lu cevap Access-Control-Allow-Origin taşır", async () => {
+    // Tarayıcı/webview, özel bir header'la (authorization) REST'e fetch atmadan ÖNCE preflight
+    // (OPTIONS) gönderir — bu istek token TAŞIMAZ. `@fastify/cors` bu isteği Bearer-auth
+    // hook'undan ÖNCE cevaplamalı, aksi halde her REST çağrısı tarayıcıda sessizce/görünür kırılır
+    // (bkz. ContextMap "daemon'a bağlantı yok" — kök neden buydu, RoadmapStrip'te sessizceydi).
+    const preflight = await fetch(`http://127.0.0.1:${daemon.port}/api/context-map`, {
+      method: "OPTIONS",
+      headers: {
+        origin: "http://localhost:5173",
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization",
+      },
+    });
+    expect(preflight.status).not.toBe(401);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
+
+    const authed = await fetch(`http://127.0.0.1:${daemon.port}/api/context-map`, {
+      headers: { authorization: `Bearer ${daemon.token}`, origin: "http://localhost:5173" },
+    });
+    expect(authed.status).toBe(200);
+    expect(authed.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
+  });
+
   it("yanlış token'lı hello reddedilir", async () => {
     const { reply, ws } = await roundTrip(
       createMessage("hello", {

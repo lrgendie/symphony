@@ -44,7 +44,9 @@ protokol WS/REST üzerinden konuşulur.
 - `constants.ts` — `PROTOCOL_VERSION`, `DAEMON_HOST`, varsayılan port 7770
 
 ### packages/core/src — daemon (symphonyd)
-- `server/daemon.ts` — Fastify+ws sunucu; TÜM istek işleyicileri buradaki switch'te
+- `server/daemon.ts` — Fastify+ws sunucu; TÜM istek işleyicileri buradaki switch'te. `@fastify/
+  cors` (Canlı bulgu #4, `origin:true`) Bearer-auth hook'undan ÖNCE kayıtlı — ui webview'inin
+  `fetch()`+Bearer REST istekleri CORS preflight'ına takılmasın diye; kayıt SIRASI bozulmamalı
 - `server/bus.ts` — EventBus: olaylar bağlı TÜM istemcilere yayınlanır (ADR-001)
 - `server/token.ts` — daemon token üretimi/yazımı (dinleme başarılı olmadan yazılmaz)
 - `server/delta-batcher.ts` — SAF, testli: `agent.delta`/`chat.delta` WS broadcast'ini anahtar
@@ -172,16 +174,20 @@ protokol WS/REST üzerinden konuşulur.
   da `import.meta.env` (tarayıcı dev, `dev:token` script'i .env.local'e yazar) kaynağından alır
 - `daemon/client.ts` — `DaemonConnection`: native WebSocket + `shared` şemaları; hello
   handshake → snapshot → yayın olaylarını store'a akıtır; bağlanınca `queryUsage()`
-  (`usage.query {groupBy:"model"}`); üstel geri çekilmeli yeniden bağlanma
+  (`usage.query {groupBy:"model"}`); üstel geri çekilmeli yeniden bağlanma. `fetchRoadmap`/
+  `fetchContextMap`/`fetchSessionDetail`: WS DIŞI, istek-başına REST (roadmap deseni — bağlantı
+  yok/hata/şema uyuşmazlığı → sessizce `null`, throw etmez)
 - `store.ts` — zustand; `handleEvent` olay tiplerini UI durumuna (providers/runs/log/pending +
   usage + `limits` + oturum cache sayaçları) çevirir. **WS→UI eşlemesinin TEK yeri**
   (testli: `store.test.ts`). Usage: `usage.query.ok` seed'ler, `usage.updated` girdiyi totals'la
   DEĞİŞTİRİR (çift saymaz) + cache biriktirir; `provider.limits` sağlayıcı başına son görüntü;
   `lastCompletedAt`/`lastErrorAt` = tesseract converge/flaş sinyalleri; `runStreams`
   (runId→metin, `agent.delta` biriktirir; araç başlayınca/koşu bitince/snapshot'ta temizlenir)
-- `App.tsx` — Şef Paneli: bağlantı + sağlayıcı sağlığı + **Model panosu** (token/maliyet/önbellek)
-  + **API kapasitesi** (rate-limit çubukları) + aktif koşular (altında `.run-stream` canlı agent
-  akış metni, dilim 2.1b) + izin kartları + canlı akış
+- `App.tsx` — `view` sekmesi (Dilim Z5: "Şef Paneli" ⇄ "Bağlam Haritası", topbar sağında) sarmalar:
+  Şef Paneli = bağlantı + sağlayıcı sağlığı + **Model panosu** (token/maliyet/önbellek) +
+  **API kapasitesi** (rate-limit çubukları) + aktif koşular (altında `.run-stream` canlı agent
+  akış metni, dilim 2.1b) + canlı akış; Bağlam Haritası = `map/ContextMap.tsx`. İzin kartları +
+  LivingScene HER İKİ sekmede de görünür (aksiyon/durum, sekmeye bağlı değil)
 - `scene/LivingScene.tsx` — İNCE KABUK: mood+vitals+converge sinyalini store'dan türetir,
   Canvas + mood HUD (sol-alt) + GPU HUD (sağ-üst) kurar; sahnenin kendisi TesseractScene'de
 - `scene/TesseractScene.tsx` — YAŞAYAN TESSERACT (dilim 8+8b, sinematik): ÜÇ kademeli küp
@@ -199,7 +205,14 @@ protokol WS/REST üzerinden konuşulur.
 - `scene/mood.ts` — SAF: sistem durumu → mood (offline>error>awaiting>executing>thinking>idle) +
   stil. `MoodStyle.activity` = GPU'dan bağımsız LLM sürücüsü (iç sinaps atım oranını sürer)
 - `scene/hardware-vitals.ts` — SAF: `deriveGpuVitals` (en yoğun GPU → load/heat/memPct). Testli
-- `index.css` — marka paleti (cyan/magenta/red, logo ile aynı); düz CSS
+- `map/layout.ts` — SAF, testli (ADR-016 Karar 6, Dilim Z5): `layoutContextMap(graph, width,
+  height)` — d3-force YALNIZ konum hesaplar (deterministik başlangıç: indekse göre çember),
+  render `map/ContextMap.tsx`'in SVG'si. `d3-force` bağımlılığı (GEREKSINIMLER.md'de işli)
+- `map/ContextMap.tsx` — Bağlam Haritası (Dilim Z5): dashboard'dan AYRI görünüm, `App.tsx`'teki
+  `view` sekme state'iyle açılır. Düğüm rengi=tür (session cyan/run magenta/project violet),
+  tıkla→yan panel (run/project meta'dan anında, session `fetchSessionDetail` ile REST)
+- `index.css` — marka paleti (cyan/magenta/red, logo ile aynı); düz CSS; `.map-*`/`.view-tab*`
+  (Dilim Z5)
 
 ### packages/desktop/src-tauri — Tauri 2 kabuğu (Rust) — `ui/dist`'i sarar
 - `src/lib.rs` — `run()`: token'ı `~/.symphony/daemon.token`'dan + portu config'ten okur,

@@ -84,6 +84,32 @@ body {
   gap: 12px;
 }
 
+/* ---- Görünüm sekmeleri (Faz 6 Dilim Z5: Şef Paneli ⇄ Bağlam Haritası) ---- */
+.view-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+}
+.view-tab {
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+.view-tab-active {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--line) inset;
+}
+
 /* ---- Durum / rozetler ---- */
 .status,
 .chip {
@@ -720,4 +746,139 @@ body {
 }
 .tone-warn .log-text {
   color: var(--amber);
+}
+
+/* ---- Bağlam Haritası (ADR-016 Karar 6, Dilim Z5, TASARIM.md §3) ---- */
+/* Düğüm rengi = tür: session=cyan (sohbet), run=magenta (`.run-agent` ile AYNI ton, mevcut
+   dashboard sözleşmesi), project=violet (tesseract'taki "sinaps kapı düğümü" rolüyle tutarlı). */
+.map-view {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+.map-canvas {
+  flex: 1;
+  min-width: 0;
+  height: 560px;
+  background: #05060a;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.map-edge {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.map-edge-project {
+  stroke: rgba(167, 139, 250, 0.35);
+}
+.map-edge-same_day {
+  stroke: rgba(139, 144, 163, 0.25);
+  stroke-dasharray: 2 3;
+}
+.map-node {
+  cursor: pointer;
+  stroke: var(--bg);
+  stroke-width: 1.5;
+}
+.map-node-session {
+  fill: var(--cyan);
+}
+.map-node-run {
+  fill: var(--magenta);
+}
+.map-node-project {
+  fill: var(--violet);
+}
+.map-node:hover {
+  filter: brightness(1.3);
+}
+.map-node-selected {
+  stroke: var(--text);
+  stroke-width: 2.5;
+}
+
+.map-detail {
+  flex-shrink: 0;
+  width: 260px;
+  padding: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow-y: auto;
+}
+.map-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.map-kind-tag {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+.map-kind-session {
+  color: var(--cyan);
+}
+.map-kind-run {
+  color: var(--magenta);
+}
+.map-kind-project {
+  color: var(--violet);
+}
+.map-detail-close {
+  font: inherit;
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+}
+.map-detail-title {
+  margin: 8px 0 2px;
+  font-size: 13px;
+  word-break: break-word;
+}
+.map-detail-at {
+  margin: 0 0 8px;
+  font-size: 11px;
+}
+.map-meta {
+  margin: 0 0 8px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  font-size: 11px;
+}
+.map-meta dt {
+  color: var(--dim);
+}
+.map-meta dd {
+  margin: 0;
+  overflow-wrap: break-word;
+}
+.map-meta-path {
+  font-size: 10px;
+}
+.map-transcript {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0 0;
+  border-top: 1px dashed var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.map-transcript-row p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.map-transcript-user {
+  color: var(--text);
+}
+.map-transcript-assistant p {
+  color: var(--cyan);
 }

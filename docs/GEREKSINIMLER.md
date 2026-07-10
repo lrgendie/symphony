@@ -31,6 +31,7 @@
 | Kütüphane | Amaç |
 |---|---|
 | `fastify` | REST API sunucusu (localhost) |
+| `@fastify/cors` | ui webview'inin (vite dev / Tauri origin'i) REST'e `fetch()`'le erişebilmesi — 2026-07-10 bulgusu, Dilim Z5: eklenti olmadan tarayıcı CORS preflight'ı Bearer-auth hook'una takılıp REST istekleri sessizce/görünür kırılıyordu |
 | `ws` | WebSocket olay yayını (canlı arayüzlerin can damarı) |
 | `ai` (Vercel AI SDK) | Tüm modelleri tek arayüzle konuşturan soyutlama |
 | `@ai-sdk/anthropic` | Claude adapter'ı |
@@ -62,6 +63,7 @@
 | `@symphony/shared` | Protokol şemaları (saf zod, tarayıcı-güvenli) — UI'nin daemon'la konuştuğu tek sözleşme ✅ |
 | `three` + `@react-three/fiber` + `@react-three/drei` | "Living Interface" parçacık küresi (WebGL) — sonraki dilim |
 | `tailwindcss` | Stil sistemi — şimdilik düz CSS (index.css, marka paleti); gerekirse eklenir |
+| `d3-force` | Bağlam Haritası (ADR-016 Karar 6, Dilim Z5): YALNIZ kuvvet-yönlü 2D yerleşim simülasyonu — render kendi SVG'imiz (TASARIM.md §3 kararı: tesseract sahnesine bindirilmez, ayrı görünüm) |
 
 ### `packages/desktop` — masaüstü kabuk
 | Kütüphane | Amaç |

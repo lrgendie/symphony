@@ -8,6 +8,7 @@ import {
   type Usage,
 } from "@symphony/shared";
 import { daemon, fetchRoadmap, type PermissionDecision } from "./daemon/client";
+import { ContextMap } from "./map/ContextMap";
 import { LivingScene } from "./scene/LivingScene";
 import {
   groupRunsByProject,
@@ -29,6 +30,9 @@ export function App(): React.JSX.Element {
     daemon.start();
     return () => daemon.stop();
   }, []);
+
+  // Faz 6 Dilim Z5 (ADR-016 Karar 6): dashboard'dan AYRI görünüm, basit sekme/geçiş state'i.
+  const [view, setView] = useState<"dashboard" | "map">("dashboard");
 
   const status = useStore((s) => s.status);
   const error = useStore((s) => s.error);
@@ -57,6 +61,22 @@ export function App(): React.JSX.Element {
           <span className="wordmark">SYMPHONY</span>
         </div>
         <div className="meta">
+          <nav className="view-tabs">
+            <button
+              type="button"
+              className={`view-tab ${view === "dashboard" ? "view-tab-active" : ""}`}
+              onClick={() => setView("dashboard")}
+            >
+              Şef Paneli
+            </button>
+            <button
+              type="button"
+              className={`view-tab ${view === "map" ? "view-tab-active" : ""}`}
+              onClick={() => setView("map")}
+            >
+              Bağlam Haritası
+            </button>
+          </nav>
           <StatusPill status={status} />
           <span className="dim">
             {daemonVersion !== null ? `daemon ${daemonVersion} · ` : ""}protokol v{PROTOCOL_VERSION}
@@ -79,74 +99,83 @@ export function App(): React.JSX.Element {
         </section>
       )}
 
-      <section className="panel">
-        <h2>Sağlayıcılar</h2>
-        <div className="chips">
-          {providers.length === 0 && <span className="dim">—</span>}
-          {providers.map((p) => (
-            <span key={p.provider} className={`chip chip-${p.status}`}>
-              <span className="dot" /> {p.provider}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel">
-        <h2>
-          Model panosu <span className="count">${fmtCost(usageTotals.costUsd)}</span>
-        </h2>
-        <ModelBoard
-          totals={usageTotals}
-          byModel={usageByModel}
-          sessionTokens={sessionTokens}
-          sessionCostUsd={sessionCostUsd}
-          cacheReadTokens={sessionCacheReadTokens}
-          cacheCreationTokens={sessionCacheCreationTokens}
-        />
-      </section>
-
-      {Object.keys(limits).length > 0 && (
-        <section className="panel">
-          <h2>API kapasitesi</h2>
-          <div className="limits">
-            {Object.values(limits)
-              .sort((a, b) => a.provider.localeCompare(b.provider))
-              .map((l) => (
-                <LimitGauge key={l.provider} limits={l} />
-              ))}
-          </div>
+      {view === "map" ? (
+        <section className="panel panel-grow">
+          <h2>Bağlam Haritası</h2>
+          <ContextMap />
         </section>
-      )}
-
-      <section className="panel">
-        <h2>
-          Aktif koşular <span className="count">{runs.length}</span>
-        </h2>
-        {runs.length === 0 ? (
-          <p className="dim empty">Şu an çalışan agent yok. Terminalde `symphony agent …` başlat.</p>
-        ) : (
-          // Faz 4 (ADR-015): "proje" = cwd'nin kendisi, kayıt defteri YOK — grup adı basename.
-          groupRunsByProject(runs).map((group) => (
-            <div key={group.cwd} className="project-group">
-              <div className="project-head">
-                <span className="project-name">{group.name}</span>
-                <span className="dim project-path">{group.cwd}</span>
-              </div>
-              <RoadmapStrip cwd={group.cwd} />
-              <ul className="runs">
-                {group.runs.map((r) => (
-                  <RunRow key={r.runId} run={r} stream={runStreams[r.runId]} file={runFiles[r.runId]} />
-                ))}
-              </ul>
+      ) : (
+        <>
+          <section className="panel">
+            <h2>Sağlayıcılar</h2>
+            <div className="chips">
+              {providers.length === 0 && <span className="dim">—</span>}
+              {providers.map((p) => (
+                <span key={p.provider} className={`chip chip-${p.status}`}>
+                  <span className="dot" /> {p.provider}
+                </span>
+              ))}
             </div>
-          ))
-        )}
-      </section>
+          </section>
 
-      <section className="panel panel-grow">
-        <h2>Canlı akış</h2>
-        <LogFeed items={log} />
-      </section>
+          <section className="panel">
+            <h2>
+              Model panosu <span className="count">${fmtCost(usageTotals.costUsd)}</span>
+            </h2>
+            <ModelBoard
+              totals={usageTotals}
+              byModel={usageByModel}
+              sessionTokens={sessionTokens}
+              sessionCostUsd={sessionCostUsd}
+              cacheReadTokens={sessionCacheReadTokens}
+              cacheCreationTokens={sessionCacheCreationTokens}
+            />
+          </section>
+
+          {Object.keys(limits).length > 0 && (
+            <section className="panel">
+              <h2>API kapasitesi</h2>
+              <div className="limits">
+                {Object.values(limits)
+                  .sort((a, b) => a.provider.localeCompare(b.provider))
+                  .map((l) => (
+                    <LimitGauge key={l.provider} limits={l} />
+                  ))}
+              </div>
+            </section>
+          )}
+
+          <section className="panel">
+            <h2>
+              Aktif koşular <span className="count">{runs.length}</span>
+            </h2>
+            {runs.length === 0 ? (
+              <p className="dim empty">Şu an çalışan agent yok. Terminalde `symphony agent …` başlat.</p>
+            ) : (
+              // Faz 4 (ADR-015): "proje" = cwd'nin kendisi, kayıt defteri YOK — grup adı basename.
+              groupRunsByProject(runs).map((group) => (
+                <div key={group.cwd} className="project-group">
+                  <div className="project-head">
+                    <span className="project-name">{group.name}</span>
+                    <span className="dim project-path">{group.cwd}</span>
+                  </div>
+                  <RoadmapStrip cwd={group.cwd} />
+                  <ul className="runs">
+                    {group.runs.map((r) => (
+                      <RunRow key={r.runId} run={r} stream={runStreams[r.runId]} file={runFiles[r.runId]} />
+                    ))}
+                  </ul>
+                </div>
+              ))
+            )}
+          </section>
+
+          <section className="panel panel-grow">
+            <h2>Canlı akış</h2>
+            <LogFeed items={log} />
+          </section>
+        </>
+      )}
     </div>
   );
 }
