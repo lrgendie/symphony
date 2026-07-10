@@ -86,7 +86,7 @@ symphony/
 - **Çıktı:** `pnpm build` ve `pnpm test` çalışan iskelet repo.
 - **Kabul testi:** Temiz klonda `pnpm install && pnpm build && pnpm test` sıfır hatayla geçer; CI yeşil; `shared`'daki en az bir zod şemasının doğrulama testi vardır.
 
-### Faz 1 — Çekirdek: Provider Katmanı (2–3. hafta) — devam ediyor
+### Faz 1 — Çekirdek: Provider Katmanı (2–3. hafta) ✅ 2026-07-03
 - [x] `symphonyd` süreci: localhost REST + WebSocket sunucusu (Fastify + ws) — token auth, hello akışı, snapshot ✅ 2026-07-03
 - [x] Vercel AI SDK ile provider adapter'ları: **Anthropic ✅ (canlı) → Ollama ✅ (canlı: qwen3:8b, $0) → OpenAI ✅ (kod; canlı test anahtar bekliyor) → Google ✅ (kod; canlı test anahtar bekliyor)** 2026-07-03
 - [x] API anahtarı yönetimi (keychain: @napi-rs/keyring + env yedek) + provider sağlık kontrolü ✅ 2026-07-03
@@ -242,11 +242,12 @@ symphony/
 - **Çıktı:** Tek komutla çok-agent'lı iş akışı, dashboard'da orkestra gibi izlenir. ✅ masaüstünde çocuk koşular `↳` ile ebeveyninin altında girintili (O3, `orderRunsForDisplay`)
 - **Kabul testi:** İki agent aynı anda farklı görevlerde koşup dashboard'da ayrı izlenebiliyor ✅ (O1-f + O3 store testleri) · şef agent bir görevi en az iki alt göreve bölüp farklı modellere dağıtıyor ✅ (O1-a testi + BUGÜNKÜ canlı `symphony agent sef` koşusu, Claude Haiku→qwen3:8b karışımı) · agent tanımı dosyası yeni makineye kopyalanınca aynen çalışıyor ✅ (Faz 3'ten beri, davranış değişmedi).
 
-### Faz 6 — Zeka Katmanı: Seni Tanıyan Symphony (15–17. hafta) — tasarım ✅ ADR-016 (2026-07-10), dilimler Z1→Z5
-- [ ] **Model yönlendirici v2 (öğrenen):** Faz 1'den beri biriken kayıtlardan (hangi model hangi görevde başarılı/hızlı/ucuz oldu) skor tablosu; "bu işi kime verelim?" sorusuna veriyle cevap
-      *(ADR-016 Karar 1/2 — fiziksel tablo değil sorgu-zamanı agregasyon; kural iskeleti + skor düzeltmesi; Dilim Z1)*
-- [ ] Soru sorulduğunda otomatik öneri: "Bu görev için yerel Qwen yeterli (ücretsiz, ~3sn) — ama en yüksek kalite istersen Claude öneririm (~$0.04)" gibi şeffaf gerekçeli seçenek sunma
-      *(Z1 kapsamında: kanıt `reason` metninde — "son N koşuda %X başarı, ort. Ys/tur, $Z/koşu")*
+### Faz 6 — Zeka Katmanı: Seni Tanıyan Symphony (15–17. hafta) — tasarım ✅ ADR-016 (2026-07-10); Z1-Z3 ✅ 2026-07-10, Z4-Z5 kaldı
+- [x] **Model yönlendirici v2 (öğrenen):** Faz 1'den beri biriken kayıtlardan (hangi model hangi görevde başarılı/hızlı/ucuz oldu) skor tablosu; "bu işi kime verelim?" sorusuna veriyle cevap
+      **✅ Dilim Z1 (2026-07-10):** sorgu-zamanı agregasyon (fiziksel tablo yok) + kural iskeleti/skor
+      düzeltmesi karışımı (`router.ts`↔`stats.ts`), `MIN_SAMPLES=3` altında v1 birebir korunur.
+- [x] Soru sorulduğunda otomatik öneri: "Bu görev için yerel Qwen yeterli (ücretsiz, ~3sn) — ama en yüksek kalite istersen Claude öneririm (~$0.04)" gibi şeffaf gerekçeli seçenek sunma
+      **✅ Dilim Z1 kapsamında:** kanıt `reason` metninde — "son N koşuda %X başarı, ort. Ys/tur, $Z/koşu".
 - [x] **Kullanıcı hafızası:** tercihlerini, kod stilini, sık kullandığın projeleri ve düzeltmelerini hatırlayan kalıcı profil (`~/.symphony/memory/`) — her agent bu bağlamla başlar.
       **✅ ADR-013 (M1-M3, 2026-07-09/10) ile ERKEN KARŞILANDI** — profil enjeksiyonu (chat+agent,
       tek kaynak), REST GET/PUT, `symphony memory show|path|distill`, damıtıcı agent. Kabul
@@ -258,11 +259,14 @@ symphony/
       agent'ın kendi güvenini/bağlamını kendi genişletmesi riskli (yanlış/yanıltıcı bir
       "gerçek" yazarsa sonraki TÜM agent'ları etkiler). *(ADR-013 Karar 2 bunu uyguladı.)*
 - [ ] **Kendini geliştirme döngüsü:** haftalık kullanım özeti üzerinden sistemin kendi yönlendirme kurallarını ve agent tanımlarını güncelleme önerisi (onayınla uygulanır)
-      *(ADR-016 Karar 5 — v1: deterministik `symphony report` + eşik-tabanlı öneri cümleleri,
-      Dilim Z3; ZAMANLANMIŞ üretim ve tanım-güncelleme önerisi Faz 8'in döngüsüne bağlandı)*
-- [ ] Geri bildirim sinyalleri: cevabı beğenme/düzeltme, agent çıktısını geri alma gibi olaylar skorlara işlenir
-      *(ADR-016 Karar 4 — `feedback.submit` + TUI tek tuş + `symphony feedback`, Dilim Z2;
-      "çıktıyı geri alma" sinyali HARİÇ: geri-alma mekanizması yok, vekil sinyal yanıltıcı olur)*
+      **🔶 KISMEN — Dilim Z3 (2026-07-10):** deterministik `symphony report` + eşik-tabanlı öneri
+      cümleleri BİTTİ (temel — "haftalık kullanım özeti" kabul maddesi karşılandı). KALAN:
+      ZAMANLANMIŞ üretim ve agent TANIM-GÜNCELLEME önerisi — bilinçle Faz 8'in kendini-geliştirme
+      döngüsüne bağlandı, madde bu yüzden `[ ]` kalıyor (yalnız alt-kümesi bitti).
+- [x] Geri bildirim sinyalleri: cevabı beğenme/düzeltme, agent çıktısını geri alma gibi olaylar skorlara işlenir
+      **✅ Dilim Z2 (2026-07-10):** `feedback.submit` + TUI tek tuş + `symphony feedback`, router v2
+      skorunu gerçekten etkiliyor (canlı doğrulandı). "Çıktıyı geri alma" sinyali BİLİNÇLE HARİÇ —
+      geri-alma mekanizması yok, vekil sinyal yanıltıcı olurdu (ADR-016 Karar 4, reddedilen kısım).
 - [ ] **Bağlam Haritası (yaşayan bilgi grafiği):** kullanıcının konuşmaları/projeleri/geliştirmeleri
       zamanla *compound* eden, keşfedilebilir bir nöral graf olarak görünür (Obsidian graph benzeri,
       zamansal). Verisi çoğunlukla MEVCUT SQLite'ta (sessions/messages/agent_runs). Görsel yön:
