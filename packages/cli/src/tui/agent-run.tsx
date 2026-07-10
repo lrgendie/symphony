@@ -59,6 +59,8 @@ export function AgentRun(props: {
   const [log, setLog] = useState<ToolLogEntry[]>([]);
   const [pending, setPending] = useState<PendingPermission | null>(null);
   const [outcome, setOutcome] = useState<RunOutcome | null>(null);
+  // Geri bildirim (ADR-016 Karar 4, Dilim Z2): koşu bitince tek tuşluk OPSİYONEL işaretleme.
+  const [feedbackSent, setFeedbackSent] = useState<"good" | "bad" | null>(null);
   const [streaming, setStreaming] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
   // Konuşmalı koşu (ADR-012, dilim 2.2): tur bitince awaiting_user → devam girişi.
@@ -217,6 +219,7 @@ export function AgentRun(props: {
     setSayDraft("");
     setExchange([]);
     setSessionId(undefined);
+    setFeedbackSent(null);
   };
 
   /** awaiting_user'daki koşuya sonraki kullanıcı turunu gönderir (agent.say, aynı runId). */
@@ -261,6 +264,15 @@ export function AgentRun(props: {
     if (outcome !== null) {
       if (key.return) resetForNewTask();
       else if (key.escape) props.onExit();
+      // Geri bildirim (ADR-016 Karar 4): g/k tek seferlik, akışı ASLA bloklamaz — hata
+      // sessizce yutulur (öneri süsü gibi, koşunun sonucu zaten kesinleşmiş).
+      else if (feedbackSent === null && runId !== null && (input === "g" || input === "k")) {
+        const verdict = input === "g" ? "good" : "bad";
+        setFeedbackSent(verdict);
+        void props.client
+          .request("feedback.submit", { subject: "run", id: runId, verdict })
+          .catch(() => undefined);
+      }
       return;
     }
     if (key.escape && runId !== null) {
@@ -351,6 +363,13 @@ export function AgentRun(props: {
       {outcome !== null && (
         <>
           <Outcome outcome={outcome} />
+          {runId !== null && (
+            <Text dimColor>
+              {feedbackSent === null
+                ? "bu koşu iyi miydi? (g/k, geç: başka tuş)"
+                : `✓ geri bildirim kaydedildi (${feedbackSent === "good" ? "iyi" : "kötü"})`}
+            </Text>
+          )}
           <Text dimColor>↵ Enter: yeni görev · Esc: ana menü</Text>
         </>
       )}

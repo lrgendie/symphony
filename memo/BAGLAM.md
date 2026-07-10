@@ -64,7 +64,12 @@ protokol WS/REST üzerinden konuşulur.
   feedbackRows)` → `(provider,model,taskKind)` başına `RouterStats` Map; `scoreOf` (Laplace +
   açık geri bildirim 2× ağır), `hasEnoughEvidence` (`MIN_SAMPLES=3`). `router.ts` ile RUNTIME
   döngüsel import (yalnız fonksiyon gövdelerinde kullanılır — modül değerlendirmede değil, ESM'de
-  güvenli, build ile doğrulandı)
+  güvenli, build ile doğrulandı). `classifyFeedbackRows` (Dilim Z3): `feedbackSince` satırını
+  `FeedbackRow[]`e çevirir — `daemon.ts buildRouterStats` VE `report/build.ts` TEK kaynaktan
+- `report/build.ts` — SAF, testli (ADR-016 Karar 5, Dilim Z3): `buildReport(input):
+  ReportResponse` — `routerStats`'tan `successTable` + eşik-tabanlı `findings` (yalnız kanıtlı
+  VE `score<0.5`). Sıfır adapter/fetch erişimi (lokallik kabul maddesi) — girdi daemon'da
+  ÇOKTAN çekilmiş veridir
 - `router/hardware.ts` — nvidia-smi: `detectVramGb` (router) + `sampleGpus`/`parseGpuCsv` (saf,
   testli) → GPU vitalleri (util/VRAM/ısı). Daemon 2sn poll → `hardware.updated` yayını
   (`DaemonOptions.sampleHardware`, testte kapalı)
@@ -73,8 +78,12 @@ protokol WS/REST üzerinden konuşulur.
   CHECK'ine awaiting_user — tablo yeniden kurma; migrate() göç sırasında FK'yı kapatır).
   `saveConversation` (2.3b): tam mesaj listesini sessions/messages'a REPLACE eder — chat.start
   (`saveChatTurn` buna delege) VE konuşmalı-agent (engine) aynı kalıcılık modelini paylaşır.
-  `runsSince`/`turnStatsSince` (ADR-016 Karar 1, Dilim Z1): router v2'nin ham veri kaynağı —
-  göç YOK, sorgu-zamanı okuma
+  `runsSince`/`turnStatsSince`/`feedbackSince` (ADR-016 Karar 1, Dilim Z1) opsiyonel `untilMs`
+  alır (Dilim Z3: router rolling-window için hep `undefined`, rapor kendi `[from,to]`'u verir)
+  — göç YOK, sorgu-zamanı okuma. v5 (ADR-016 Karar 4, Dilim Z2): `feedback` tablosu (açık
+  iyi/kötü işaretleme) — `recordFeedback`/`recentFeedback`/`feedbackSince` (yalnız
+  `subject_kind='run'`, `agent_runs` JOIN'i ile provider/model/task taşır). Z3: YENİ
+  `feedbackSummarySince` (TÜM subject_kind) + `topErrorCodesSince` (rapor için)
 - `memory/profile.ts` — SAF, testli, `core/index.ts`'ten dışa açık (ADR-013): `loadProfile`/
   `ensureProfileScaffold` (M1, enjeksiyon — kesiyor/scaffold'u null sayıyor) AYRI amaçlı
   `readProfileSnapshot`/`writeProfile` (M2, REST GET/PUT — TAM içerik, `truncated` yalnız uyarı)
@@ -118,8 +127,14 @@ protokol WS/REST üzerinden konuşulur.
 - `index.ts` — commander kayıtları; argümansız → TUI
 - `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`) +
   REST geçmiş sorguları (`listSessions`/`sessionDetail` — Bearer token, shared şema, 404→null)
-- `commands/` — status/models/watch/history/memory/agents/agent/add (her komut tek dosya)
+- `commands/` — status/models/watch/history/memory/agents/agent/feedback/report/add (her komut tek dosya)
   - `add.ts` — `symphony add <npm-paketi>`: eklenti sistemi, `mcp.addServer` isteği atar
+  - `feedback.ts` (ADR-016 Karar 4, Dilim Z2) — `symphony feedback <runId> iyi|kötü [-n not]`:
+    Türkçe değeri wire'a çevirir, `feedback.submit` atar. **Tam UUID gerekir** (history'nin
+    aksine id ön eki DESTEKLENMEZ — prefix için "agent runs listesi" ucu gerekirdi, kapsam dışı)
+  - `report.ts` (ADR-016 Karar 5, Dilim Z3) — `symphony report [--from --to]`: REST
+    `getReport`'tan çeker, SAF `formatReportMarkdown` ile Türkçe markdown'a çevirir (LLM YOK,
+    deterministik), stdout + `~/.symphony/reports/<isoWeekLabel>.md`'ye yazar
   - `memory.ts` — commander alt-komut grubu (`index.ts`'te `memory show|path|distill`, show
     varsayılan): `memoryShowCommand` (REST `getMemory`) · `memoryPathCommand` (dosya yolu YAZAR,
     daemon'a bağlanmaz) · `memoryDistillCommand` (M3, ADR-013 Karar 5) — arşiv dizinini

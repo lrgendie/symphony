@@ -22,9 +22,13 @@ const SSE_CHUNKS = [
 
 // ADR-013 testi: sağlayıcıya GERÇEKTEN giden istek gövdesini denetlemek için son body'yi tutar.
 let lastOllamaRequestBody = "";
+// ADR-016 Karar 5 lokallik testi: rapor üretiminin HİÇBİR provider isteği yapmadığını kanıtlamak
+// için gerçek sahte sunucuya düşen istek sayısını sayar (önce/sonra farkı 0 olmalı).
+let ollamaRequestCount = 0;
 
 beforeAll(async () => {
   fakeOllama = createServer((req, res) => {
+    ollamaRequestCount += 1;
     if (req.method === "GET" && req.url === "/api/tags") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ models: [{ name: "qwen3:8b" }] }));
@@ -234,6 +238,97 @@ describe("symphonyd", () => {
     ws.close();
   });
 
+  it("feedback.submit: bilinmeyen koşu id'si VALIDATION_FEEDBACK_SUBJECT_UNKNOWN döner", async () => {
+    const { reply, ws } = await roundTrip(
+      createMessage("hello", {
+        token: daemon.token,
+        client: "cli",
+        protocolVersion: PROTOCOL_VERSION,
+      }),
+    );
+    expect(reply.type).toBe("hello.ok");
+
+    const err = await request(
+      ws,
+      createMessage("feedback.submit", {
+        subject: "run",
+        id: crypto.randomUUID(),
+        verdict: "bad",
+      }),
+    );
+    expect(err.type).toBe("error");
+    expect((err.payload as { code: string }).code).toBe("VALIDATION_FEEDBACK_SUBJECT_UNKNOWN");
+    ws.close();
+  });
+
+  it("feedback.submit (ADR-016 Karar 4, Dilim Z2): geçerli koşuya işaret KABUL edilir ve router v2 skorunu DÜŞÜRÜR", async () => {
+    // "general" tür bilerek seçildi (kod/hızlı/uzun-bağlam anahtar kelimesi yok) — üstteki
+    // testlerin "quick" kovasıyla (ollama, qwen3:8b) ÇAKIŞMASIN diye ayrı bir (provider, model,
+    // tür) kovası kullanıyoruz.
+    const task = "bana bir öneri sun";
+    const db = new DataStore(join(testHome, "data", "symphony.db"));
+    const runIds: string[] = [];
+    try {
+      for (let i = 0; i < 3; i++) {
+        const id = crypto.randomUUID();
+        db.createAgentRun({
+          id,
+          agentId: "asistan",
+          task,
+          provider: "ollama",
+          model: "qwen3:8b",
+          cwd: testHome,
+          startedAt: Date.now(),
+        });
+        db.finishAgentRun(id, {
+          state: "completed",
+          result: "tamam",
+          errorCode: null,
+          usage: { inputTokens: 10, outputTokens: 5, costUsd: 0 },
+          steps: 1,
+        });
+        runIds.push(id);
+      }
+    } finally {
+      db.close();
+    }
+
+    const { reply, ws } = await roundTrip(
+      createMessage("hello", {
+        token: daemon.token,
+        client: "cli",
+        protocolVersion: PROTOCOL_VERSION,
+      }),
+    );
+    expect(reply.type).toBe("hello.ok");
+
+    // Geri bildirim ÖNCESİ: 3/3 başarı → yüksek skor, düşük-güven notu YOK.
+    const before = await request(ws, createMessage("router.suggest", { task }));
+    const beforeSuggestions = (
+      before.payload as { suggestions: Array<{ provider: string; model: string; reason: string }> }
+    ).suggestions;
+    const beforeLocal = beforeSuggestions.find((s) => s.provider === "ollama" && s.model === "qwen3:8b");
+    expect(beforeLocal?.reason).toContain("3 koşuda %100 başarı");
+    expect(beforeLocal?.reason).not.toContain("düşük güven skoru");
+
+    for (const runId of runIds) {
+      const ack = await request(
+        ws,
+        createMessage("feedback.submit", { subject: "run", id: runId, verdict: "bad" }),
+      );
+      expect(ack.type).toBe("feedback.submit.ok");
+    }
+
+    // Geri bildirim SONRASI: aynı 3 başarılı koşuya rağmen 3 "kötü" işareti skoru <0.5'e düşürür.
+    const after = await request(ws, createMessage("router.suggest", { task }));
+    const afterSuggestions = (
+      after.payload as { suggestions: Array<{ provider: string; model: string; reason: string }> }
+    ).suggestions;
+    const afterLocal = afterSuggestions.find((s) => s.provider === "ollama" && s.model === "qwen3:8b");
+    expect(afterLocal?.reason).toContain("düşük güven skoru");
+    ws.close();
+  });
+
   it("tek-kopya kilidi: ikinci kopya reddedilir ve token dosyası EZİLMEZ", async () => {
     const tokenFile = join(testHome, "daemon.token");
     const tokenBefore = readFileSync(tokenFile, "utf8");
@@ -393,6 +488,67 @@ describe("symphonyd", () => {
       { title: "Faz 1 — Devam", done: 0, total: 1, state: "todo" },
     ]);
     rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  it("kullanım raporu (ADR-016 Karar 5, Dilim Z3): auth'suz 401 · geçersiz aralık 400 · varsayılan pencere (7 gün) + gerçek veri 200 · HİÇBİR provider isteği yapmaz", async () => {
+    const unauthorized = await fetch(`http://127.0.0.1:${daemon.port}/api/report`);
+    expect(unauthorized.status).toBe(401);
+
+    const auth = { headers: { authorization: `Bearer ${daemon.token}` } };
+
+    const invalidRange = await fetch(
+      `http://127.0.0.1:${daemon.port}/api/report?from=2000&to=1000`,
+      auth,
+    );
+    expect(invalidRange.status).toBe(400);
+
+    // Rapor penceresine kesin düşecek bir koşu + geri bildirim + telemetri hatası seed et.
+    const db = new DataStore(join(testHome, "data", "symphony.db"));
+    const runId = crypto.randomUUID();
+    try {
+      db.createAgentRun({
+        id: runId,
+        agentId: "asistan",
+        task: "rapor testi görevi",
+        provider: "ollama",
+        model: "qwen3:8b",
+        cwd: testHome,
+        startedAt: Date.now(),
+      });
+      db.finishAgentRun(runId, {
+        state: "completed",
+        result: "tamam",
+        errorCode: null,
+        usage: { inputTokens: 10, outputTokens: 5, costUsd: 0 },
+        steps: 1,
+      });
+      db.recordFeedback({ subjectKind: "run", subjectId: runId, verdict: "good" });
+      db.recordTelemetry({ scope: "agent", code: "AGENT_TOOL_LOOP", message: "rapor test hatası" });
+    } finally {
+      db.close();
+    }
+
+    // LOKALLİK (kabul maddesi): rapor üretimi ÖNCESİ/SONRASI sahte sağlayıcıya düşen istek
+    // sayısı DEĞİŞMEMELİ — rapor yolu hiçbir adapter/fetch çağırmaz.
+    const before = ollamaRequestCount;
+    const res = await fetch(`http://127.0.0.1:${daemon.port}/api/report`, auth);
+    expect(res.status).toBe(200);
+    expect(ollamaRequestCount).toBe(before);
+
+    const body = (await res.json()) as {
+      from: number;
+      to: number;
+      totals: { inputTokens: number };
+      feedback: { good: number; bad: number };
+      topErrors: Array<{ code: string; count: number }>;
+      successTable: Array<{ provider: string; model: string; taskKind: string; runs: number }>;
+    };
+    expect(body.to - body.from).toBe(7 * 24 * 60 * 60 * 1000); // vars. son 7 gün
+    expect(body.feedback.good).toBeGreaterThanOrEqual(1);
+    expect(body.topErrors.some((e) => e.code === "AGENT_TOOL_LOOP")).toBe(true);
+    expect(
+      body.successTable.some((r) => r.provider === "ollama" && r.model === "qwen3:8b" && r.runs >= 1),
+    ).toBe(true);
   });
 
   it("başarısız sohbet SQLite'a istek kaydı + telemetri düşürür; usage.query cevaplar", async () => {

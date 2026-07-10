@@ -102,6 +102,20 @@ export const UsageQueryPayloadSchema = z
   })
   .strip();
 
+/**
+ * Açık kullanıcı geri bildirimi (ADR-016 Karar 4): router v2 skorlarını besler. `subject`/`verdict`
+ * wire değerleridir (tanımlayıcı → İngilizce, ADR notu); `id` koşuysa `agent_runs.id`, sohbetse
+ * `sessions.id` — daemon doğrular, yoksa `VALIDATION_FEEDBACK_SUBJECT_UNKNOWN`.
+ */
+export const FeedbackSubmitPayloadSchema = z
+  .object({
+    subject: z.enum(["run", "chat"]),
+    id: z.string().uuid(),
+    verdict: z.enum(["good", "bad"]),
+    note: z.string().min(1).optional(),
+  })
+  .strip();
+
 export const REQUEST_PAYLOAD_SCHEMAS = {
   hello: HelloPayloadSchema,
   "state.sync": StateSyncPayloadSchema,
@@ -117,6 +131,7 @@ export const REQUEST_PAYLOAD_SCHEMAS = {
   "router.suggest": RouterSuggestPayloadSchema,
   "usage.query": UsageQueryPayloadSchema,
   "mcp.addServer": McpAddServerPayloadSchema,
+  "feedback.submit": FeedbackSubmitPayloadSchema,
 } as const;
 
 export type RequestType = keyof typeof REQUEST_PAYLOAD_SCHEMAS;

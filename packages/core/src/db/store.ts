@@ -136,6 +136,21 @@ const MIGRATIONS: readonly string[] = [
   ALTER TABLE agent_runs_v4 RENAME TO agent_runs;
   CREATE INDEX idx_agent_runs_started_at ON agent_runs (started_at);
   `,
+  // v5 — açık geri bildirim (ADR-016 Karar 4, Dilim Z2): router v2 skorlarını besler.
+  // subject_id HETEROJEN referans (subject_kind='run' → agent_runs.id, 'chat' → sessions.id) —
+  // tek bir FK hedefi olamaz; doğrulama daemon katmanında (VALIDATION_FEEDBACK_SUBJECT_UNKNOWN).
+  `
+  CREATE TABLE feedback (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    at           INTEGER NOT NULL,
+    subject_kind TEXT NOT NULL CHECK (subject_kind IN ('run', 'chat')),
+    subject_id   TEXT NOT NULL,
+    verdict      TEXT NOT NULL CHECK (verdict IN ('good', 'bad')),
+    note         TEXT
+  );
+  CREATE INDEX idx_feedback_at ON feedback (at);
+  CREATE INDEX idx_feedback_subject ON feedback (subject_kind, subject_id);
+  `,
 ];
 
 export type RequestStatus = "ok" | "error" | "cancelled";
@@ -608,6 +623,11 @@ export class DataStore {
     return result.changes;
   }
 
+  /** Bir koşu id'si `agent_runs`'ta var mı (ADR-016 Karar 4: feedback.submit doğrulaması). */
+  agentRunExists(id: string): boolean {
+    return this.db.prepare(`SELECT 1 FROM agent_runs WHERE id = ?`).get(id) !== undefined;
+  }
+
   /** Son koşular (yeniden eskiye) — CLI listesi ve testler için. */
   recentAgentRuns(limit = 50): AgentRunRow[] {
     return this.db
@@ -618,15 +638,18 @@ export class DataStore {
   /**
    * Router v2 (ADR-016 Karar 1): tamamlanmış koşuların ham listesi — görev türü sınıflandırması
    * ÇAĞIRAN TARAFTA (router/stats.ts) yapılır, burada yalnız veri çekilir. `cancelled` koşular
-   * BİLİNÇLE dışarıda (kullanıcı vazgeçti — ne başarı ne başarısızlık kanıtıdır).
+   * BİLİNÇLE dışarıda (kullanıcı vazgeçti — ne başarı ne başarısızlık kanıtıdır). `untilMs`
+   * (ADR-016 Karar 5, Dilim Z3): rapor bir `[from,to]` ARALIĞI ister — router'ın kendi rolling-
+   * window kullanımı (`daemon.ts buildRouterStats`) üst sınır vermez (her zaman "şimdi"ye kadar).
    */
-  runsSince(sinceMs: number): RouterRunRow[] {
+  runsSince(sinceMs: number, untilMs?: number): RouterRunRow[] {
+    const upper = untilMs !== undefined ? "AND started_at <= ?" : "";
     const rows = this.db
       .prepare(
         `SELECT task, provider, model, state, cost_usd
-         FROM agent_runs WHERE started_at >= ? AND state IN ('completed', 'failed')`,
+         FROM agent_runs WHERE started_at >= ? ${upper} AND state IN ('completed', 'failed')`,
       )
-      .all(sinceMs) as Array<{
+      .all(...(untilMs !== undefined ? [sinceMs, untilMs] : [sinceMs])) as Array<{
       task: string;
       provider: string;
       model: string;
@@ -645,16 +668,17 @@ export class DataStore {
   /**
    * Router v2 (ADR-016 Karar 1): sağlayıcı+model başına ortalama tur süresi. `requests.duration_ms`
    * KULLANILIR — `agent_runs`'ın toplam süresi insan beklemesini (awaiting_permission/awaiting_user)
-   * içerir, model hızını ÖLÇMEZ; `requests` yalnız model turlarını kapsar.
+   * içerir, model hızını ÖLÇMEZ; `requests` yalnız model turlarını kapsar. `untilMs`: bkz. `runsSince`.
    */
-  turnStatsSince(sinceMs: number): RouterTurnStatsRow[] {
+  turnStatsSince(sinceMs: number, untilMs?: number): RouterTurnStatsRow[] {
+    const upper = untilMs !== undefined ? "AND started_at <= ?" : "";
     const rows = this.db
       .prepare(
         `SELECT provider, model, AVG(duration_ms) AS avg_duration_ms, COUNT(*) AS turns
-         FROM requests WHERE started_at >= ? AND status = 'ok'
+         FROM requests WHERE started_at >= ? ${upper} AND status = 'ok'
          GROUP BY provider, model`,
       )
-      .all(sinceMs) as Array<{
+      .all(...(untilMs !== undefined ? [sinceMs, untilMs] : [sinceMs])) as Array<{
       provider: string;
       model: string;
       avg_duration_ms: number;
@@ -668,9 +692,136 @@ export class DataStore {
     }));
   }
 
+  /** Açık kullanıcı geri bildirimi (ADR-016 Karar 4, Dilim Z2). */
+  recordFeedback(record: FeedbackRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO feedback (at, subject_kind, subject_id, verdict, note)
+         VALUES (@at, @subjectKind, @subjectId, @verdict, @note)`,
+      )
+      .run({
+        at: Date.now(),
+        subjectKind: record.subjectKind,
+        subjectId: record.subjectId,
+        verdict: record.verdict,
+        note: record.note ?? null,
+      });
+  }
+
+  /** Son geri bildirimler (yeniden eskiye) — CLI/testler için. */
+  recentFeedback(limit = 50): FeedbackEntry[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM feedback ORDER BY at DESC, id DESC LIMIT ?`)
+      .all(limit) as Array<{
+      id: number;
+      at: number;
+      subject_kind: string;
+      subject_id: string;
+      verdict: string;
+      note: string | null;
+    }>;
+    return rows.map((row) => ({
+      id: row.id,
+      at: row.at,
+      subjectKind: row.subject_kind as "run" | "chat",
+      subjectId: row.subject_id,
+      verdict: row.verdict as "good" | "bad",
+      note: row.note,
+    }));
+  }
+
+  /**
+   * Router v2 (ADR-016 Karar 1/4): yalnız `subject_kind='run'` geri bildirimi döner — koşunun
+   * `agent_runs` satırıyla JOIN edilip (provider, model, task) taşınır, `classifyTask` ÇAĞIRAN
+   * TARAFTA (`router/stats.ts` `classifyFeedbackRows`) uygulanır (runsSince ile AYNI desen).
+   * Sohbet geri bildirimi (subject_kind='chat') router skoruna KATILMAZ — sessions'ta görev-türü
+   * sınıflaması için karşılık gelen bir metin yok. `untilMs`: bkz. `runsSince`.
+   */
+  feedbackSince(sinceMs: number, untilMs?: number): RouterFeedbackRow[] {
+    const upper = untilMs !== undefined ? "AND f.at <= ?" : "";
+    const rows = this.db
+      .prepare(
+        `SELECT f.verdict AS verdict, r.provider AS provider, r.model AS model, r.task AS task
+         FROM feedback f JOIN agent_runs r ON f.subject_id = r.id
+         WHERE f.subject_kind = 'run' AND f.at >= ? ${upper}`,
+      )
+      .all(...(untilMs !== undefined ? [sinceMs, untilMs] : [sinceMs])) as Array<{
+      verdict: string;
+      provider: string;
+      model: string;
+      task: string;
+    }>;
+    return rows.map((row) => ({
+      provider: row.provider,
+      model: row.model,
+      task: row.task,
+      verdict: row.verdict as "good" | "bad",
+    }));
+  }
+
+  /**
+   * Rapor (ADR-016 Karar 5, Dilim Z3): TÜM geri bildirim özeti (run+chat, router'ın aksine
+   * sınırlanmaz) — kaç koşu/sohbet "iyi"/"kötü" işaretlendi.
+   */
+  feedbackSummarySince(sinceMs: number, untilMs?: number): { good: number; bad: number } {
+    const upper = untilMs !== undefined ? "AND at <= ?" : "";
+    const row = this.db
+      .prepare(
+        `SELECT
+           SUM(CASE WHEN verdict = 'good' THEN 1 ELSE 0 END) AS good,
+           SUM(CASE WHEN verdict = 'bad' THEN 1 ELSE 0 END) AS bad
+         FROM feedback WHERE at >= ? ${upper}`,
+      )
+      .get(...(untilMs !== undefined ? [sinceMs, untilMs] : [sinceMs])) as {
+      good: number | null;
+      bad: number | null;
+    };
+    return { good: row.good ?? 0, bad: row.bad ?? 0 };
+  }
+
+  /** Rapor (ADR-016 Karar 5, Dilim Z3): en sık hata kodları (yeniden en aza). */
+  topErrorCodesSince(sinceMs: number, untilMs?: number, limit = 10): Array<{ code: string; count: number }> {
+    const upper = untilMs !== undefined ? "AND at <= ?" : "";
+    const rows = this.db
+      .prepare(
+        `SELECT code, COUNT(*) AS count FROM telemetry WHERE at >= ? ${upper}
+         GROUP BY code ORDER BY count DESC, code LIMIT ?`,
+      )
+      .all(...(untilMs !== undefined ? [sinceMs, untilMs, limit] : [sinceMs, limit])) as Array<{
+      code: string;
+      count: number;
+    }>;
+    return rows;
+  }
+
   close(): void {
     this.db.close();
   }
+}
+
+export interface FeedbackRecord {
+  subjectKind: "run" | "chat";
+  subjectId: string;
+  verdict: "good" | "bad";
+  note?: string;
+}
+
+export interface FeedbackEntry {
+  id: number;
+  /** epoch ms */
+  at: number;
+  subjectKind: "run" | "chat";
+  subjectId: string;
+  verdict: "good" | "bad";
+  note: string | null;
+}
+
+/** `feedbackSince` satırı — router/stats.ts girdisi (`classifyTask` çağıran tarafta uygulanır). */
+export interface RouterFeedbackRow {
+  provider: string;
+  model: string;
+  task: string;
+  verdict: "good" | "bad";
 }
 
 /** `runsSince` satırı — router/stats.ts girdisi. */

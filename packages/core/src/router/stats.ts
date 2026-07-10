@@ -1,4 +1,4 @@
-import type { RouterRunRow, RouterTurnStatsRow } from "../db/store.js";
+import type { RouterFeedbackRow, RouterRunRow, RouterTurnStatsRow } from "../db/store.js";
 import { classifyTask, type TaskKind } from "./router.js";
 
 /**
@@ -107,4 +107,20 @@ export function scoreOf(entry: RouterStatsEntry): number {
 /** `runs >= MIN_SAMPLES` değilse kanıt YOK sayılır (soğuk başlangıç garantisi). */
 export function hasEnoughEvidence(entry: RouterStatsEntry): boolean {
   return entry.runs >= MIN_SAMPLES;
+}
+
+/**
+ * `store.feedbackSince`'in ham (provider, model, task) satırlarını `computeRouterStats`'ın
+ * beklediği `FeedbackRow[]`e çevirir (`classifyTask` burada, TEK yerde uygulanır). Hem
+ * `daemon.ts buildRouterStats` (Dilim Z2) hem `report/build.ts` (Dilim Z3, ADR-016 Karar 5
+ * "ikinci gerçek üretme" yasağı) BU fonksiyonu kullanır — sınıflandırma mantığı iki yerde
+ * tekrarlanmaz.
+ */
+export function classifyFeedbackRows(rows: RouterFeedbackRow[]): FeedbackRow[] {
+  return rows.map((row) => ({
+    provider: row.provider,
+    model: row.model,
+    taskKind: classifyTask(row.task),
+    verdict: row.verdict,
+  }));
 }

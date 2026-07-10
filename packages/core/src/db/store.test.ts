@@ -228,7 +228,7 @@ describe("DataStore", () => {
       provider?: string;
       model?: string;
       costUsd?: number;
-    }): void {
+    }): string {
       const id = crypto.randomUUID();
       store.createAgentRun({
         id,
@@ -246,6 +246,7 @@ describe("DataStore", () => {
         usage: { inputTokens: 10, outputTokens: 5, costUsd: overrides.costUsd ?? 0 },
         steps: 1,
       });
+      return id;
     }
 
     it("runsSince: yalnız completed/failed döner, cancelled HARİÇ tutulur", () => {
@@ -280,6 +281,70 @@ describe("DataStore", () => {
       const rows = store.turnStatsSince(0);
       const row = rows.find((r) => r.provider === "anthropic" && r.model === "claude-opus-4-8");
       expect(row).toMatchObject({ turns: 2, avgDurationMs: 2000 });
+    });
+
+    it("agentRunExists: var olan id true, uydurma id false döner", () => {
+      openStore();
+      const id = finishRun({ state: "completed", startedAt: 1_000 });
+      expect(store.agentRunExists(id)).toBe(true);
+      expect(store.agentRunExists("yok-boyle-id")).toBe(false);
+    });
+  });
+
+  describe("geri bildirim (ADR-016 Karar 4, göç v5)", () => {
+    it("recordFeedback yazar, recentFeedback yeniden-eskiye okur (note opsiyonel)", () => {
+      openStore();
+      store.recordFeedback({ subjectKind: "run", subjectId: "r1", verdict: "good", note: "hızlıydı" });
+      store.recordFeedback({ subjectKind: "chat", subjectId: "s1", verdict: "bad" });
+
+      const rows = store.recentFeedback();
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toMatchObject({ subjectKind: "chat", subjectId: "s1", verdict: "bad", note: null });
+      expect(rows[1]).toMatchObject({
+        subjectKind: "run",
+        subjectId: "r1",
+        verdict: "good",
+        note: "hızlıydı",
+      });
+    });
+
+    it("feedbackSince: yalnız subject_kind='run' döner, agent_runs ile JOIN edip provider/model/task taşır — 'chat' geri bildirimi HARİÇ", () => {
+      openStore();
+      const runId = crypto.randomUUID();
+      store.createAgentRun({
+        id: runId,
+        agentId: "coder",
+        task: "şu kodu düzelt",
+        provider: "ollama",
+        model: "qwen3:8b",
+        cwd: dir,
+        startedAt: 1_000,
+      });
+      store.recordFeedback({ subjectKind: "run", subjectId: runId, verdict: "bad" });
+      store.recordFeedback({ subjectKind: "chat", subjectId: "yok-boyle-oturum", verdict: "good" });
+
+      const rows = store.feedbackSince(0);
+      expect(rows).toEqual([
+        { provider: "ollama", model: "qwen3:8b", task: "şu kodu düzelt", verdict: "bad" },
+      ]);
+    });
+
+    it("feedbackSince: sinceMs'ten ÖNCEki geri bildirimi dışarıda bırakmaz için `at` şimdi yazılır — zaman filtresi ileri tarihte boş döner", () => {
+      openStore();
+      const runId = crypto.randomUUID();
+      store.createAgentRun({
+        id: runId,
+        agentId: "coder",
+        task: "özet çıkar",
+        provider: "anthropic",
+        model: "claude-haiku-4-5",
+        cwd: dir,
+        startedAt: 1_000,
+      });
+      store.recordFeedback({ subjectKind: "run", subjectId: runId, verdict: "good" });
+
+      expect(store.feedbackSince(0)).toHaveLength(1);
+      expect(store.feedbackSince(Date.now() + 60_000)).toHaveLength(0);
     });
   });
 });

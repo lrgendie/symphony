@@ -12,12 +12,14 @@ import {
   MemoryGetResponseSchema,
   parseMessage,
   PROTOCOL_VERSION,
+  ReportResponseSchema,
   type EventPayload,
   type EventType,
   type HistorySessionDetailResponse,
   type HistorySessionSummary,
   type MemoryGetResponse,
   type REQUEST_PAYLOAD_SCHEMAS,
+  type ReportResponse,
   type RequestType,
   type Snapshot,
   type Usage,
@@ -347,6 +349,18 @@ export class DaemonClient {
   async getMemory(): Promise<MemoryGetResponse> {
     const raw = await this.getHistory("/api/memory");
     return MemoryGetResponseSchema.parse(raw);
+  }
+
+  // ---- REST kullanım raporu (PROTOKOL §1.1, ADR-016 Karar 5 — Dilim Z3) ----
+
+  /** Deterministik kullanım raporu. `from`/`to` verilmezse daemon varsayılanı (son 7 gün) kullanılır. */
+  async getReport(from?: number, to?: number): Promise<ReportResponse> {
+    const params = new URLSearchParams();
+    if (from !== undefined) params.set("from", String(from));
+    if (to !== undefined) params.set("to", String(to));
+    const query = params.toString();
+    const raw = await this.getHistory(`/api/report${query.length > 0 ? `?${query}` : ""}`);
+    return ReportResponseSchema.parse(raw);
   }
 
   /** Profilin TAM içeriğini değiştirir — yalnız insan arayüzünden çağrılır. */

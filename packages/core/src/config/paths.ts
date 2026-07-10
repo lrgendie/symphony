@@ -28,6 +28,8 @@ export interface SymphonyPaths {
   mcpServersFile: string;
   /** Faz 4: CLI'nin başlattığı masaüstü sürecinin PID'si — yeniden başlatmayı önler. */
   desktopPidFile: string;
+  /** ADR-016 Karar 5 (Dilim Z3): `symphony report`ün yazdığı Türkçe markdown raporları. */
+  reportsDir: string;
 }
 
 export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPaths {
@@ -46,13 +48,21 @@ export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPath
     permissionsFile: join(home, "permissions.json"),
     mcpServersFile: join(home, "mcp-servers.json"),
     desktopPidFile: join(home, "desktop.pid"),
+    reportsDir: join(home, "reports"),
   };
 }
 
 /** Dizin ağacını (yalnız dizinleri) oluşturur; dosyalar sahipleri tarafından yazılır. */
 export function ensureSymphonyHome(home: string = getSymphonyHome()): SymphonyPaths {
   const paths = getSymphonyPaths(home);
-  for (const dir of [paths.home, paths.agentsDir, paths.memoryDir, paths.dataDir, paths.logsDir]) {
+  for (const dir of [
+    paths.home,
+    paths.agentsDir,
+    paths.memoryDir,
+    paths.dataDir,
+    paths.logsDir,
+    paths.reportsDir,
+  ]) {
     mkdirSync(dir, { recursive: true });
   }
   return paths;

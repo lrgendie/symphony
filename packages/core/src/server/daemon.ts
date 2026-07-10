@@ -30,7 +30,13 @@ import type { ProviderAdapter } from "../providers/types.js";
 import { DataStore } from "../db/store.js";
 import { detectVramGb, sampleGpus } from "../router/hardware.js";
 import { suggestModels } from "../router/router.js";
-import { computeRouterStats, STATS_WINDOW_DAYS, type RouterStats } from "../router/stats.js";
+import {
+  classifyFeedbackRows,
+  computeRouterStats,
+  STATS_WINDOW_DAYS,
+  type RouterStats,
+} from "../router/stats.js";
+import { buildReport } from "../report/build.js";
 import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent } from "../agent/definition.js";
 import { registerMcpServer } from "../agent/mcp.js";
@@ -164,14 +170,16 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   }
 
   /**
-   * Router v2 (ADR-016 Karar 1/2): mevcut tablolardan sorgu-zamanı skor agregasyonu — fiziksel
+   * Router v2 (ADR-016 Karar 1/2/4): mevcut tablolardan sorgu-zamanı skor agregasyonu — fiziksel
    * skor tablosu yok. `router.suggest` işleyicisi VE `pickModel` (agent motoru) AYNI fonksiyonu
    * çağırır ki iki yol aynı kanıta göre aynı kararı versin (SPEC §1 "boşsa router seçer" ilkesiyle
-   * tutarlılık). Feedback tablosu Dilim Z2'de gelir — burada bilinçle hep `[]`.
+   * tutarlılık). Rolling window — üst sınır YOK (her zaman "şimdi"ye kadar); rapor (Z3) kendi
+   * `[from,to]` aralığı için AYNI `computeRouterStats`'ı ayrı çağırır (ikinci gerçek üretilmez).
    */
   function buildRouterStats(): RouterStats {
     const sinceMs = Date.now() - STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000;
-    return computeRouterStats(store.runsSince(sinceMs), store.turnStatsSince(sinceMs), []);
+    const feedback = classifyFeedbackRows(store.feedbackSince(sinceMs));
+    return computeRouterStats(store.runsSince(sinceMs), store.turnStatsSince(sinceMs), feedback);
   }
 
   async function providerStatuses(): Promise<ProviderHealth[]> {
@@ -447,6 +455,35 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     return { phases: parseRoadmap(readFileSync(file, "utf8")) };
   });
 
+  // Kullanım raporu (ADR-016 Karar 5, Dilim Z3): deterministik agregasyon, LLM YOK. `from`/`to`
+  // verilmezse son 7 gün. model×görev-türü tablosu router v2 (Z1) ile AYNI computeRouterStats'ı
+  // AYRI bir [from,to] aralığıyla çağırır — ikinci gerçek üretilmez.
+  app.get("/api/report", async (request, reply) => {
+    const query = request.query as { from?: string; to?: string };
+    const to = query.to !== undefined ? Number(query.to) : Date.now();
+    const from = query.from !== undefined ? Number(query.from) : to - 7 * 24 * 60 * 60 * 1000;
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) {
+      return reply.code(400).send({
+        code: "VALIDATION_REPORT_RANGE_INVALID",
+        message: "from/to epoch ms olmalı ve from <= to sağlanmalı",
+      });
+    }
+    const routerStats = computeRouterStats(
+      store.runsSince(from, to),
+      store.turnStatsSince(from, to),
+      classifyFeedbackRows(store.feedbackSince(from, to)),
+    );
+    return buildReport({
+      from,
+      to,
+      usageByModel: store.usageQuery({ from, to, groupBy: "model" }),
+      usageByDay: store.usageQuery({ from, to, groupBy: "day" }),
+      routerStats,
+      topErrors: store.topErrorCodesSince(from, to),
+      feedback: store.feedbackSummarySince(from, to),
+    });
+  });
+
   // ---- WebSocket ----
 
   const wss = new WebSocketServer({ noServer: true });
@@ -656,6 +693,31 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             } catch (error) {
               sendError(toErrorPayload(error), message.id);
             }
+            return;
+          }
+          case "feedback.submit": {
+            const payload = message.payload as RequestPayload<"feedback.submit">;
+            const exists =
+              payload.subject === "run"
+                ? store.agentRunExists(payload.id)
+                : store.sessionDetail(payload.id) !== null;
+            if (!exists) {
+              sendError(
+                {
+                  code: "VALIDATION_FEEDBACK_SUBJECT_UNKNOWN",
+                  message: `Bilinmeyen ${payload.subject === "run" ? "koşu" : "oturum"} id'si: ${payload.id}`,
+                },
+                message.id,
+              );
+              return;
+            }
+            store.recordFeedback({
+              subjectKind: payload.subject,
+              subjectId: payload.id,
+              verdict: payload.verdict,
+              ...(payload.note !== undefined ? { note: payload.note } : {}),
+            });
+            bus.sendTo(ws, "feedback.submit.ok", {}, message.id);
             return;
           }
           default: {

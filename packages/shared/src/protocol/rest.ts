@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ChatMessageSchema } from "./common.js";
+import { ChatMessageSchema, UsageSchema } from "./common.js";
 
 /**
  * REST geçmiş uçlarının cevap şemaları (PROTOKOL.md §1.1).
@@ -80,3 +80,61 @@ export type RoadmapPhase = z.infer<typeof RoadmapPhaseSchema>;
 
 export const RoadmapResponseSchema = z.object({ phases: z.array(RoadmapPhaseSchema) }).strip();
 export type RoadmapResponse = z.infer<typeof RoadmapResponseSchema>;
+
+/**
+ * Kullanım raporu (ADR-016 Karar 5, Dilim Z3): deterministik agregasyon, LLM YOK — bu uçtan
+ * hiçbir provider çağrısı yapılmaz (kabul maddesi, `report/build.test.ts`'te doğrulanır).
+ */
+export const ReportUsageRowSchema = z
+  .object({
+    key: z.string(),
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    costUsd: z.number().nonnegative(),
+  })
+  .strip();
+export type ReportUsageRow = z.infer<typeof ReportUsageRowSchema>;
+
+/** Model×görev-türü başarı satırı — router v2'nin (ADR-016 Karar 1) AYNI kaynağından türetilir. */
+export const ReportSuccessRowSchema = z
+  .object({
+    provider: z.string().min(1),
+    model: z.string().min(1),
+    taskKind: z.enum(["code", "quick", "longContext", "general"]),
+    runs: z.number().int().nonnegative(),
+    /** Ham başarı oranı (ok/runs), 0..1 — router'ın Laplace-düzeltmeli skoru DEĞİL, insana gösterim içindir. */
+    successRate: z.number().min(0).max(1),
+    avgCostUsd: z.number().nonnegative(),
+    avgTurnMs: z.number().nonnegative().optional(),
+    /** `runs >= MIN_SAMPLES` mi — az örnekli satırlar bulgulara GİRMEZ (bkz. `findings`). */
+    hasEvidence: z.boolean(),
+  })
+  .strip();
+export type ReportSuccessRow = z.infer<typeof ReportSuccessRowSchema>;
+
+export const ReportErrorRowSchema = z
+  .object({ code: z.string().min(1), count: z.number().int().positive() })
+  .strip();
+export type ReportErrorRow = z.infer<typeof ReportErrorRowSchema>;
+
+export const ReportFeedbackSummarySchema = z
+  .object({ good: z.number().int().nonnegative(), bad: z.number().int().nonnegative() })
+  .strip();
+export type ReportFeedbackSummary = z.infer<typeof ReportFeedbackSummarySchema>;
+
+export const ReportResponseSchema = z
+  .object({
+    /** epoch ms — sorgu aralığı (dahil). */
+    from: z.number().int().nonnegative(),
+    to: z.number().int().nonnegative(),
+    totals: UsageSchema,
+    usageByModel: z.array(ReportUsageRowSchema),
+    usageByDay: z.array(ReportUsageRowSchema),
+    successTable: z.array(ReportSuccessRowSchema),
+    topErrors: z.array(ReportErrorRowSchema),
+    feedback: ReportFeedbackSummarySchema,
+    /** Eşik-tabanlı, deterministik öneri cümleleri (Türkçe) — LLM üretmez. */
+    findings: z.array(z.string()),
+  })
+  .strip();
+export type ReportResponse = z.infer<typeof ReportResponseSchema>;

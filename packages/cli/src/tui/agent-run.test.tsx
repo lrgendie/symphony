@@ -330,6 +330,63 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
     expect(frame).toContain("10+5 token");
   });
 
+  it("koşu bitince geri bildirim satırı görünür; 'g' → feedback.submit(good) atar ve Enter'ı BLOKLAMAZ (ADR-016 Karar 4)", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
+    );
+    await skipCwdAndModel(stdin);
+    stdin.write("özet çıkar");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    fake.emit("agent.run.completed", {
+      runId: RUN_ID,
+      result: "özet",
+      usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+    });
+    await tick();
+    expect(lastFrame()).toContain("bu koşu iyi miydi?");
+
+    stdin.write("g");
+    await tick();
+
+    const feedbackReq = fake.requests.find((r) => r.type === "feedback.submit");
+    expect(feedbackReq?.payload).toEqual({ subject: "run", id: RUN_ID, verdict: "good" });
+    expect(lastFrame()).toContain("geri bildirim kaydedildi (iyi)");
+
+    // Akış ASLA bloklanmaz: geri bildirim verildikten SONRA Enter yine yeni göreve döner.
+    stdin.write("\r");
+    await tick();
+    expect(lastFrame()).toContain("Görev nedir?");
+  });
+
+  it("geri bildirim yerine BAŞKA bir tuşa basılırsa sessizce geçilir — istek atılmaz", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
+    );
+    await skipCwdAndModel(stdin);
+    stdin.write("özet çıkar");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    fake.emit("agent.run.completed", {
+      runId: RUN_ID,
+      result: "özet",
+      usage: { inputTokens: 10, outputTokens: 5, costUsd: 0.001 },
+    });
+    await tick();
+
+    stdin.write("x");
+    await tick();
+
+    expect(fake.requests.some((r) => r.type === "feedback.submit")).toBe(false);
+    expect(lastFrame()).toContain("bu koşu iyi miydi?"); // hâlâ bekliyor, ekran değişmedi
+  });
+
   it("agent.run.failed → hata kodunu gösterir", async () => {
     const fake = fakeClient();
     const { stdin, lastFrame } = render(

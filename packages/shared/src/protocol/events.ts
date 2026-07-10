@@ -239,6 +239,7 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   "router.suggest.ok": RouterSuggestOkPayloadSchema,
   "usage.query.ok": UsageQueryOkPayloadSchema,
   "mcp.addServer.ok": McpAddServerOkPayloadSchema,
+  "feedback.submit.ok": AckPayloadSchema,
   "chat.delta": ChatDeltaPayloadSchema,
   "chat.completed": ChatCompletedPayloadSchema,
   "agent.run.started": AgentRunStartedPayloadSchema,

@@ -9,6 +9,8 @@ import { historyCommand } from "./commands/history.js";
 import { memoryDistillCommand, memoryPathCommand, memoryShowCommand } from "./commands/memory.js";
 import { agentsCommand } from "./commands/agents.js";
 import { agentRunCommand } from "./commands/agent.js";
+import { feedbackCommand } from "./commands/feedback.js";
+import { reportCommand } from "./commands/report.js";
 import { addCommand } from "./commands/add.js";
 import { ensureDesktopRunning } from "./client/desktop-launch.js";
 
@@ -56,6 +58,21 @@ program
   .action((paket: string, ekstra: string[], opts: { name?: string }) =>
     addCommand(paket, ekstra, opts).catch(fail),
   );
+
+program
+  .command("feedback <runId> <değer>")
+  .description("Geçmiş bir agent koşusunu işaretle: iyi|kötü (router v2'yi besler, ADR-016)")
+  .option("-n, --not <metin>", "kısa not (opsiyonel)")
+  .action((runId: string, deger: string, opts: { not?: string }) =>
+    feedbackCommand(runId, deger, opts).catch(fail),
+  );
+
+program
+  .command("report")
+  .description("Kullanım raporu: token/maliyet, model×görev başarı tablosu, bulgular (ADR-016)")
+  .option("--from <tarih>", "başlangıç (YYYY-AA-GG, varsayılan: 7 gün önce)")
+  .option("--to <tarih>", "bitiş (YYYY-AA-GG, varsayılan: şimdi)")
+  .action((opts: { from?: string; to?: string }) => reportCommand(opts).catch(fail));
 
 program
   .command("history [oturum]")

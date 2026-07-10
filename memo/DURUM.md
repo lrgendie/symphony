@@ -3,7 +3,107 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Sonnet — Dilim Z1 BİTTİ ve testli, 339 test)
+**Son güncelleme:** 2026-07-10 (Sonnet — Dilim Z3 BİTTİ ve testli, 365 test)
+
+## Faz 6 — Dilim Z3 (rapor) BİTTİ (2026-07-10, Sonnet)
+
+ADR-016 Karar 5 uygulandı. Kural 1 sırası: PROTOKOL → shared → core → cli.
+- **PROTOKOL.md:** `GET /api/report` satırındaki `(planlandı — Dilim Z3)` kaldırıldı.
+- **`shared/rest.ts`:** `ReportResponseSchema` (+`ReportUsageRowSchema`/`ReportSuccessRowSchema`/
+  `ReportErrorRowSchema`/`ReportFeedbackSummarySchema`) — `totals` mevcut `UsageSchema`'yı
+  YENİDEN KULLANIR (yeni tip yok); `taskKind` enum'u shared'ın kendi literal union'ı (core'a
+  bağımlılık YOK, RoadmapPhaseSchema'daki `state` enum'uyla aynı desen).
+- **`store.ts`:** `runsSince`/`turnStatsSince`/`feedbackSince` üçüne opsiyonel `untilMs` eklendi
+  (router'ın rolling-window kullanımı ETKİLENMEDİ — hep `undefined`; rapor kendi `[from,to]`
+  aralığı için verir). YENİ `feedbackSummarySince` (TÜM subject_kind, good/bad toplamı) +
+  `topErrorCodesSince` (telemetry GROUP BY code). **Yan bulgu/düzeltme:** `recentFeedback`'in
+  SQL'i `ORDER BY at DESC, id` yazmıştı (id için örtük ASC) — `telemetry`'nin `id DESC`
+  emsaliyle TUTARSIZDI; aynı milisaniyede eklenen iki kayıtta yanlış sırayla dönüyordu (testte
+  YAKALANDI, `id DESC` ile düzeltildi). Ders: autoincrement int id'li her yeni `recent*` metodu
+  `telemetry` desenini (`id DESC`) birebir izlemeli.
+- **YENİ `router/stats.ts` `classifyFeedbackRows`:** Z2'de `daemon.ts`'e gömülü olan
+  "`feedbackSince` satırını `classifyTask` ile `FeedbackRow[]`e çevir" mantığı BURAYA taşındı —
+  hem `daemon.ts buildRouterStats` (Z2, refactor edildi) hem YENİ `report/build.ts` (Z3) AYNI
+  fonksiyonu kullanıyor (ADR Karar 5 "ikinci gerçek üretme" yasağının somut karşılığı).
+- **YENİ `core/src/report/build.ts`** (SAF, testli): `buildReport(input): ReportResponse` —
+  `routerStats` Map'inden `successTable` + eşik-tabanlı `findings` (kanıtlı VE `score<0.5`
+  çiftler; kanıtsız satırlar ASLA bulgu üretmez — yanıltıcı öneri önlenir). **Bilinçli
+  sadeleştirme:** ADR'nin illüstratif "bu tür için bulut önerilir" örneği yerine nötr bir cümle
+  kullanıldı ("farklı bir model denemeyi düşün") — ADR "ör." diyerek örnek olduğunu belirtiyor;
+  yerel/bulut varsayımı olmadan (ör. zaten bulut bir modelin "bulut önerilir" alması saçma
+  olurdu) her zaman DOĞRU bir cümle tercih edildi.
+- **`daemon.ts`:** `GET /api/report?from&to` (Bearer; `from`/`to` yoksa `to=şimdi`,
+  `from=to-7gün`; `from>to` → 400 `VALIDATION_REPORT_RANGE_INVALID`). `usageQuery` iki kez
+  (`groupBy:"model"` ve `"day"`) + `runsSince/turnStatsSince/feedbackSince(from,to)` +
+  `topErrorCodesSince`/`feedbackSummarySince` → `buildReport`'a geçirilir.
+- **`paths.ts`:** `reportsDir` (`~/.symphony/reports/`) — `ensureSymphonyHome`'un mkdir
+  listesine eklendi (memoryDir/dataDir/logsDir ile aynı desen).
+- **`cli/client/daemon-client.ts`:** `getReport(from?, to?)` — mevcut `getHistory` REST
+  yardımcısını yeniden kullanır (Bearer+timeout+hata deseni; roadmap/memory ile aynı).
+- **YENİ `cli/commands/report.ts`:** `symphony report [--from --to]` (tarih `YYYY-AA-GG`,
+  `Date.parse` ile ayrıştırılır, geçersizse net hata+exit 1). `formatReportMarkdown` (SAF,
+  Türkçe markdown — LLM YOK, aynı girdi hep aynı çıktı) stdout'a basar + `isoWeekLabel`/
+  `reportFilePath` (SAF) ile `~/.symphony/reports/YYYY-Www.md`'ye yazar.
+- **Test:** 347→**365** (+18: `report/build.test.ts` YENİ 7 — boş girdi, alanların DOĞRUDAN
+  geçtiği, kanıtlı-düşük-skor bulgu üretir, kanıtlı-yüksek-skor bulgu ÜRETMEZ, kanıtsız düşük
+  skor bulgu ÜRETMEZ [MIN_SAMPLES sigortası rapora da işliyor], sıralama, açık geri bildirimin
+  kanıt eşiğini etkilemesi; `cli/commands/report.test.ts` YENİ 10 — `isoWeekLabel` gerçek
+  tarihle çapraz doğrulandı [2026-07-10→"2026-W28", node ile bağımsız hesaplanıp teyit edildi],
+  `reportFilePath`, `formatReportMarkdown` alan kontrolleri [snapshot DEĞİL] + determinizm;
+  `daemon.test.ts` +1 — 401/400/200 + **LOKALLİK KANITI**: sahte Ollama sunucusuna düşen istek
+  SAYACI rapor çağrısı öncesi/sonrası DEĞİŞMİYOR [gerçek runtime kanıt, yalnız tip imzası değil]).
+  `pnpm build && pnpm test && pnpm lint` temiz (46 dosya/365 test).
+- **CANLI DOĞRULAMA TAMAMLANDI:** daemon restart (yeni kod) → `symphony report` gerçek
+  `~/.symphony` verisiyle çalıştırıldı — 152922+63392 token, 5 model, 7 gün, 9 satırlık başarı
+  tablosu, 4 hata kodu, 1 geri bildirim, **2 gerçek bulgu ürettü** (`claude-sonnet-5` hızlı
+  özette %33 başarı; `qwen2.5vl:7b` genel işte %0 başarı — bu ikincisi Canlı bulgu #3'teki
+  belgelenen vision-model tool-calling arızasıyla BİREBİR örtüşüyor, sistemin gerçek bir geçmiş
+  olayı doğru yakaladığının kanıtı). `--from/--to` ve geçersiz tarih hata yolu da canlı denendi.
+  Test dosyası (`~/.symphony/reports/2026-W28.md`) canlı denemeden sonra silindi (repo dışı,
+  kalıcı yan etki istenmiyordu).
+
+**Sıradaki: Dilim Z4** (bağlam haritası verisi — REST `GET /api/context-map`).
+Talimat aşağıda ("📋 Dilim Z4" başlığı) zaten yazılı, değişmedi.
+
+## Faz 6 — Dilim Z2 (geri bildirim) BİTTİ (2026-07-10, Sonnet)
+
+ADR-016 Karar 4 uygulandı. Kural 1 sırası: PROTOKOL → shared → core → cli.
+- **PROTOKOL.md:** `feedback.submit` satırındaki `(planlandı — Dilim Z2)` kaldırıldı.
+- **`shared/requests.ts`:** `FeedbackSubmitPayloadSchema {subject:"run"|"chat", id (uuid),
+  verdict:"good"|"bad", note?}`. **`shared/events.ts`:** `feedback.submit.ok` → mevcut
+  `AckPayloadSchema` ({} — yeni tip gerekmedi, `chat.cancel.ok`/`agent.say.ok` ile aynı desen).
+- **`store.ts`:** göç v5 — `feedback(id, at, subject_kind CHECK(run,chat), subject_id, verdict
+  CHECK(good,bad), note)`. `subject_id` HETEROJEN referans (run→agent_runs.id, chat→sessions.id)
+  → tek FK hedefi olamaz, doğrulama daemon katmanında. `recordFeedback`/`recentFeedback` (CRUD) +
+  `agentRunExists(id)` (YENİ, doğrulama için) + `feedbackSince(sinceMs)` — **yalnız
+  `subject_kind='run'` döner**, `agent_runs` ile JOIN edilip (provider,model,task) taşır;
+  `classifyTask` ÇAĞIRAN TARAFTA uygulanır (`runsSince` ile AYNI desen). Sohbet geri bildirimi
+  router skoruna KATILMAZ (sessions'ta görev-türü sınıflaması için karşılık yok — bilinçli sınır).
+- **`daemon.ts`:** `feedback.submit` case'i — `subject==="run"` ise `agentRunExists`, `"chat"`
+  ise `sessionDetail!==null` ile doğrular; yoksa `VALIDATION_FEEDBACK_SUBJECT_UNKNOWN`.
+  `buildRouterStats()` artık `feedbackSince` + `classifyTask` ile `FeedbackRow[]` üretip
+  `computeRouterStats`'a geçiriyor (Z1'de hep `[]`'ydi).
+- **TUI `agent-run.tsx`:** koşu bitince (`outcome!==null`) `"bu koşu iyi miydi? (g/k, geç: başka
+  tuş)"` satırı; `g`/`k` `feedback.submit` atar (hata sessizce yutulur), HERHANGİ başka tuş
+  sessizce geçilir, Enter/Esc HER DURUMDA (feedback verilse de verilmese de) çalışmaya devam eder.
+- **YENİ `cli/commands/feedback.ts`:** `symphony feedback <runId> iyi|kötü [-n not]` — Türkçe
+  değeri wire'a çevirir (`iyi→good`, `kötü→bad`), geçersiz değerde hata+exit 1. **Bilinçli kapsam
+  sınırı:** `history`nin aksine id ÖN EKİ desteklemiyor (tam UUID gerekir) — prefix çözümü yeni
+  bir "agent runs listesi" protokol ucu gerektirirdi, ADR-016 kapsamı dışı; asıl yüzey TUI'nin
+  tek-tuşu (runId zaten elde), CLI ikincil/geçmişten-işaretleme içindir.
+- **Test:** 339→**347** (+8: store +5 — `agentRunExists`, `recordFeedback`/`recentFeedback`
+  roundtrip, `feedbackSince` yalnız 'run' + JOIN, zaman filtresi; daemon +2 — bilinmeyen id hatası,
+  **açık geri bildirim router v2 skorunu GERÇEKTEN düşürüyor** [3 başarılı koşu + 3 "kötü" işareti
+  → reason "düşük güven skoru"na döner, WS üzerinden uçtan uca]; TUI +2 — g tuşu feedback.submit
+  atar + Enter'ı bloklamaz, başka tuş sessizce geçilir). `pnpm build && pnpm test && pnpm lint`
+  temiz (44 dosya/347 test).
+- **CANLI DOĞRULAMA TAMAMLANDI:** daemon restart (yeni kod) → küçük bir WS probe ile gerçek bir
+  agent koşusu başlatılıp TAM runId yakalandı → `symphony feedback <runId> iyi -n "..."` →
+  `✔ geri bildirim kaydedildi: iyi` (gerçek DB'ye yazıldı) → `symphony feedback <uydurma-id>
+  kötü` → `⚠ Bilinmeyen koşu id'si: ...` + exit 1 (doğrulama yolu da canlı doğrulandı).
+
+**Sıradaki: Dilim Z3** (rapor — REST `GET /api/report` + `symphony report`).
+Talimat aşağıda ("📋 Dilim Z3" başlığı) zaten yazılı, değişmedi.
 
 ## Faz 6 — Dilim Z1 (routerStats + router v2 karışımı) BİTTİ (2026-07-10, Sonnet)
 
@@ -102,7 +202,7 @@ Z2, `GET /api/report` Z3, `GET /api/context-map` Z4), ROADMAP Faz 6 maddeleri AD
    cevabında kanıtlı reason (seed'li DB ile).
 7. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
 
-### 📋 Dilim Z2 — geri bildirim (`feedback.submit` + göç v5 + TUI/CLI yüzeyi) — SIRADAKİ
+### ✅ Dilim Z2 — geri bildirim (`feedback.submit` + göç v5 + TUI/CLI yüzeyi) — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 1. PROTOKOL'deki `(planlandı — Dilim Z2)` işaretini kaldır; `shared/requests.ts`'e
    `FeedbackSubmitPayloadSchema` + events'e `feedback.submit.ok {}`.
@@ -117,7 +217,7 @@ Z2, `GET /api/report` Z3, `GET /api/context-map` Z4), ROADMAP Faz 6 maddeleri AD
 5. Test: göç + record/list · daemon doğrulama (bilinmeyen id hata) · stats'a feedback etkisi
    (kötü işaretli model skoru düşer) · TUI tuşu (mevcut agent-run.test deseni).
 
-### 📋 Dilim Z3 — rapor (REST `GET /api/report` + `symphony report`)
+### ✅ Dilim Z3 — rapor (REST `GET /api/report` + `symphony report`) — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 1. PROTOKOL işaretini kaldır; `shared/rest.ts`'e `ReportResponseSchema`.
 2. YENİ `core/src/report/build.ts` (SAF): girdi = usageQuery satırları + routerStats + telemetri
@@ -129,7 +229,7 @@ Z2, `GET /api/report` Z3, `GET /api/context-map` Z4), ROADMAP Faz 6 maddeleri AD
 5. Test: build.ts eşik/özet senaryoları · endpoint 401/200 · **lokallik: rapor üretimi hiçbir
    adapter/fetch çağırmaz** (kabul maddesi) · markdown render snapshot değil alan kontrolü.
 
-### 📋 Dilim Z4 — bağlam haritası verisi (REST `GET /api/context-map`)
+### 📋 Dilim Z4 — bağlam haritası verisi (REST `GET /api/context-map`) — SIRADAKİ
 
 1. PROTOKOL işaretini kaldır; `shared/rest.ts`'e `ContextMapResponseSchema` (nodes/edges).
 2. YENİ `core/src/context-map/build.ts` (SAF, testli): girdi = sessions + agent_runs satırları
