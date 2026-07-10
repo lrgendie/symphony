@@ -3,7 +3,37 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10 (Sonnet — Dilim P2 BİTTİ ve testli, 310 test; P3 sırada)
+**Son güncelleme:** 2026-07-10 (Sonnet — Dilim P3 BİTTİ ve testli, 315 test; **Faz 4 ✅ TAMAMEN KAPANDI**)
+
+## Faz 4 — Dilim P3 (masaüstü roadmap paneli + kapanış) BİTTİ (2026-07-10, Sonnet)
+
+ADR-015 Karar 3/5 uygulandı; Faz 4'ün son iki maddesi + tüm ROADMAP.md senkronu tamam.
+- **`ui/src/daemon/client.ts`:** `fetchRoadmap(dir)` — `GET /api/roadmap` (Bearer), WS akışının
+  DIŞINDA istek-başına REST (roadmap her koşu olayında değişmez). Bağlantı yok/ağ hatası/404/
+  şema uyuşmazlığı → sessizce `null` (throw etmez, panel gizlenir).
+- **`App.tsx`:** yeni `RoadmapStrip` bileşeni — proje başlığının (`project-head`) hemen altında,
+  grup görünür olunca BİR KEZ çeker (`useEffect([cwd])`, agresif polling yok). Faz satırı +
+  `model-bar` deseninde ilerleme çubuğu (`done/total`), renk `state`'ten (`--green` done,
+  gradient in_progress, soluk `--line` todo). `phases:[]` veya `null` → hiçbir şey render etmez.
+- **`index.css`:** `.roadmap-strip`/`.roadmap-phase-*` (Model panosu diliyle tutarlı).
+- **`docs/TASARIM.md`:** §3 (Bağlam Haritası) altına ADR-015 Karar 5 notu — roadmap paneli
+  mütevazı liste/çubuk, interaktif graf Faz 6'nın işi.
+- **`ROADMAP.md`:** Faz 4'ün TÜM maddeleri gerçek duruma senkronlandı ve işaretlendi (yalnız
+  P1-P3'ün iki maddesi değil — Şef Paneli'nin "hangi dosya" kalıntısı ve "CLI→masaüstü otomatik
+  açılış" da stale `[ ]`/`[~]` kalmıştı, hepsi düzeltildi); Faz 4 başlığı artık ✅ 2026-07-10.
+  "Hangi adımda hangi agent canlı" bağlaması v2'ye ertelendi notu düşüldü (ADR-015 Karar 4).
+- **Test:** 310→**315** — `daemon/client.test.ts` (5, YENİ dosya: bağlantı yoksa fetch
+  çağrılmadan null · başarılı cevap + dir kodlama/Bearer header doğrulaması · 404→null ·
+  ağ hatası→null (throw yok) · şemaya uymayan cevap→null). `window`/`fetch` `vi.stubGlobal`
+  ile enjekte edildi (paket vitest ortamı "node", DOM yok). Panel bileşen render testi
+  YAZILMADI — repo'da ui paketi için jsdom/RTL altyapısı yok, plan bunun yerine "store-seviyesi
+  SAF fonksiyon testi yeterli" izni veriyordu. `pnpm build && pnpm test && pnpm lint` temiz.
+- **Görsel doğrulama KULLANICIYA** (`desktop:dev`, Bash'ten görülemez — birden fazla farklı
+  cwd'de agent koşusu başlatıp her projenin ROADMAP.md'sinden faz çubuklarının doğru göründüğünü
+  görmek yeterli; ROADMAP.md'si olmayan proje satırsız kalmalı).
+
+**Faz 4 — Masaüstü: Orkestra Sahnesi tamamen ✅.** Sıradaki: Faz 6 (Zeka Katmanı) ya da kullanıcı
+önceliğine göre başka bir dilim — bir sonraki oturum kullanıcıyla birlikte karar verilecek.
 
 ## Faz 4 — Dilim P2 (roadmap parser + REST) BİTTİ (2026-07-10, Sonnet)
 
@@ -29,19 +59,7 @@ tekrar okuyup düzeltildi. Ders: DURUM.md'deki plan taslağı değil, KARARLAR.m
   yoksa boş dizi · `####` faz saymaz) + `daemon.test.ts` (1: 401/400/404/200 roundtrip,
   gerçek geçici dizinde ROADMAP.md yazıp okutarak). `pnpm build && pnpm test && pnpm lint` temiz.
 
-### 📋 Dilim P3 — masaüstü roadmap paneli + kapanış ← SIRADAKİ (Sonnet)
-
-1. `ui/daemon/client.ts` (ya da store yanına): `fetchRoadmap(dir)` — Bearer'lı REST, 404→null.
-2. UI: aktif proje gruplarının (P1) cwd'leri için roadmap çek (grup görünür olunca bir kez;
-   agresif polling YOK), proje başlığının altında faz satırları + ilerleme çubuğu (`done/total`,
-   Model panosu `model-bar` deseni; renk `state`'ten). Roadmap'i olmayan proje satırsız kalır
-   (boş durum gösterme, 404 sessizce yutulur).
-3. `docs/TASARIM.md`'ye tek paragraf: roadmap paneli mütevazı liste/çubuk dilinde; graf
-   görselleştirme Faz 6 Bağlam Haritası'na aittir (ADR-015 Karar 5).
-4. ROADMAP Faz 4'ün son iki maddesini işaretle (yol haritası maddesindeki "hangi adımda hangi
-   agent canlı" kısmına "v2'ye ertelendi — ADR-015 Karar 4" notu düş; Faz 4'ü ✅ yap).
-5. Test: `fetchRoadmap` birim testi (mock fetch) + panel bileşen/store testi. Üçlü + DURUM +
-   görsel doğrulama kullanıcıya (`desktop:dev`).
+### ✅ Dilim P3 — masaüstü roadmap paneli + kapanış — BİTTİ (yukarıda "Faz 4 — Dilim P3" bölümünde ayrıntı)
 
 ## Faz 4 — Dilim P1 (canlı proje gruplaması) BİTTİ (2026-07-10, Sonnet)
 
@@ -99,9 +117,9 @@ ADR-015 Karar 1/2 uygulandı. Kural 1 sırası: PROTOKOL → shared → core →
 
 ### ✅ Dilim P2 — roadmap parser + REST — BİTTİ (yukarıda "Faz 4 — Dilim P2" bölümünde ayrıntı)
 
-### 📋 Dilim P3 — masaüstü roadmap paneli + kapanış ← SIRADAKİ (yukarıda ayrıntılı talimat, Sonnet)
+### ✅ Dilim P3 — masaüstü roadmap paneli + kapanış — BİTTİ (yukarıda "Faz 4 — Dilim P3" bölümünde ayrıntı)
 
-**Sıra P1→P2→P3; her dilim sonrası üçlü doğrulama + DURUM güncelle. Uygulama: Sonnet.**
+**P1→P2→P3 hepsi BİTTİ (2026-07-10) — Faz 4 tamamen kapandı.**
 
 ## Faz 4 — ROADMAP senkronu + "CLI → masaüstü otomatik açılış" BİTTİ (2026-07-10, Sonnet)
 

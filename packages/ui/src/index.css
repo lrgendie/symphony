@@ -206,6 +206,42 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Faz 4 Dilim P3 (ADR-015 Karar 3/5): mütevazı yol haritası şeridi — proje başlığının altında,
+   Model panosu `model-bar` deseniyle tutarlı. */
+.roadmap-strip {
+  list-style: none;
+  margin: 0 0 8px 2px;
+  padding: 6px 0 0;
+  border-top: 1px dashed var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.roadmap-phase-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.75rem;
+}
+.roadmap-phase-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.roadmap-phase-count {
+  margin-left: auto;
+  font-size: 0.7rem;
+}
+.roadmap-phase-todo .roadmap-phase-title {
+  opacity: 0.6;
+}
+.roadmap-phase-done .model-bar {
+  background: var(--green);
+}
+.roadmap-phase-todo .model-bar {
+  background: var(--line);
+}
+
 .runs {
   list-style: none;
   margin: 0;

@@ -2,8 +2,10 @@ import {
   createMessage,
   parseMessage,
   PROTOCOL_VERSION,
+  RoadmapResponseSchema,
   type EventPayload,
   type EventType,
+  type RoadmapPhase,
 } from "@symphony/shared";
 import { getBootstrap } from "../config";
 import { useStore } from "../store";
@@ -141,3 +143,25 @@ export class DaemonConnection {
 
 /** Uygulama boyunca tek bağlantı — App effect'i start/stop eder, bileşenler respond() çağırır. */
 export const daemon = new DaemonConnection();
+
+/**
+ * Yol haritası (ADR-015 Karar 3, Dilim P3) — WS akışının DIŞINDA, istek başına REST çağrısı
+ * (roadmap'in her koşu olayında değişmesi beklenmez). Bağlantı bilgisi yoksa/istek başarısızsa/
+ * `<dir>/ROADMAP.md` yoksa (404) sessizce `null` döner — panel gizlenir, hata gösterilmez.
+ */
+export async function fetchRoadmap(dir: string): Promise<RoadmapPhase[] | null> {
+  const boot = getBootstrap();
+  if (boot === null) return null;
+  let res: Response;
+  try {
+    res = await fetch(
+      `http://127.0.0.1:${boot.port}/api/roadmap?dir=${encodeURIComponent(dir)}`,
+      { headers: { authorization: `Bearer ${boot.token}` } },
+    );
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+  const parsed = RoadmapResponseSchema.safeParse(await res.json());
+  return parsed.success ? parsed.data.phases : null;
+}

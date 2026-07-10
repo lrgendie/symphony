@@ -139,6 +139,13 @@ bağlam birikir.
 Bu, ROADMAP Faz 4'teki "Yol haritası görselleştirme" ve Faz 6 "Kullanıcı hafızası" ile
 akrabadır; ayrı ve büyük bir girişimdir (kendi dilimleri olacak).
 
+**Not (ADR-015 Karar 5, 2026-07-10):** Faz 4'ün "yol haritası görselleştirme" maddesi bu
+büyük graf DEĞİL, mütevazı bir PANEL olarak uygulandı (Dilim P3) — proje başlığının altında
+faz satırları + `model-bar` deseninde ilerleme çubukları (`ui/src/App.tsx`, `RoadmapStrip`).
+Obsidian-graph benzeri interaktif görselleştirme yukarıdaki Bağlam Haritası'na ertelendi;
+roadmap verisi (SQLite değil, `ROADMAP.md` ayrıştırması) o graf tasarlanırken bir katman
+olarak taşınabilir.
+
 ## 4. Uygulama sırası (öneri)
 
 1. **Yaşayan Arayüz merkezi** ✅ — küre olarak doğdu (dilim 3–7), 2026-07-08'de yaşayan

@@ -143,7 +143,7 @@ symphony/
 - **Çıktı:** "şu dosyadaki bug'ı düzelt" diyebildiğin, onayınla kodu değiştiren agent.
 - **Kabul testi:** Agent diff gösterip onay almadan tek bayt yazamıyor (izinsiz yazma girişimi testle kanıtlanmış şekilde engelli) ✅; workspace dışına çıkamıyor ✅; deny cevabı koşuyu kırmıyor ✅ (üçü de `engine.test.ts` + `daemon-agent.test.ts`, 2026-07-04); bir harici MCP sunucusu bağlanıp araç olarak çağrılıyor ✅ (2026-07-05, canlı: `@modelcontextprotocol/server-filesystem`, izin akışı + araç hatası kurtarma gerçek sunucuyla kanıtlandı — `mcp.test.ts` + `engine.test.ts`). Davranışlar `docs/SPEC-AGENT.md`'ye uygun.
 
-### Faz 4 — Masaüstü: Orkestra Sahnesi (9–11. hafta) — çekirdek TAMAM, birkaç görsel/UX dilimi kalan (2026-07-10 senkronu)
+### Faz 4 — Masaüstü: Orkestra Sahnesi (9–11. hafta) ✅ 2026-07-10 (P1/P2/P3 kapanışı)
 - [x] Tauri 2 + React dashboard, daemon'un WS akışına bağlanır ✅ 2026-07-05 (dilim 1) —
   `packages/ui` (React 19 + Vite 8, tarayıcı-güvenli WS istemcisi, yalnız `shared`'a bağımlı)
   + `packages/desktop` (Tauri 2, `ui/dist`'i sarar, token'ı `~/.symphony/daemon.token`'dan
@@ -159,21 +159,27 @@ symphony/
   TesseractScene.tsx` + `scene/tesseract/{geometry,pulses}.ts` (saf+testli). Görsel dil artık
   `docs/TASARIM.md §2`'de tesseract olarak güncel. Kalan: her agent'ın kendi "yaşam formu"
   (birden çok eşzamanlı koşuyu ayrı ayrı görselleştirme) — küçük bir sonraki dilim adayı.
-- [~] **Şef Paneli:** aktif agent'lar + canlı log akışı ✅ · izin istekleri masaüstünden
+- [x] **Şef Paneli:** aktif agent'lar + canlı log akışı ✅ · izin istekleri masaüstünden
   CEVAPLANABİLİYOR ✅ (dilim 2, kart + renkli diff + Evet/Bu koşu/Daima/Hayır, SPEC §5) ·
   çocuk koşular (Faz 5, `run_agent`) ebeveyninin altında girintili görünüyor ✅ (2026-07-10,
-  O3, `orderRunsForDisplay`). Kalan: "hangi dosya" zengin görünümü (agent'ın o an dokunduğu
-  dosyanın canlı önizlemesi) — sonraki dilim.
+  O3, `orderRunsForDisplay`) · "hangi dosya" zengin görünümü ✅ (2026-07-10, `RunFile`, diff
+  izin kartı kapansa da kalıcı, `read_file` sonuç önizlemesi).
 - [x] Model panosu ✅ TAMAM (2026-07-05 temel + 2026-07-07 Dilim 6 API kapasitesi) — provider
   durumları (canlı up/down/degraded), token kullanımı/maliyet sayaçları (`usage.updated`),
   prompt-cache isabet göstergesi, yerel GPU/VRAM vitalleri (`hardware.updated`,
   `scene/hardware-vitals.ts`), Anthropic rate-limit çubukları (`provider.limits`).
-- [ ] **Yol haritası görselleştirme:** projelerin ROADMAP/plan dosyalarından otomatik üretilen interaktif faz-adım grafiği; hangi adım bitti, hangi adımda hangi agent çalışıyor canlı görünür
-- [ ] Proje görünümü: hangi projede hangi agent ne yapıyor
-- [ ] **CLI → masaüstü otomatik açılış:** terminalde `symphony` başlatılınca masaüstü
-  uygulaması da açılır (kurulu ve kapalıysa) — sistem tek komutla "canlanır".
-  Yapılandırılabilir: `~/.symphony/config.json` → `desktop.autoLaunch` (varsayılan açık)
-  ← **SIRADAKİ** (2026-07-10'da ele alınıyor)
+- [x] **Yol haritası görselleştirme:** ✅ 2026-07-10 (ADR-015 Karar 3/5, Dilim P2/P3) —
+  `ROADMAP.md` sözleşmeli düz markdown olarak ayrıştırılır (`core/src/roadmap/parse.ts`,
+  `GET /api/roadmap`), proje başlığı altında mütevazı PANEL (faz satırı + ilerleme çubuğu),
+  interaktif graf DEĞİL (o, Faz 6 Bağlam Haritası'nın işi). "Hangi adımda hangi agent canlı"
+  bağlaması bilinçle v2'ye ertelendi (ADR-015 Karar 4) — statik done/in_progress/todo yeterli
+  sayıldı, canlı koşular zaten aynı proje başlığı altında görünüyor.
+- [x] Proje görünümü: ✅ 2026-07-10 (ADR-015 Karar 1/2, Dilim P1) — hangi projede hangi agent
+  ne yapıyor: "Aktif koşular" paneli koşunun `cwd`'sine göre gruplanır (kayıt defteri yok,
+  ad = basename); geçmiş koşuların projeye göre dökümü bilinçle v2.
+- [x] **CLI → masaüstü otomatik açılış:** ✅ 2026-07-10 — terminalde `symphony` başlatılınca
+  masaüstü uygulaması da açılır (kurulu ve kapalıysa) — sistem tek komutla "canlanır".
+  Yapılandırılabilir: `~/.symphony/config.json` → `desktop.autoLaunch` (varsayılan açık).
 - [x] Terminal ⇄ masaüstü eş zamanlılık testi ✅ TAMAM — CLI'da başlayan iş masaüstünde anında
   görünüyor (dilim 1 kabul testi, kullanıcı doğruladı) · agent akış metni paritesi (dilim 2.1b,
   `agent.delta`→`runStreams`) · Faz 5 çocuk koşu hiyerarşisi de aynı anda iki yüzeyde tutarlı
@@ -183,7 +189,10 @@ symphony/
 - **Kabul testi:** CLI'da başlatılan koşu 1 saniye içinde masaüstünde görünüyor ✅ · tesseract
   agent durumlarına (thinking/executing/failed) görsel tepki veriyor ✅ (Living Interface,
   görsel doğrulama kullanıcıya) · token/maliyet sayaçları gerçek kullanım verisiyle artıyor ✅
-  (model panosu) · izin istekleri masaüstünden de cevaplanabiliyor ✅ (dilim 2).
+  (model panosu) · izin istekleri masaüstünden de cevaplanabiliyor ✅ (dilim 2) · proje
+  gruplaması + roadmap paneli birim testleriyle kanıtlı (P1/P2/P3, 315 test) — **canlı görsel
+  doğrulama (P1/P2/P3'ün `desktop:dev`'de gerçek proje/ROADMAP.md ile görülmesi) KULLANICIYA
+  kalıyor**, Bash'ten görülemez.
 
 ### Sıradaki dilimler — kullanıcı önceliği (2026-07-07, ANLAŞILAN SIRA: 1→2→3→4)
 

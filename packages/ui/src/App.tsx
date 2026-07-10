@@ -1,12 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   PROTOCOL_VERSION,
   type ActiveRun,
   type PendingPermission,
   type ProviderLimitsPayload,
+  type RoadmapPhase,
   type Usage,
 } from "@symphony/shared";
-import { daemon, type PermissionDecision } from "./daemon/client";
+import { daemon, fetchRoadmap, type PermissionDecision } from "./daemon/client";
 import { LivingScene } from "./scene/LivingScene";
 import {
   groupRunsByProject,
@@ -131,6 +132,7 @@ export function App(): React.JSX.Element {
                 <span className="project-name">{group.name}</span>
                 <span className="dim project-path">{group.cwd}</span>
               </div>
+              <RoadmapStrip cwd={group.cwd} />
               <ul className="runs">
                 {group.runs.map((r) => (
                   <RunRow key={r.runId} run={r} stream={runStreams[r.runId]} file={runFiles[r.runId]} />
@@ -184,6 +186,54 @@ function PermissionCard({ permission }: { permission: PendingPermission }): Reac
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Faz 4 Dilim P3 (ADR-015 Karar 3/5): proje başlığı altında mütevazı yol haritası şeridi —
+ * faz başına ilerleme çubuğu (Model panosu `model-bar` deseni). Grup görünür olunca BİR KEZ
+ * çeker (agresif polling yok — roadmap her koşu olayında değişmez); dosya yoksa (404) veya
+ * kalıba uymuyorsa (`phases: []`) sessizce hiçbir şey göstermez.
+ */
+function RoadmapStrip({ cwd }: { cwd: string }): React.JSX.Element | null {
+  const [phases, setPhases] = useState<RoadmapPhase[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (cwd === "") return undefined;
+    void fetchRoadmap(cwd).then((result) => {
+      if (!cancelled) setPhases(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cwd]);
+
+  if (phases === null || phases.length === 0) return null;
+
+  return (
+    <ul className="roadmap-strip">
+      {phases.map((phase) => (
+        <li key={phase.title} className={`roadmap-phase roadmap-phase-${phase.state}`}>
+          <div className="roadmap-phase-head">
+            <span className="roadmap-phase-title">{phase.title}</span>
+            <span className="dim roadmap-phase-count">
+              {phase.total > 0 ? `${phase.done}/${phase.total}` : "—"}
+            </span>
+          </div>
+          <div className="model-bar-track">
+            <div
+              className="model-bar"
+              style={{
+                width: `${
+                  phase.total > 0 ? (phase.done / phase.total) * 100 : phase.state === "done" ? 100 : 0
+                }%`,
+              }}
+            />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
