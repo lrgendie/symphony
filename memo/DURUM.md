@@ -3,7 +3,111 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Sonnet — Dilim D7 BİTTİ ve testli, 599 test; Faz 6'nın son açık maddesi kapandı)
+**Son güncelleme:** 2026-07-11 (Fable — **Bağlam Haritası v2 TASARIMI: ADR-019 + dilimler H1..H5** aşağıda; ayrıca `zanaat/OPERASYON-REHBERI.md` eklendi. Kod değişikliği yok. Öncesi: Sonnet — Dilim D7 BİTTİ ve testli; Faz 6'nın son açık maddesi kapandı)
+
+## Belge eki — zanaat rehberi (2026-07-11, Fable)
+
+Kullanıcının isteğiyle YENİ `zanaat/OPERASYON-REHBERI.md` yazıldı: devralan modele kural DEĞİL
+çalışma-biçimi katmanı (8 el alışkanlığı; projenin gerçek yara izleri — cache şema bug'ı,
+worktree ata-repo sızması, mükerrer Dilim 1 — örnek olarak gömülü). `memo/DEVIR.md` girişine
+işaret kondu. Kod/test/protokol DEĞİŞMEDİ.
+
+## Bağlam Haritası v2: TASARIM TAMAM (2026-07-11, Fable — ADR-019) → dilimler H1..H5
+
+Kullanıcının isteği (kendi sözleriyle özet): düğümler rastgele saçılmasın; her LLM için düğüm
+olsun ve yerel/API ayrımı görünsün; "bunu haritaya ekleyelim" deyince konu başlığı+tarihle
+kalıcı bağlam düğümü doğsun; düğüm koparma / grup kurma / bağlam→bağlam bağlama interaktif
+olsun; agent koşusu agent→koşu→model ÜÇLÜSÜ olarak okunsun; **en önemlisi** harita haftalık
+otomatik tek düğüme katlanıp kenara yerleşsin — düzenli, tarihsel, takip edilebilir. Görsel
+katman kullanıcıya soruldu, **Yaşayan 2D** seçildi (tam-3D reddedildi, ADR-019 Karar 5).
+
+**Tasarımın 6 kararı ADR-019'da** (KARARLAR.md — H dilimlerine başlamadan MUTLAKA oku).
+Çekirdek ilkeler: türetilebilen SAKLANMAZ (yalnız kürasyon kalıcı: göç v6 `map_nodes`/
+`map_edges`); haftalık katlanma SORGU-ZAMANI kuralıdır (zamanlayıcı/tablo YOK, hafta tanımı
+`isoWeekLabel`'dan); kürasyon WS istekleri `map.*` (önce PROTOKOL.md!); sabitlenmiş öğe asla
+katlanmaz; türetilmiş düğüm asla silinemez.
+
+### 📋 Dilim H1 — kürasyon temeli (Sonnet): göç v6 + curation.ts + PROTOKOL + shared + daemon
+1. `docs/PROTOKOL.md`: `map.pin` / `map.node.rename` / `map.node.delete` / `map.group.create` /
+   `map.member.add|remove` / `map.link.add|remove` istekleri + `.ok` cevapları + hata kodları
+   (`VALIDATION_MAP_NODE_UNKNOWN`, `VALIDATION_MAP_NODE_PROTECTED`, `VALIDATION_MAP_REF_UNKNOWN`).
+   Ayrıntılı payload şekilleri ADR-019 Karar 2'de.
+2. `shared/src/protocol/requests.ts`: zod şemaları (ref'siz `map.pin`de `title` zorunlu —
+   `.superRefine` ile). `events.ts`: cevap şemaları. Şemasız mesaj çıkamaz (envelope kuralı).
+3. `core/src/db/store.ts`: göç v6 — `map_nodes(id TEXT PK, kind TEXT CHECK(context|group),
+   title TEXT, created_at INTEGER, ref_kind TEXT NULL, ref_id TEXT NULL)` +
+   `map_edges(id TEXT PK, from_id TEXT, to_id TEXT, kind TEXT CHECK(link|member),
+   created_at INTEGER)`. Metodlar: `insertMapNode/renameMapNode/deleteMapNode(+kenar kaskadı)/
+   listMapNodes/insertMapEdge/deleteMapEdge/listMapEdges`.
+   **PAKETLEME DEĞİŞMEZİ (ADR-019 Karar 7a):** v6 SALT EKLEMELİDİR — mevcut tabloya ALTER/
+   yeniden-kurma YASAK; böylece `symphony rollback` (F5) sonrası ESKİ kod v6 DB ile sorunsuz
+   açılır (`migrate()`: `version >= MIGRATIONS.length → return`). Test: v6'ya göçmüş DB'de
+   MIGRATIONS'ı 5'e kırpılmış sahte eski store'un hatasız açıldığı + eski tabloların okunmaya
+   devam ettiği bir testle kanıtlanır.
+4. YENİ SAF `core/src/context-map/curation.ts`: doğrulama mantığı — türetilmiş id koruması
+   (`project:`/`model:`/`agent:`/`week:` önekleri + session/run varlığı store'dan enjekte edilen
+   `exists` ile), ref doğrulama, group üyelik kuralları. Testli (kaskad silme, koruma, ref yok).
+5. `core/src/server/daemon.ts`: 8 handler — curation.ts'e delege, hepsi `map.*.ok` döner.
+   `daemon.test.ts`: pin→rename→link→group→detach→delete roundtrip + koruma reddi + restart
+   sonrası kalıcılık (yeni store örneğiyle okunuyor).
+6. `pnpm build && pnpm test && pnpm lint` temiz; DURUM güncelle.
+
+### 📋 Dilim H2 — graf v2 (Sonnet): katlanma + model/agent düğümleri + kürasyon bindirmesi
+1. `shared/src/protocol/rest.ts`: `ContextMapNodeSchema.kind` enum'una `context|group|week|
+   model|agent`; `ContextMapEdgeSchema.kind` enum'una `pin|link|member|model|agent|week`
+   (ADDITIVE). PROTOKOL.md'ye not + `?week=` query paramı.
+   **İstemci toleransı (ADR-019 Karar 7b):** UI'nin OKUDUĞU `kind` katı enum'da kalmasın —
+   `z.string()` (+ bilinen türler için tip daraltma, bilinmeyen tür jenerik düğüm olarak
+   çizilir): gelecekte daemon önde / masaüstü geride kaldığında harita "bağlantı yok"a
+   düşmez. Bugün yayımlanmış eski istemci yok (F2 beklemede) — ileriye dönük düzeltme yeterli.
+2. `core/src/context-map/build.ts` v2 (SAF kalır; `isoWeekLabel` import — `report/markdown.ts`
+   TEK hafta tanımı): (a) içinde bulunulan hafta DIŞINDAKİ ve SABİTLENMEMİŞ session/run'lar
+   tek tek girmez → hafta başına `week:<label>` düğümü (meta: oturum/koşu sayısı, modeller) +
+   kronolojik `week` kenar zinciri; (b) görünür her koşudan `model:.../agent:...` düğümlerine
+   kenar, görünür her oturumdan model düğümüne kenar (model meta: `origin: local|api`);
+   (c) kürasyon girdisi (`mapNodes`/`mapEdges` — daemon çeker, build'e paramla girer):
+   context/group düğümleri + pin/link/member kenarları grafa bindirilir; ref'li context'in
+   ref öğesi KATLANMAZ. `buildContextMap({..., mapNodes, mapEdges, now})` — `now` enjekte
+   (test fake-clock). `?week=` istenirse o haftanın öğeleri AÇIK döner.
+3. `daemon.ts`: `/api/context-map` artık store'dan kürasyonu da çekip geçirir; `week`/`flat`
+   query paramları. Test: hafta sınırı (fake now), sabitlenen öğenin katlanmaması, üçlü kenar.
+4. `pnpm build && pnpm test && pnpm lint`; DURUM güncelle.
+
+### 📋 Dilim H3 — masaüstü v2 (Opus önerilir): görsel + kürasyon UI + drill-down
+1. ÖNCE `docs/TASARIM.md` §3 (ADR-019 notu) oku. `ui/src/map/layout.ts`: week düğümleri
+   simülasyona girmez, alt kenara kronolojik `fx/fy` sabitlenir (SAF, testli).
+2. `ContextMap.tsx` + `index.css`: yeni düğüm türleri — model düğümü yerel/API ayrımıyla
+   (iki ayrı renk/şekil, `.map-node-model-local` / `-api`), agent/context/group/week görselleri;
+   detay paneline kürasyon düğmeleri (Haritaya sabitle / Yeniden adlandır / Bağla / Grupla /
+   Kopar / Sil) — WS istekleri `ui/src/daemon/client.ts`'e eklenir (mevcut istek deseni).
+   "Bağla" modu: A seçili → düğme → B'ye tıkla → `map.link.add`. Hafta düğümüne tıkla →
+   panelde özet + "haftayı aç" → `fetchContextMap({week})` ile o haftanın grafı + "← dön".
+3. Kürasyon sonrası harita yeniden çekilir (sekme-açılış deseniyle aynı fetch).
+4. **Sürüm sapması (ADR-019 Karar 7c/7d):** `map.*` isteği eski daemon'da başarısız olursa
+   kürasyon düğmesi zarif hata göstersin ("daemon'ı güncelle: symphony update" — daemonVersion
+   `/api/health`ten zaten UI'da). NOT: H3/H5 `ui/dist`e gömülür — masaüstünde görünmesi YENİ
+   desktop installer sürümü ister (tag → F6 release matrix); H1/H2/H4 npm update ile yeter.
+5. `pnpm build && pnpm test && pnpm lint`; kullanıcıyla canlı görsel doğrulama; DURUM güncelle.
+
+### 📋 Dilim H4 — TUI `/harita` + CLI `symphony harita` (Sonnet)
+1. `cli/src/tui/chat.tsx` + `agent-run.tsx`: girdi `/harita` (ops. `[başlık]`) ile başlıyorsa
+   modele GÖNDERME — aktif `sessionId`yi `map.pin` ile sabitle, tek satır onay mesajı bas.
+2. YENİ `cli/src/commands/harita.ts`: `symphony harita ekle <sessionId|runId> [--baslik X]` +
+   `symphony harita liste`. `index.ts`'e kayıt. Testler (ink-testing-library + komut testleri).
+3. `docs/REHBER.md` güncelle (ADR-019 Karar 7f): `/harita` komutu, `symphony harita`,
+   haftalık katlanma davranışı + komut tablosu satırları. Kürasyonun `symphony sync` ile
+   TAŞINMADIĞI (yerel SQLite'ta kaldığı) rehberde açıkça söylenir.
+4. `pnpm build && pnpm test && pnpm lint`; DURUM güncelle.
+
+### 📋 Dilim H5 — yaşayan animasyon katmanı (Sonnet)
+TASARIM §5 sınırları içinde: sürekli hafif drift (d3 `alphaTarget` düşük tutulur), son 24
+saatin kenarlarında dash akış nabzı, yeni düğüm spring doğuşu, katlanmada fade.
+`prefers-reduced-motion` desteği (geri dönüş koşulu). Saf matematik (varsa) ayrı modülde testli;
+görsel doğrulama kullanıcıyla. `pnpm build && pnpm test && pnpm lint`; DURUM güncelle.
+
+**Sıradaki:** H1'den başla (Sonnet yeterli). Ayrıca cepte bekleyen iş: Fable'ın yarım kalan
+mimari tarama raporu (build+test+lint 617/617 temiz çıktı; güvenlik çekirdeği + motor okundu,
+rapor yazılmadı) — H dilimlerinden bağımsız, Fable dönünce tamamlanacak.
 
 ## Dilim D7 — agent tanım-güncelleme önerisi BİTTİ (2026-07-11, Sonnet) — Faz 6'nın son açık maddesi kapandı
 

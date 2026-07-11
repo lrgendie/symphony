@@ -24,6 +24,7 @@
 | Faz 6 zeka işi (router v2/feedback/rapor/harita, Z1-Z5) | ADR-016 (KARARLAR.md, BAĞLAYICI) + `memo/DURUM.md` Z-dilim talimatları + `router/router.ts` |
 | Faz 7 paketleme işi (yayın/installer/sync/update/rehber, F1-F7) | ADR-017 (KARARLAR.md, BAĞLAYICI) + `memo/DURUM.md` F-dilim talimatları |
 | Faz 8 kendini geliştirme (doktor/yama/canlıya alma/güven/bekçi/agent-önerisi, D1-D7) | ADR-018 (KARARLAR.md, BAĞLAYICI) + `memo/DURUM.md` D-dilim talimatları + `agent/engine.ts`/`db/store.ts` |
+| Bağlam Haritası v2 işi (kürasyon/katlanma, H1-H5) | ADR-019 (KARARLAR.md, BAĞLAYICI) + `memo/DURUM.md` H-dilim talimatları + `context-map/build.ts` + `ui/src/map/` |
 | Model devri (Fable→Opus vb.) | `memo/DEVIR.md` — rol, disiplin, tuzak haritası |
 
 ## Paket grafiği

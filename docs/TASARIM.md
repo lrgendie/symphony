@@ -146,6 +146,15 @@ Obsidian-graph benzeri interaktif görselleştirme yukarıdaki Bağlam Haritası
 roadmap verisi (SQLite değil, `ROADMAP.md` ayrıştırması) o graf tasarlanırken bir katman
 olarak taşınabilir.
 
+**Not (ADR-019, 2026-07-11 — Bağlam Haritası v2, "yaşayan 2D"):** v1'in türetilmiş grafının
+üstüne KÜRASYON katmanı geldi: sabitlenen konu düğümleri (başlık+tarih), kullanıcı grupları,
+elle bağlar; agent koşusu **agent→koşu→model** üçlüsü olarak okunur; model düğümleri yerel
+(Ollama) ↔ API ayrımını renk/şekille taşır; geçmiş haftalar otomatik TEK `week` düğümüne
+katlanıp haritanın ALT KENARINA kronolojik dizilir (tarihsel dökümantasyon hissi — "compound"
+vizyonunun düzenli hâli). Görsel dil: harita 2D SVG kalır ama CANLANIR (hafif drift, son 24
+saatin kenarlarında akış nabzı, spring doğuş, katlanmada fade) — her animasyonun anlamı var
+(§5), tam-3D bilinçli reddedildi (sahne sanattır [tesseract], harita okunabilir araçtır).
+
 ## 4. Uygulama sırası (öneri)
 
 1. **Yaşayan Arayüz merkezi** ✅ — küre olarak doğdu (dilim 3–7), 2026-07-08'de yaşayan

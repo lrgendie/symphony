@@ -3,6 +3,7 @@
 > Bu belge, tasarımı yapan Fable 5'in yerine geçen modele (Opus veya başka)
 > yazılmıştır. Fable'ın haftalık limiti dolduğunda buradan devam edilir.
 > **CLAUDE.md anayasadır, bu belge onun Faz 3+ eki ve tuzak haritasıdır.**
+> Çalışma biçimi (kural değil zanaat katmanı) için: `zanaat/OPERASYON-REHBERI.md`.
 
 ## Rolün
 

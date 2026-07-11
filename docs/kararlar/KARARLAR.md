@@ -646,3 +646,116 @@ YAMALAR (dosyanın geri kalanı DOKUNULMAZ). Uygulama; agent tanımları `engine
 koşuda dosyadan taze okunur (`loadAgentDefinition` cache TUTMAZ) — daemon restart GEREKMEZ.
 *Reddedilen:* zaten pinli agent'lar için "belki şu model daha iyi olurdu" tahmini; system
 prompt/araç seti önerisi (v1 dışı, ayrı karar gerektirir).
+
+## ADR-019 — Bağlam Haritası v2: küratörlü bağlam grafı, haftalık katlanma, model/agent düğümleri, yaşayan 2D (2026-07-11, Fable)
+**Bağlam:** Kullanıcının bugünkü isteği (v1'i canlı kullandıktan sonra): rastgele saçılmış,
+tamamen türetilmiş graf yerine **küratörlü, tarihsel, takip edilebilir** bir bağlam haritası.
+Maddeler: (1) her LLM/model için düğüm; yerel (Ollama) ↔ API (bulut) ayrımı görünür olsun;
+(2) "bunu bağlam haritasına ekleyelim" dediğinde konu başlığı + tarihle KALICI bir bağlam
+düğümü doğsun; (3) interaktif kürasyon: düğüm koparma, yeni grup kurma, grup düğümü, bir
+bağlamı başka bağlama bağlama, başlığı kullanıcının belirleyebilmesi; (4) agent koşusu
+**agent → koşu → model** üçlüsü olarak (3 ayrı düğüm, bağlı) okunabilsin; (5) **en önemlisi:**
+harita haftalık olarak otomatik TEK düğüme katlansın, hafta düğümü haritanın kenarına
+yerleşsin — karmaşık güncel graf yerine düzenli, tarihsel dökümantasyonlu bir izleme yüzeyi;
+(6) görsel katman: **yaşayan 2D** (kullanıcı bugün üç seçenek arasından seçti; tam-3D
+reddedildi). Mevcut zemin: v1 (ADR-016 Karar 6) tamamen türetilmiş ve uçucu — kürasyonun
+kalıcılaşacağı hiçbir yer yok; model bilgisi düğüm değil meta.
+
+**Karar 1 — Kürasyon KALICIDIR; türetilen türetilmiş kalır. Göç v6: `map_nodes` + `map_edges`.**
+ADR-016 Karar 1'in ruhu korunur: türetilebilen HİÇBİR ŞEY saklanmaz (session/run/proje/model/
+agent/hafta düğümleri sorgu zamanında kurulmaya devam eder); yalnız TÜRETİLEMEYEN insan emeği
+saklanır. `map_nodes(id, kind: "context"|"group", title, created_at, ref_kind: "session"|"run"|
+NULL, ref_id)` — `context` = sabitlenmiş konu (ref'li: bir oturuma/koşuya işaret eder; ref'siz:
+serbest konu düğümü), `group` = kullanıcı grubu. `map_edges(id, from_id, to_id, kind: "link"|
+"member", created_at)` — uçlar HERHANGİ bir kararlı düğüm id'si olabilir (kürasyon id'leri +
+türetilmiş kararlı id'ler: `project:<cwd>`, `model:<provider>/<model>`, `agent:<agentId>`,
+`week:<label>`, session/run UUID'leri). `member` kenarı bir `group` düğümüne İÇE bakar; koparma
+= member kenarını silme. Kürasyon düğümü silinince kenarları da silinir (uygulama içi kaskad);
+türetilmiş düğümler ASLA silinemez (`VALIDATION_MAP_NODE_PROTECTED`).
+*Reddedilen:* türetilmiş öğeleri kürasyon tablosuna kopyalamak — ikinci gerçek + senkron yükü.
+
+**Karar 2 — Kürasyon = WS istekleri (ADDITIVE); okuma REST'te kalır. Önce PROTOKOL.md.**
+Yeni istekler (hepsi Bearer'lı oturumdaki mevcut zarf düzeninde): `map.pin {title?, ref?:{kind,
+id}}` → `.ok {nodeId}` (ref verilirse başlık vars. oturum başlığı/koşu görevi; ref'siz çağrıda
+title ZORUNLU) · `map.node.rename {nodeId, title}` · `map.node.delete {nodeId}` (yalnız
+kürasyon) · `map.group.create {title, members[]}` → `.ok {nodeId}` · `map.member.add/remove
+{groupId, nodeId}` · `map.link.add/remove {from, to}`. Doğrulama daemon'da: bilinmeyen id →
+`VALIDATION_MAP_NODE_UNKNOWN`; ref bilinmiyor → `VALIDATION_MAP_REF_UNKNOWN`. REST
+`GET /api/context-map` cevabı ADDITIVE genişler: düğüm `kind` enum'una `context|group|week|
+model|agent`, kenar `kind` enum'una `pin|link|member|model|agent|week` eklenir; model düğümü
+meta'sında `origin: "local"|"api"` (provider=ollama → local). Drill-down: `?week=<ISO-hafta>`
+o haftanın AÇILMIŞ alt-grafını döner.
+
+**Karar 3 — Model + agent düğümleri: ADR-016 Karar 6'nın "model bağı kenar değil" reddi
+REVİZE.** Eski reddin gerekçesi ("her şey tek model düğümüne bağlanır → çöp graf") Karar 4'ün
+haftalık katlanmasıyla ortadan kalkar: model/agent düğümleri yalnız AÇIK (katlanmamış) öğelere
+bağlanır, hub'lar şişemez. Kenarlar: her görünür koşudan `model:<provider>/<model>` VE
+`agent:<agentId>` düğümlerine; her görünür oturumdan model düğümüne. Böylece koşu, kullanıcının
+istediği gibi **agent → koşu → model** zinciri olarak okunur (koşu ortada). Model düğümünün
+görseli yerel/API ayrımını taşır (renk/şekil — TASARIM.md'ye işlenir).
+*Geri dönüş:* buna rağmen çöp graf hissi doğarsa oturum→model kenarı kaldırılır (üçlü kalır).
+
+**Karar 4 — Haftalık katlanma SORGU ZAMANINDA türetilir; zamanlayıcı da tablo da YOK.**
+Hafta tanımının TEK kaynağı mevcut `isoWeekLabel` (core/report/markdown.ts, D5 ile aynı).
+`buildContextMap` v2 kuralı: İÇİNDE BULUNULAN ISO haftası dışındaki session/run öğeleri grafa
+tek tek GİRMEZ; hafta başına bir `week:<label>` düğümü doğar (meta: oturum/koşu sayısı,
+kullanılan modeller, o haftanın rapor dosyası varsa adı — D5 raporuyla kavramsal hizalanma).
+Hafta düğümleri kronolojik `week` kenarlarıyla zincirlenir ve YERLEŞİMDE kuvvet simülasyonuna
+KATILMAZ — alt kenara kronolojik sabitlenir (d3 `fx/fy`; "haritanın kenarına yerleşsin").
+İKİ İSTİSNA katlanmaz: (a) sabitlenmiş (bir `context` düğümünün ref'lediği) öğe — insan emeği
+hep görünür; (b) kürasyon düğümlerinin kendisi (context/group) tarihsizdir, hep görünür.
+Gerekçe: deterministik, göçsüz, ikinci gerçeksiz; hafta bittiği AN harita kendiliğinden
+sadeleşir; DB'den hiçbir şey silinmez (tarihsel dökümantasyon korunur); `?week=` her haftayı
+sonradan açabilir. *Reddedilen:* zamanlanmış fiziksel rollup (D5 zamanlayıcısına ek iş) —
+katlanma SALT görünüm kuralıyken durum biriktirmek gereksiz karmaşıklık.
+
+**Karar 5 — Görsel: YAŞAYAN 2D (kullanıcı kararı, 2026-07-11); tam-3D reddedildi.**
+SVG + d3-force kalır ama harita CANLANIR: simülasyon sürekli hafif salınımla tick atar (drift),
+son 24 saatin kenarlarında akış nabzı (dash animasyonu), yeni düğüm yay (spring) animasyonuyla
+doğar, katlanan öğeler hafta düğümüne süzülerek kaybolur (v1'de basit fade yeterli). TASARIM §5
+sınırları bağlayıcı: her animasyonun anlamı var, 60fps, palet dışına çıkılmaz. ADR-016'nın
+"tesseract sahnesine bindirme" reddi GEÇERLİ kalır; 3D "sahne modu" ancak ayrı bir ADR ile.
+
+**Karar 6 — Kürasyon yüzeyleri: masaüstü paneli + TUI `/harita` + CLI `symphony harita`.**
+Masaüstü: detay paneline kürasyon düğmeleri (Haritaya sabitle / Yeniden adlandır / Bağla /
+Grupla / Kopar / Sil) + "bağla" modu (A seçili → Bağla → B'ye tıkla → `map.link.add`).
+Sürükle-bırakla gruplama v2'ye ertelenir (panel düğmeleri testlenebilir ve ucuz). TUI: sohbet/
+agent ekranında `/harita [başlık]` aktif oturumu sabitler ("bunu haritaya ekleyelim" anı) —
+girdi zaten yakalanıyor, tek komut ayrıştırması. CLI: `symphony harita ekle <sessionId|runId>
+[--baslik X]` + `symphony harita liste` (kürasyon düğümlerini gösterir).
+
+**Karar 7 — Paketleme/güncelleme etkileri (Faz 7 zinciriyle uyum; 2026-07-11 kullanıcı sorusu).**
+(a) **Göç v6 SALT EKLEMELİ olmak ZORUNDA** (yeni tablolar; mevcut tabloya ALTER/yeniden-kurma
+YOK): `migrate()` eski kodda `version >= MIGRATIONS.length → return` der (store.ts) — yani
+`symphony rollback` (F5) v6'ya göçmüş DB ile sorunsuz çalışır, map tabloları eski kodda âtıl
+durur. Bu değişmez H1'in kabul koşuludur; ileride v6'yı genişletmek gerekirse YENİ göç açılır.
+`symphony update` tarafında elle adım yok — daemon ilk açılışta kendisi göçer.
+(b) **Eski istemci toleransı:** REST cevabındaki YENİ enum değerleri (`week|model|...`) eski
+istemcinin katı zod enum'unda parse hatası üretir → harita "bağlantı yok" sanır. Bugün dışarıda
+yayımlanmış istemci YOK (F2 npm yayını hâlâ beklemede) — ileriye dönük düzeltme yeter: H2'de
+UI tarafındaki `kind` alanları katı enum yerine bilinmeyen-değere toleranslı okunur (bilinmeyen
+tür jenerik düğüm çizilir). Böylece GELECEKTEKİ daemon-önde/masaüstü-geride sapması kırılmaz.
+(c) **Tersi sapma (yeni masaüstü + eski daemon):** `map.*` istekleri eski daemon'da bilinmez →
+kürasyon düğmeleri zarif hata gösterir ("daemon'ı güncelle: symphony update"); `/api/health`
+daemonVersion zaten UI'da mevcut. (d) **Masaüstü installer:** `ui/dist` pakete GÖMÜLÜR —
+H3/H5 masaüstünde görünmek için YENİ desktop sürümü (tag → F6 release matrix) gerektirir;
+H1/H2/H4 yalnız npm `symphony update` ile gider. (e) **`symphony sync` kürasyonu TAŞIMAZ**
+(bilinçli): kürasyon SQLite `data/`sında, beyaz liste dışı (ADR-017 Karar 3'ün "DB asla sync
+edilmez" kuralı geçerli). Çok-makine talebi doğarsa `symphony harita disari-aktar/ice-aktar`
+(JSON) ayrı karar olarak gelir. (f) REHBER.md'ye yeni komutlar/harita davranışı H4'te işlenir.
+
+**Dikey dilimler (Kural 7):**
+H1 kürasyon temeli: göç v6 + SAF `context-map/curation.ts` + PROTOKOL + shared + daemon
+işleyicileri (Sonnet) → H2 graf v2: katlanma + model/agent düğümleri + kürasyon bindirmesi +
+`?week=` (Sonnet) → H3 masaüstü v2: yeni düğüm görselleri (yerel/API ayrımı), hafta kenarı
+yerleşimi, kürasyon UI + bağla modu + drill-down (Opus önerilir — etkileşim yoğun) →
+H4 TUI `/harita` + CLI `symphony harita` (Sonnet) → H5 yaşayan animasyon katmanı (Sonnet).
+Adım adım talimat `memo/DURUM.md`'de. Kabul: sabitlenen konu başlık+tarihle haritada kalıcı;
+elle grup/bağ kurulup daemon restart'ında yaşıyor; geçen haftanın öğeleri tek hafta düğümüne
+katlanmış ve `?week=` ile açılıyor; agent koşusu agent→koşu→model üçlüsü olarak görünüyor.
+
+**Geri dönüş koşulları:** katlanma kafa karıştırırsa `?flat=1` katlamasız görünüm eklenir
+(kural tek yerde, `buildContextMap` bayrağı); model/agent düğümleri gürültü yaratırsa
+oturum→model kenarı düşürülür; kürasyon istekleri kötüye kullanılabilir çıkarsa (ör. dev
+`members[]`) şemalara üst sınır konur; animasyon performans yerse `prefers-reduced-motion`
++ sabit görünüm anahtarı.
