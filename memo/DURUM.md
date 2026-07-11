@@ -3,7 +3,38 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Sonnet — Dilim F4 BİTTİ ve testli, 409 test; CI Linux'tan Windows'a çevrildi)
+**Son güncelleme:** 2026-07-11 (Sonnet — Dilim F5 BİTTİ ve testli, 418 test)
+
+## Faz 7 — Dilim F5 (`symphony update` + `symphony rollback`) BİTTİ (2026-07-11, Sonnet)
+
+ADR-017 Karar 4 uygulandı. Kural 1 sırası: PROTOKOL → core → cli.
+- **PROTOKOL.md §1.1:** `POST /api/shutdown` satırı eklendi (Bearer; cevap gönderildikten SONRA
+  kapanır). **`daemon.ts`:** `close` (önceden return içinde anonim) isimli `const`'a çıkarıldı —
+  hem `RunningDaemon.close`'a hem YENİ endpoint'e AYNI fonksiyon referansı. Endpoint `reply.send()`
+  sonrası `void close()` çağırır (await ETMEZ — `app.close()` isteği bitirmeden bağlantıyı keserdi).
+- **`paths.ts`:** `versionsFile` (`~/.symphony/versions.json`).
+- **YENİ `cli/src/commands/update.ts`:** SAF `readVersions`/`writeVersions`/`nextVersions`/
+  `swappedVersions` + `updateCommand`/`rollbackCommand`. `execa` `cli`'ye eklendi (GEREKSINIMLER
+  güncellendi: "core+cli"). `symphony update`: kendi paket adı+sürümünü self-require ile okur
+  (F1 deseni, `require("@symphony/cli/package.json")`) → `npm view` → aynıysa çık, farklıysa
+  `npm install -g` → versions.json → `/api/shutdown` + `ensureDaemonRunning`. `symphony rollback`:
+  versions.json yoksa net hata+exit(1); varsa `previous`e kurar, kaydı SWAP eder.
+- **`index.ts`:** `symphony update` / `symphony rollback` komutları.
+- **Test:** 409→**418** (+9: `update.test.ts` 8 — versions.json roundtrip/nextVersions/
+  swappedVersions [SAF], `updateCommand` aynı-sürüm→install ÇAĞRILMAZ, farklı-sürüm→install+
+  versions.json+ensureDaemonRunning [execa MOCK — gerçek npm/global kurulum testte YOK],
+  `rollbackCommand` kayıt-yok→hata, kayıt-var→previous'a kurup swap eder; `daemon.test.ts` +1 —
+  AYRI/adanmış bir daemon örneğiyle (paylaşılanı kapatmak dosyadaki TÜM testleri kırardı)
+  `/api/shutdown` 401/200 + health'in GERÇEKTEN artık cevap vermediği). `pnpm build && pnpm
+  test && pnpm lint` temiz (52 dosya/418 test).
+- **CANLI DENENMEDİ (bilinçli):** gerçek `~/.symphony` daemon'ına karşı `/api/shutdown` denenmedi
+  — o an kullanıcının daha önce başlattığı masaüstü uygulamasının bağlantısını gereksizce
+  keserdi; dedike-instance testi (yukarıda) davranışı zaten AYNI kod yoluyla kanıtlıyor. Gerçek
+  `npm install -g` de hiç çalıştırılmadı (F2'nin gerçek yayınına bağımlı — henüz yayınlanmadı).
+
+**Sıradaki:** F2'nin bekleyen kısmı hâlâ duruyor (npm login + org denemesi — kullanıcı). F5'in
+gerçek kabul testi de (registry'den gerçek update/rollback) F2 bitince mümkün olur. F2 beklerken
+F6'ya (GitHub Actions release matrix) ya da F7'ye (REHBER.md, bağımsız) geçilebilir.
 
 ## Faz 7 — Dilim F4 (`symphony sync`) BİTTİ (2026-07-11, Sonnet)
 
@@ -231,7 +262,7 @@ Kök+3 paket sürümü zaten 0.1.0 (lockstep başlangıcı hazır).
    değiştirir, ikincide DUR mesajı.
 5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
 
-### 📋 Dilim F5 — `symphony update` + `symphony rollback` — SIRADAKİ
+### ✅ Dilim F5 — `symphony update` + `symphony rollback` — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 **Önce oku:** ADR-017 Karar 4 · `docs/PROTOKOL.md` §1.1 · `daemon.ts` REST bölümü.
 1. **PROTOKOL önce (Kural 1):** PROTOKOL.md §1.1'e `POST /api/shutdown` satırı (Bearer; daemon
@@ -252,7 +283,7 @@ Kök+3 paket sürümü zaten 0.1.0 (lockstep başlangıcı hazır).
    npm çağrıları testte MOCK (gerçek global kurulum testte yok; execa çağrı argümanları doğrulanır).
 5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
 
-### 📋 Dilim F6 — GitHub Actions release matrix (4 platform + npm publish)
+### 📋 Dilim F6 — GitHub Actions release matrix (4 platform + npm publish) — SIRADAKİ
 
 **Önce oku:** ADR-017 Karar 2 + geri dönüş koşulları.
 1. YENİ `.github/workflows/release.yml`: tetik `push: tags: v*`. Job 1 `test` (windows-latest):

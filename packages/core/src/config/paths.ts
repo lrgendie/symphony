@@ -30,6 +30,8 @@ export interface SymphonyPaths {
   desktopPidFile: string;
   /** ADR-016 Karar 5 (Dilim Z3): `symphony report`ün yazdığı Türkçe markdown raporları. */
   reportsDir: string;
+  /** ADR-017 Karar 4 (Dilim F5): `symphony update`/`rollback`'in sürüm geçmişi ({previous,current,at}). */
+  versionsFile: string;
 }
 
 export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPaths {
@@ -49,6 +51,7 @@ export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPath
     mcpServersFile: join(home, "mcp-servers.json"),
     desktopPidFile: join(home, "desktop.pid"),
     reportsDir: join(home, "reports"),
+    versionsFile: join(home, "versions.json"),
   };
 }
 

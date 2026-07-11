@@ -44,7 +44,7 @@
 | `better-sqlite3` | Yerel veri katmanı: geçmiş, telemetri, skorlar |
 | `keytar` | API anahtarlarını OS keychain'inde saklama |
 | `pino` | Yapılandırılmış loglama (hata telemetrisinin temeli) |
-| `execa` | Agent'ın komut çalıştırma aracı (PowerShell/bash) ✅ kuruldu 2026-07-04. **ADR-017 (Dilim F5):** `symphony update/rollback` npm'i bununla çağırır — `cli` paketine de kurulur (Windows npm.cmd tuzağına karşı) |
+| `execa` | Agent'ın komut çalıştırma aracı (PowerShell/bash) ✅ kuruldu 2026-07-04 (`core`). **ADR-017 (Dilim F5):** `symphony update/rollback` npm'i bununla çağırır — `cli` paketine de ✅ kuruldu 2026-07-11 (Windows npm.cmd tuzağına karşı) |
 | `tinyglobby` | Agent `glob`/`grep` araçlarının dosya tarayıcısı (fast-glob'dan küçük, vitest de kullanıyor) ✅ 2026-07-04 |
 | `picomatch` | İzin kurallarında glob desen eşleme (`permissions.json`) ✅ 2026-07-04 |
 | `diff` | İzin isteklerindeki birleşik diff üretimi (SPEC-AGENT §6) ✅ 2026-07-04 |

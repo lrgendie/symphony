@@ -148,6 +148,34 @@ describe("symphonyd", () => {
     expect(authed.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
   });
 
+  it("otomatik güncelleme (ADR-017 Karar 4, Dilim F5): POST /api/shutdown auth'suz 401 · auth'lu 200 + daemon GERÇEKTEN kapanır", async () => {
+    // AYRI/ADANMIŞ bir daemon örneği — paylaşılan `daemon`'ı kapatmak dosyadaki TÜM diğer
+    // testleri kırardı. Kapandıktan sonra `dedicated.close()` ÇAĞRILMAZ (zaten kapandı).
+    const dedicatedHome = mkdtempSync(join(tmpdir(), "symphony-shutdown-test-"));
+    const dedicated = await startDaemon({ port: 0, home: dedicatedHome, sampleHardware: false });
+    try {
+      const unauthorized = await fetch(`http://127.0.0.1:${dedicated.port}/api/shutdown`, {
+        method: "POST",
+      });
+      expect(unauthorized.status).toBe(401);
+
+      const res = await fetch(`http://127.0.0.1:${dedicated.port}/api/shutdown`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${dedicated.token}` },
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+
+      // Cevap alındıktan SONRA daemon kapanır — health artık cevap VERMEMELİ.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await expect(
+        fetch(`http://127.0.0.1:${dedicated.port}/api/health`, { signal: AbortSignal.timeout(1_000) }),
+      ).rejects.toThrow();
+    } finally {
+      rmSync(dedicatedHome, { recursive: true, force: true });
+    }
+  });
+
   it("yanlış token'lı hello reddedilir", async () => {
     const { reply, ws } = await roundTrip(
       createMessage("hello", {

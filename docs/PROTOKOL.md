@@ -28,6 +28,7 @@
 | `GET /api/roadmap?dir=<yol>` | Bearer | `<dir>/ROADMAP.md`'yi ayrıştırıp `{ phases: RoadmapPhase[] }` döner (ADR-015 Karar 3); `dir` eksikse 400, dosya yoksa 404 — istemci (masaüstü webview) dosya sistemine erişemediği için daemon okur |
 | `GET /api/report?from=<ms>&to=<ms>` | Bearer | Kullanım raporu agregasyonu (ADR-016 Karar 5): toplam token/maliyet (gün+model kırılımı), model×görev-türü başarı tablosu, en sık hata kodları, geri bildirim özeti, eşik bulguları. `from`/`to` verilmezse son 7 gün. Deterministik — bu uç hiçbir provider çağrısı yapmaz |
 | `GET /api/context-map?limit=<n>` | Bearer | Bağlam haritası grafı (ADR-016 Karar 6): `{ nodes: [{id, kind: "session"\|"run"\|"project", label, at, meta}], edges: [{from, to, kind: "project"\|"same_day"}] }` — mevcut sessions/agent_runs verisinden deterministik türetim, vars. son 500 düğüm |
+| `POST /api/shutdown` | Bearer | Daemon'ı TEMİZ kapatır (ADR-017 Karar 4): `{ ok: true }` cevabı GÖNDERİLDİKTEN SONRA kapanır (istemci cevabı kaybetmez) — `symphony update`/`rollback`'in "yeni sürümle yeniden başlat" adımı; agent araç yüzeyinde bu uca giden yol YOKTUR |
 
 Kalıcı geçmiş SQLite'tadır ve YALNIZ REST ile sorgulanır (§6: olay replay'i yok).
 Cevap şemaları `shared`'dadır: `HistorySessionSummarySchema`, `HistoryMessageSchema`,

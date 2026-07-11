@@ -532,6 +532,16 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     return buildContextMap({ runs, sessions, limit });
   });
 
+  // Otomatik güncelleme/rollback (ADR-017 Karar 4, Dilim F5): daemon'ı TEMİZ kapatır. Cevap
+  // GÖNDERİLDİKTEN SONRA `close()` çağrılır — aksi hâlde `app.close()` bağlantıyı bu isteği
+  // flush etmeden keser, istemci (symphony update/rollback) cevabı hiç görmez. `close` aşağıda
+  // TANIMLIDIR (return'de) — closure JS'te bu SIRA sorunu yaratmaz (handler ancak gerçek bir
+  // istekte ÇALIŞIR, o zamana dek `close` çoktan atanmış olur).
+  app.post("/api/shutdown", async (request, reply) => {
+    await reply.send({ ok: true });
+    void close();
+  });
+
   // ---- WebSocket ----
 
   const wss = new WebSocketServer({ noServer: true });
@@ -800,20 +810,18 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const boundPort = typeof address === "object" && address !== null ? address.port : port;
   log.info({ port: boundPort, protocolVersion: PROTOCOL_VERSION }, "symphonyd dinliyor");
 
-  return {
-    port: boundPort,
-    token,
-    close: async () => {
-      if (hardwareTimer !== null) clearInterval(hardwareTimer);
-      engine.cancelAll();
-      for (const abort of activeChats.values()) abort.abort();
-      // Açık istemci soketleri koparılmazsa app.close() sonsuza dek bekleyebilir.
-      for (const client of wss.clients) client.terminate();
-      wss.close();
-      await app.close();
-      store.close();
-    },
+  const close = async (): Promise<void> => {
+    if (hardwareTimer !== null) clearInterval(hardwareTimer);
+    engine.cancelAll();
+    for (const abort of activeChats.values()) abort.abort();
+    // Açık istemci soketleri koparılmazsa app.close() sonsuza dek bekleyebilir.
+    for (const client of wss.clients) client.terminate();
+    wss.close();
+    await app.close();
+    store.close();
   };
+
+  return { port: boundPort, token, close };
 }
 
 function makeError(code: string, message: string): Error {

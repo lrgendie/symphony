@@ -97,7 +97,8 @@ protokol WS/REST üzerinden konuşulur.
   `ensureProfileScaffold` (M1, enjeksiyon — kesiyor/scaffold'u null sayıyor) AYRI amaçlı
   `readProfileSnapshot`/`writeProfile` (M2, REST GET/PUT — TAM içerik, `truncated` yalnız uyarı)
 - `secrets/secret-store.ts` — OS keychain + env yedek; anahtar DİSKE YAZILMAZ
-- `config/paths.ts` — `~/.symphony` yol haritası (SYMPHONY_HOME ile taşınır)
+- `config/paths.ts` — `~/.symphony` yol haritası (SYMPHONY_HOME ile taşınır). `versionsFile`
+  (ADR-017 Karar 4, Dilim F5) — `symphony update`/`rollback`'in {previous,current,at} kaydı
 - `config/config.ts` — config.json yükleme (`daemon`/`defaults`/`memory`/`desktop` +
   `limits.maxOutputTokens`: kaçak üretim sigortasının TEK varsayılan kaynağı, vars. 8192)
 - `agent/` — Faz 3 agent motoru (SPEC-AGENT.md'nin uygulaması):
@@ -147,6 +148,10 @@ protokol WS/REST üzerinden konuşulur.
     `symphony sync` (add+commit varsa → `pull --rebase` → push; çakışmada DURUR, elle-çöz mesajı
     — otomatik birleştirme YOK). `simple-git` kullanır; kimlik doğrulama sistemin git credential
     helper'ına bırakılır. `daemon.token`/`data`/`logs` ASLA beyaz listede değil
+  - `update.ts` (ADR-017 Karar 4, Dilim F5) — `symphony update` (npm view→install-g→
+    `versions.json`→`/api/shutdown`+`ensureDaemonRunning`) + `symphony rollback` (previous'a
+    döner, kaydı swap eder). SAF yardımcılar (`readVersions`/`writeVersions`/`nextVersions`/
+    `swappedVersions`) aynı dosyada, ayrı test edilir. `execa` ile npm çağrılır (testte MOCK)
   - `feedback.ts` (ADR-016 Karar 4, Dilim Z2) — `symphony feedback <runId> iyi|kötü [-n not]`:
     Türkçe değeri wire'a çevirir, `feedback.submit` atar. **Tam UUID gerekir** (history'nin
     aksine id ön eki DESTEKLENMEZ — prefix için "agent runs listesi" ucu gerekirdi, kapsam dışı)

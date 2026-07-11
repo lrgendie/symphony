@@ -13,6 +13,7 @@ import { feedbackCommand } from "./commands/feedback.js";
 import { reportCommand } from "./commands/report.js";
 import { addCommand } from "./commands/add.js";
 import { syncCommand, syncInitCommand } from "./commands/sync.js";
+import { rollbackCommand, updateCommand } from "./commands/update.js";
 import { ensureDesktopRunning } from "./client/desktop-launch.js";
 
 const program = new Command();
@@ -115,6 +116,16 @@ sync
   .command("init <uzak-depo-url>")
   .description("İlk kurulum / yeni makine: uzak depoya bağlan, varsa mevcut yapılandırmayı indir")
   .action((url: string) => syncInitCommand(url).catch(fail));
+
+program
+  .command("update")
+  .description("npm'de yeni sürüm varsa kur, daemon'ı yeniden başlat (ADR-017 Karar 4)")
+  .action(wrap(() => updateCommand()));
+
+program
+  .command("rollback")
+  .description("Son `update`den önceki sürüme dön (ADR-017 Karar 4)")
+  .action(wrap(() => rollbackCommand()));
 
 // Argümansız `symphony` → TUI (model seçici + sohbet)
 program.action(
