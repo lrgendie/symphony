@@ -151,6 +151,28 @@ const MIGRATIONS: readonly string[] = [
   CREATE INDEX idx_feedback_at ON feedback (at);
   CREATE INDEX idx_feedback_subject ON feedback (subject_kind, subject_id);
   `,
+  // v6 — kendine yama önerileri (ADR-018 Karar 3, Faz 8 Dilim D1): doktor agent'ın sandbox'ta
+  // ürettiği önerinin KALICI kaydı. `state` geçişleri CLI'nin denetimli `patch apply/reject`
+  // zincirinde yapılır (bkz. Dilim D3) — daemon kendi kendine `applied`/`reverted` YAZMAZ.
+  `
+  CREATE TABLE patches (
+    id           TEXT PRIMARY KEY,
+    created_at   INTEGER NOT NULL,
+    error_code   TEXT NOT NULL,
+    category     TEXT NOT NULL,
+    branch       TEXT NOT NULL,
+    files        TEXT NOT NULL,
+    diff         TEXT NOT NULL,
+    test_ok      INTEGER NOT NULL,
+    test_summary TEXT NOT NULL,
+    run_id       TEXT,
+    state        TEXT NOT NULL CHECK (state IN
+      ('proposed', 'applied', 'rejected', 'reverted', 'failed')),
+    resolved_at  INTEGER
+  );
+  CREATE INDEX idx_patches_state ON patches (state);
+  CREATE INDEX idx_patches_error_code ON patches (error_code);
+  `,
 ];
 
 export type RequestStatus = "ok" | "error" | "cancelled";
@@ -228,6 +250,51 @@ interface TelemetryRow {
   message: string;
   stack: string | null;
   context: string | null;
+}
+
+function toTelemetryEntry(row: TelemetryRow): TelemetryEntry {
+  return {
+    id: row.id,
+    at: row.at,
+    scope: row.scope,
+    code: row.code,
+    message: row.message,
+    ...(row.stack !== null ? { stack: row.stack } : {}),
+    ...(row.context !== null ? { context: JSON.parse(row.context) as Record<string, unknown> } : {}),
+  };
+}
+
+/** `patches` satırı (ADR-018 Karar 3, Faz 8 Dilim D1) — SQLite sütun adlarıyla. */
+interface PatchRow {
+  id: string;
+  created_at: number;
+  error_code: string;
+  category: string;
+  branch: string;
+  files: string;
+  diff: string;
+  test_ok: number;
+  test_summary: string;
+  run_id: string | null;
+  state: string;
+  resolved_at: number | null;
+}
+
+function toPatchEntry(row: PatchRow): PatchEntry {
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    errorCode: row.error_code,
+    category: row.category,
+    branch: row.branch,
+    files: JSON.parse(row.files) as string[],
+    diff: row.diff,
+    testOk: row.test_ok === 1,
+    testSummary: row.test_summary,
+    runId: row.run_id,
+    state: row.state as PatchState,
+    resolvedAt: row.resolved_at,
+  };
 }
 
 interface SumRow {
@@ -549,17 +616,19 @@ export class DataStore {
     const rows = this.db
       .prepare(`SELECT * FROM telemetry ORDER BY at DESC, id DESC LIMIT ?`)
       .all(limit) as TelemetryRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      at: row.at,
-      scope: row.scope,
-      code: row.code,
-      message: row.message,
-      ...(row.stack !== null ? { stack: row.stack } : {}),
-      ...(row.context !== null
-        ? { context: JSON.parse(row.context) as Record<string, unknown> }
-        : {}),
-    }));
+    return rows.map(toTelemetryEntry);
+  }
+
+  /**
+   * Doktor teşhis dosyasının girdisi (ADR-018 Karar 1/2, Faz 8 Dilim D1): bir hata koduna ait
+   * ham telemetri kayıtları (yeniden eskiye) — `recentTelemetry` ile AYNI dönüşüm (`toTelemetryEntry`),
+   * yalnız kod+zaman penceresiyle filtrelenir.
+   */
+  telemetryRowsForCode(code: string, sinceMs: number): TelemetryEntry[] {
+    const rows = this.db
+      .prepare(`SELECT * FROM telemetry WHERE code = ? AND at >= ? ORDER BY at DESC`)
+      .all(code, sinceMs) as TelemetryRow[];
+    return rows.map(toTelemetryEntry);
   }
 
   // ---- Agent koşuları (v3, SPEC-AGENT §7) ----
@@ -794,6 +863,81 @@ export class DataStore {
     return rows;
   }
 
+  // ---- Kendine yama önerileri (ADR-018 Karar 3, Faz 8 Dilim D1) ----
+
+  /** Doktor agent'ın sandbox'ta ürettiği öneriyi kaydeder — state daima `'proposed'` başlar. */
+  createPatch(record: PatchRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO patches
+           (id, created_at, error_code, category, branch, files, diff, test_ok, test_summary, run_id, state)
+         VALUES
+           (@id, @createdAt, @errorCode, @category, @branch, @files, @diff, @testOk, @testSummary, @runId, 'proposed')`,
+      )
+      .run({
+        id: record.id,
+        createdAt: Date.now(),
+        errorCode: record.errorCode,
+        category: record.category,
+        branch: record.branch,
+        files: JSON.stringify(record.files),
+        diff: record.diff,
+        testOk: record.testOk ? 1 : 0,
+        testSummary: record.testSummary,
+        runId: record.runId ?? null,
+      });
+  }
+
+  /** Tek bir yama kaydı — yoksa null. */
+  patchById(id: string): PatchEntry | null {
+    const row = this.db.prepare(`SELECT * FROM patches WHERE id = ?`).get(id) as
+      | PatchRow
+      | undefined;
+    return row === undefined ? null : toPatchEntry(row);
+  }
+
+  /**
+   * Yama listesi (yeniden eskiye); `state` verilirse yalnız o durumdakiler. `id` TEXT'tir
+   * (UUID) — aynı milisaniyede eklenen iki kayıtta `created_at DESC` TEK BAŞINA sırayı
+   * garanti ETMEZ (Z3'ün `telemetry`/`recentFeedback` dersiyle AYNI sınıf hata); ikincil
+   * anahtar örtük `rowid` (SQLite'ta INSERT sırasıyla monoton artar, `id` autoincrement
+   * olmasa da güvenilir).
+   */
+  listPatches(state?: PatchState): PatchEntry[] {
+    const rows = (
+      state !== undefined
+        ? this.db
+            .prepare(`SELECT * FROM patches WHERE state = ? ORDER BY created_at DESC, rowid DESC`)
+            .all(state)
+        : this.db.prepare(`SELECT * FROM patches ORDER BY created_at DESC, rowid DESC`).all()
+    ) as PatchRow[];
+    return rows.map(toPatchEntry);
+  }
+
+  /**
+   * Bir yamanın durumunu değiştirir (`resolved_at` = şimdi) — CLI'nin denetimli `patch apply/
+   * reject` zincirinde çağrılır (Dilim D3); daemon kendi kendine ÇAĞIRMAZ.
+   */
+  resolvePatch(id: string, state: PatchState): void {
+    this.db.prepare(`UPDATE patches SET state = ?, resolved_at = ? WHERE id = ?`).run(
+      state,
+      Date.now(),
+      id,
+    );
+  }
+
+  /**
+   * Teşhis eleme listesi (ADR-018 Karar 1): hâlâ AÇIK (`proposed`) ya da UYGULANMIŞ (`applied`)
+   * bir önerisi olan hata kodları — `detectRecurring`'in dışarıda bırakacağı kodlar (aynı hata
+   * için ikinci bir öneri üretilmez; `rejected`/`reverted`/`failed` yeniden aday olabilir).
+   */
+  openOrAppliedErrorCodes(): string[] {
+    const rows = this.db
+      .prepare(`SELECT DISTINCT error_code FROM patches WHERE state IN ('proposed', 'applied')`)
+      .all() as Array<{ error_code: string }>;
+    return rows.map((row) => row.error_code);
+  }
+
   close(): void {
     this.db.close();
   }
@@ -886,4 +1030,38 @@ export interface AgentRunRow {
   cost_usd: number;
   started_at: number;
   finished_at: number | null;
+}
+
+/** ADR-018 Karar 3 (Faz 8): yama önerisinin ömür boyu durumu — CLI'nin denetimli zinciriyle değişir. */
+export type PatchState = "proposed" | "applied" | "rejected" | "reverted" | "failed";
+
+/** `createPatch` girdisi — `id`/`files` doktor boru hattınca üretilir (Dilim D2). */
+export interface PatchRecord {
+  id: string;
+  errorCode: string;
+  category: string;
+  branch: string;
+  files: string[];
+  diff: string;
+  testOk: boolean;
+  testSummary: string;
+  runId?: string;
+}
+
+/** `patches` satırının kamuya açık (camelCase) görünümü. */
+export interface PatchEntry {
+  id: string;
+  /** epoch ms */
+  createdAt: number;
+  errorCode: string;
+  category: string;
+  branch: string;
+  files: string[];
+  diff: string;
+  testOk: boolean;
+  testSummary: string;
+  runId: string | null;
+  state: PatchState;
+  /** epoch ms — `resolvePatch` çağrılana dek null (hâlâ `proposed`). */
+  resolvedAt: number | null;
 }

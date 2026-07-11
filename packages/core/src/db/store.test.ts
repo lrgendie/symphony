@@ -347,4 +347,97 @@ describe("DataStore", () => {
       expect(store.feedbackSince(Date.now() + 60_000)).toHaveLength(0);
     });
   });
+
+  describe("kendine yama önerileri (ADR-018 Karar 3, göç v6)", () => {
+    function makePatch(overrides: Partial<Parameters<DataStore["createPatch"]>[0]> = {}) {
+      return {
+        id: crypto.randomUUID(),
+        errorCode: "AGENT_TOOL_LOOP",
+        category: "AGENT_TOOL_LOOP",
+        branch: "doktor/agent-tool-loop",
+        files: ["packages/core/src/agent/engine.ts"],
+        diff: "--- a/engine.ts\n+++ b/engine.ts\n@@ ...",
+        testOk: true,
+        testSummary: "49 dosya, 421 test yeşil",
+        ...overrides,
+      };
+    }
+
+    it("createPatch yazar, patchById TAM eşleşen kaydı döner (state daima 'proposed' başlar)", () => {
+      openStore();
+      const record = makePatch();
+      store.createPatch(record);
+
+      const entry = store.patchById(record.id);
+      expect(entry).toMatchObject({
+        id: record.id,
+        errorCode: "AGENT_TOOL_LOOP",
+        category: "AGENT_TOOL_LOOP",
+        branch: "doktor/agent-tool-loop",
+        files: ["packages/core/src/agent/engine.ts"],
+        testOk: true,
+        testSummary: "49 dosya, 421 test yeşil",
+        runId: null,
+        state: "proposed",
+        resolvedAt: null,
+      });
+      expect(typeof entry?.createdAt).toBe("number");
+    });
+
+    it("patchById bilinmeyen id için null döner", () => {
+      openStore();
+      expect(store.patchById("yok-boyle-id")).toBeNull();
+    });
+
+    it("listPatches yeniden-eskiye döner; state verilirse yalnız o durumdakiler", () => {
+      openStore();
+      store.createPatch(makePatch({ id: "p1", errorCode: "A" }));
+      store.createPatch(makePatch({ id: "p2", errorCode: "B" }));
+      store.resolvePatch("p1", "applied");
+
+      expect(store.listPatches().map((p) => p.id)).toEqual(["p2", "p1"]);
+      expect(store.listPatches("applied").map((p) => p.id)).toEqual(["p1"]);
+      expect(store.listPatches("proposed").map((p) => p.id)).toEqual(["p2"]);
+    });
+
+    it("resolvePatch state'i değiştirir + resolvedAt'i doldurur", () => {
+      openStore();
+      store.createPatch(makePatch({ id: "p1" }));
+      expect(store.patchById("p1")?.resolvedAt).toBeNull();
+
+      store.resolvePatch("p1", "reverted");
+
+      const after = store.patchById("p1");
+      expect(after?.state).toBe("reverted");
+      expect(typeof after?.resolvedAt).toBe("number");
+    });
+
+    it("openOrAppliedErrorCodes: yalnız 'proposed'/'applied' durumundaki kodları döner", () => {
+      openStore();
+      store.createPatch(makePatch({ id: "p1", errorCode: "OPEN_ONE" }));
+      store.createPatch(makePatch({ id: "p2", errorCode: "APPLIED_ONE" }));
+      store.createPatch(makePatch({ id: "p3", errorCode: "REJECTED_ONE" }));
+      store.resolvePatch("p2", "applied");
+      store.resolvePatch("p3", "rejected");
+
+      const codes = store.openOrAppliedErrorCodes();
+      expect(codes).toContain("OPEN_ONE");
+      expect(codes).toContain("APPLIED_ONE");
+      expect(codes).not.toContain("REJECTED_ONE");
+    });
+
+    it("telemetryRowsForCode: yalnız verilen kodu ve zaman penceresini döner, recentTelemetry ile AYNI alan biçimi", () => {
+      openStore();
+      store.recordTelemetry({ scope: "agent", code: "AGENT_TOOL_LOOP", message: "1", stack: "s1" });
+      store.recordTelemetry({ scope: "agent", code: "AGENT_TOOL_LOOP", message: "2" });
+      store.recordTelemetry({ scope: "agent", code: "BASKA_KOD", message: "3" });
+
+      const rows = store.telemetryRowsForCode("AGENT_TOOL_LOOP", 0);
+      expect(rows).toHaveLength(2);
+      expect(rows.every((r) => r.code === "AGENT_TOOL_LOOP")).toBe(true);
+      expect(rows.find((r) => r.message === "1")?.stack).toBe("s1");
+
+      expect(store.telemetryRowsForCode("AGENT_TOOL_LOOP", Date.now() + 60_000)).toEqual([]);
+    });
+  });
 });

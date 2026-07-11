@@ -3,7 +3,42 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Fable — Faz 8 tasarımı TAMAM: ADR-018 yazıldı, dilimler D1-D6 Sonnet'e hazır)
+**Son güncelleme:** 2026-07-11 (Sonnet — Dilim D1 BİTTİ ve testli, 430 test)
+
+## Faz 8 — Dilim D1 (teşhis çekirdeği) BİTTİ (2026-07-11, Sonnet)
+
+ADR-018 Karar 1+3 uygulandı. Protokolsüz (öngörüldüğü gibi).
+- **Göç v6 (`store.ts`):** `patches(id TEXT PK, created_at, error_code, category, branch,
+  files[JSON], diff, test_ok, test_summary, run_id, state CHECK(...), resolved_at)` +
+  `idx_patches_state`/`idx_patches_error_code`.
+- **Store CRUD:** `createPatch`/`patchById`/`listPatches(state?)`/`resolvePatch(id,state)`
+  (resolved_at=now) + `openOrAppliedErrorCodes()` (teşhis eleme listesi) + `telemetryRowsForCode
+  (code, sinceMs)` (teşhis dosyası girdisi). **Bilinçli sadeleştirme:** `recentTelemetry`'nin
+  satır→nesne dönüşümü `toTelemetryEntry` yardımcı fonksiyonuna çıkarıldı, `telemetryRowsForCode`
+  AYNI fonksiyonu kullanıyor (ikinci gerçek üretilmedi) — `toPatchEntry` de aynı desende.
+  Yeni tipler: `PatchState`/`PatchRecord`/`PatchEntry` (core/index.ts zaten `export * from
+  db/store.js` yaptığından otomatik dışa açık).
+- **Yan bulgu/düzeltme (Z3'ün dersiyle AYNI sınıf hata):** `listPatches`'in `ORDER BY
+  created_at DESC` TEK BAŞINA sırayı garanti etmiyordu — `patches.id` TEXT (UUID), autoincrement
+  DEĞİL; aynı milisaniyede eklenen iki kayıt rastgele sırayla dönebiliyordu (testte YAKALANDI).
+  Düzeltme: ikincil anahtar örtük `rowid` (`ORDER BY created_at DESC, rowid DESC`) — SQLite'ta
+  `id` autoincrement olmasa da INSERT sırasıyla monoton artar. **Ders:** yeni bir `recent*`/
+  `list*` metodu TEXT id'li bir tabloda sıralama gerektiğinde `rowid`'i tiebreaker yapmalı
+  (autoincrement INTEGER id'lerde zaten `id DESC` yeterliydi, bu ders genelleşti).
+- **YENİ `core/src/doctor/detect.ts`** (SAF, testli): `detectRecurring(rows, excluded,
+  minRecurrence=3)` — eşik altı VE `excluded` (açık/uygulanmış önerisi olan kod) elenir, kalan
+  sayıya göre azalan sıralanır. LLM'e sorulmaz (ADR-016 rapor felsefesiyle aynı).
+- **Test:** 418→**430** (+12: `store.test.ts` YENİ "kendine yama önerileri" describe 6 —
+  createPatch+patchById roundtrip, bilinmeyen id→null, listPatches state filtresi+sıralama
+  [rowid düzeltmesi burada yakalandı], resolvePatch state+resolvedAt, openOrAppliedErrorCodes
+  ayrımı, telemetryRowsForCode kod+pencere filtresi; `doctor/detect.test.ts` YENİ dosya 6 —
+  eşik altı/eşiğe tam uyan, excluded, sıralama, özel minRecurrence, boş girdi).
+  `pnpm build && pnpm test && pnpm lint` temiz (53 dosya/430 test).
+
+**Sıradaki: Dilim D2** (sandbox + doktor koşusu — PROTOKOL + worktree boru hattı + `doktor`
+tanımı + `symphony doctor`). ADR-018'in kendi tavsiyesi: **bu dilim + D3 Opus'a bırakılsın**
+(asenkron boru hattı orkestrasyonu + güvenlik-kritik merge/restart/revert zinciri — hata
+maliyeti yüksek). Talimat aşağıda ("📋 Dilim D2" başlığı) zaten yazılı, değişmedi.
 
 ## Faz 8 — Kendini Geliştiren Symphony: TASARIM TAMAM (2026-07-11, Fable — ADR-018) → dilimler D1..D6
 
@@ -33,7 +68,7 @@ alma F5'in restart zinciridir. Kararların özü:
 (`tsx src/main.ts`) — merge+restart = canlıya alma GERÇEK. npm-global kurulumda `selfDev.repoPath`
 yoksa doktor net hatayla durur (bilinçli sınır).
 
-### 📋 Dilim D1 — teşhis çekirdeği (SAF detect + göç v6 + store CRUD; protokolsüz) — SIRADAKİ
+### ✅ Dilim D1 — teşhis çekirdeği (SAF detect + göç v6 + store CRUD; protokolsüz) — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 **Önce oku (yalnız bunlar):** ADR-018 Karar 1+3 · `store.ts`'te `telemetry` tablosu/
 `topErrorCodesSince` civarı + `feedback` göçü (v5, desen) · `router/stats.ts` başı (SAF modül deseni).
@@ -52,7 +87,7 @@ yoksa doktor net hatayla durur (bilinçli sınır).
    sıralama) — `stats.test.ts`/`store.test.ts` desenleri.
 5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
 
-### 📋 Dilim D2 — sandbox + doktor koşusu (PROTOKOL + boru hattı + `symphony doctor`)
+### 📋 Dilim D2 — sandbox + doktor koşusu (PROTOKOL + boru hattı + `symphony doctor`) — SIRADAKİ (ÖNERİ: Opus)
 
 **Önce oku:** ADR-018 Karar 1+2 · `agent/definition.ts` `ensureDefaultAgent` · `daemon.ts`
 `agent.start` handler'ı + `buildRouterStats` civarı · `config/config.ts`.
