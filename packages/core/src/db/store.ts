@@ -12,7 +12,7 @@ import type {
  * (`~/.symphony/data/symphony.db`). Şema sürümü `PRAGMA user_version` ile
  * izlenir; her göç bir kez, sırayla ve işlem (transaction) içinde koşar.
  *
- * Faz 1 tabloları:
+ * Tablolar (göç sırasına göre — v1..v6):
  * - `requests`  — her model isteğinin kaydı (ROADMAP: router v2 ve
  *   kişiselleşme bu veriyle beslenecek)
  * - `telemetry` — hata telemetrisi: hangi işlem, hangi girdi ÖZETİ, stack
