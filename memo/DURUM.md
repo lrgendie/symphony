@@ -3,7 +3,78 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Sonnet — Dilim D1 BİTTİ ve testli, 430 test)
+**Son güncelleme:** 2026-07-11 (Opus — Dilim D2 BİTTİ ve testli, 456 test; canlı kabul provası KULLANICIYA)
+
+## Faz 8 — Dilim D2 (sandbox + doktor koşusu) BİTTİ (2026-07-11, Opus)
+
+ADR-018 Karar 1+2+3 uygulandı. Kural 1 sırası: PROTOKOL → shared → core → cli.
+
+**İKİ TASARIM BOŞLUĞU BULUNDU VE KAPATILDI (uygulama sırasında ortaya çıktı):**
+1. **Agent COMMIT ATMAZ ama D3 merge'e muhtaç.** Doktor agent worktree'de yalnız dosya düzenler
+   (commit aracı yok) — ama D3'ün `patch apply` zinciri `git merge doktor/<dal>` yapacak, bu da
+   dalda bir COMMIT olmasını gerektirir. Çözüm: koşu bitince **boru hattı** `git add -A` +
+   `commit` yapar (`collectAndCommit`). Teşhis dosyası ÖNCE silinir — o bizim girdimiz, yamanın
+   parçası DEĞİL (testle kanıtlı).
+2. **`doctor.run.ok {runId}` İMKÂNSIZ.** Boru hattının ilk adımı (worktree + `pnpm install`) tek
+   başına dakikalarca sürer; WS istek zaman aşımı **30sn** (`daemon-client.ts` REQUEST_TIMEOUT_MS).
+   runId ancak agent koşusu doğunca var olur → cevap onu BEKLEYEMEZ. Çözüm (ADR'ye AYKIRI DEĞİL —
+   ADR yalnız "doctor.run boru hattını başlatır" der, cevap şeklini DURUM taslağı önermişti):
+   `doctor.run.ok` = **ACK `{}`**; runId + ilerleme YENİ `doctor.phase` olayıyla akar
+   (`sandbox|agent|verify|done|failed`). Uzun sessiz adımlarda kullanıcıya ilerleme göstermek de
+   bunun işi — aksi hâlde terminal 3-5 dk donmuş görünürdü.
+- **PROTOKOL.md §3/§4 + shared:** `doctor.diagnose {}` → `.ok {candidates}` · `doctor.run
+  {errorCode}` → `.ok {}` (ACK) · YENİ olay `doctor.phase {phase, message, runId?}` · YENİ olay
+  `doctor.patch.proposed {runId, patchId, errorCode, branch, files, testOk, testSummary}`.
+- **`bus.ts`:** `observe(listener)` — daemon-İÇİ dinleyici (boru hattı koşu bitişini böyle bekler;
+  motorun içine kanca YOK). Yalnız `broadcast` gözlemcilere düşer, `sendTo` DÜŞMEZ. Gözlemci
+  hatası yayını KESMEZ (try/catch).
+- **`config.ts`:** `selfDev {repoPath?, minRecurrence: 3, windowDays: 7}`.
+- **YENİ `core/src/doctor/sandbox.ts`:** `slugForCode`/`sandboxBranch`/`formatDiagnosis`
+  (SAF, testli) + `findRepoRoot` (**node_modules içinden null** — paketlenmiş kurulumda daemon
+  kendi kaynağına sahip değil, kullanıcının rastgele projesini "kendi repom" sanmasın) +
+  `createSandbox` (worktree + dal + install; `install` bayrağı testte kapatılır) +
+  `collectAndCommit` + `runVerification` (build→test→lint, ilk düşende durur) + `removeSandbox`
+  (`keepBranch`: yama önerildiyse DAL KORUNUR, worktree kalkar — D3 dalı merge edecek) +
+  **`SandboxOps`/`REAL_SANDBOX_OPS`** (git+pnpm yüzeyi tek nesnede — boru hattı testte sahte
+  ops'la uçtan uca denenebiliyor).
+- **`definition.ts`:** YENİ `doktor` varsayılan agent tanımı (coder araç seti, `run_agent` YOK,
+  model/provider boş → router). Sistem prompt'u: teşhis dosyasını OKU → kök neden → ASGARİ yama →
+  testleri koştur; "kök neden bulunamadıysa yama UYDURMA".
+- **YENİ `core/src/doctor/pipeline.ts`:** `diagnose()` + `run(errorCode)`. `run` yalnız
+  DOĞRULAMAYI bekler (repo/kod/meşguliyet → `VALIDATION_SELFDEV_REPO_REQUIRED` /
+  `VALIDATION_DOCTOR_CODE_UNKNOWN` / `AGENT_DOCTOR_BUSY`), gerisi arka planda. Doktor **NORMAL**
+  `engine.start` ile koşar (`agentId: "doktor"`, `cwd = worktree`) — izin kapısı, jail, durum
+  makinesi aynen geçerli; ayrıcalıklı mod YOK.
+- **`daemon.ts`:** `DoctorPipeline` kurulur (motorun yalnız `startRun` yüzeyini görür) +
+  `doctor.diagnose`/`doctor.run` handler'ları.
+- **YENİ `cli/commands/doctor.ts`:** `symphony doctor [--kod X]` — aday listesi → boru hattı →
+  canlı izleme (faz mesajları + agent olayları + izin istekleri) → yama önerisi özeti.
+  `renderDiff` `agent.ts`'ten export edilip yeniden kullanıldı (kod tekrarı yok).
+- **Test:** 430→**456** (+26: `sandbox.test.ts` 10 SAF [slug/dal, findRepoRoot'un node_modules
+  guard'ı, teşhis dosyası biçimi/limit]; `sandbox.git.test.ts` 5 **GERÇEK git** [worktree+dal
+  açılır; agent değişiklikleri DALDA commit'lenir; **teşhis dosyası yamaya GİRMEZ**; değişiklik
+  yoksa null; keepBranch=true'da dal KORUNUR; yarım kalmış dal temizlenip yeniden açılır];
+  `pipeline.test.ts` 9 [teşhis eleme; 3 doğrulama hatası; başarı yolu (doktor SANDBOX'ta koşar,
+  yama `proposed`, olay yayınlanır, dal korunur); **`test_ok` boru hattının ölçümü — agent
+  "tamamlandı" dese bile düşen testler yamaya işlenir**; koşu başarısız → yama YAZILMAZ + dal
+  silinir; değişiklik yok → doğrulama bile koşmaz; meşguliyet kalkar]; `definition.test.ts` +1;
+  `daemon.test.ts` +1 [gerçek DB'ye seed → `doctor.diagnose` adayı bulur; bilinmeyen kodda
+  `doctor.run` reddedilir]). `pnpm build && pnpm test && pnpm lint` temiz (56 dosya/456 test).
+- **CANLI DOĞRULAMA (kısmi — agent koşusu HARİÇ):** daemon yeni kodla yeniden başlatıldı →
+  gerçek WS `doctor.diagnose` → gerçek telemetriden **`INTERNAL_AGENT_ERROR` × 7** adayı döndü
+  (deterministik teşhis canlı çalışıyor). Sandbox mekaniği **bu gerçek repo** üzerinde denendi
+  (`findRepoRoot` → worktree açıldı → gerçek kaynak kopyası doğrulandı → teşhis yazıldı →
+  temizlendi); `git worktree list` + `git branch doktor/*` sonrasında TERTEMİZ (artık yok).
+- **YAPILMADI — KABUL PROVASI KULLANICIYA:** gerçek doktor agent koşusu (`symphony doctor`)
+  ÇALIŞTIRILMADI: gerçek LLM token'ı harcar, izin isteklerini terminalden İNTERAKTİF cevaplamak
+  gerekir ve 3-5 dk sürer (worktree + install + koşu + build/test/lint). Kullanıcı hazır olduğunda
+  `symphony doctor` yazıp `INTERNAL_AGENT_ERROR` adayıyla uçtan uca denemeli — beklenen: faz
+  mesajları akar, izin sorulur, sonunda yama önerisi (`testOk` ile) kaydedilir ve
+  "symphony patch apply" önerilir (o komut D3'te gelecek).
+
+**Sıradaki: Dilim D3** (denetimli canlıya alma + watchdog — `symphony patches`/`patch apply|reject`
++ PROTECTED_PATHS). ADR-018'in tavsiyesi: **D3 de Opus'ta kalsın** (güvenlik-kritik merge/restart/
+revert zinciri). Talimat aşağıda ("📋 Dilim D3") zaten yazılı, değişmedi.
 
 ## Faz 8 — Dilim D1 (teşhis çekirdeği) BİTTİ (2026-07-11, Sonnet)
 
@@ -87,7 +158,7 @@ yoksa doktor net hatayla durur (bilinçli sınır).
    sıralama) — `stats.test.ts`/`store.test.ts` desenleri.
 5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
 
-### 📋 Dilim D2 — sandbox + doktor koşusu (PROTOKOL + boru hattı + `symphony doctor`) — SIRADAKİ (ÖNERİ: Opus)
+### ✅ Dilim D2 — sandbox + doktor koşusu — BİTTİ (yukarıda ayrıntı + İKİ tasarım boşluğunun kapatılması; orijinal talimat aşağıda arşivlendi)
 
 **Önce oku:** ADR-018 Karar 1+2 · `agent/definition.ts` `ensureDefaultAgent` · `daemon.ts`
 `agent.start` handler'ı + `buildRouterStats` civarı · `config/config.ts`.
@@ -122,7 +193,12 @@ yoksa doktor net hatayla durur (bilinçli sınır).
    kasıtlı telemetri hatası enjekte et (test-DB değil gerçek DB'ye 3 sahte kayıt) → `symphony
    doctor` → aday görünüyor → koşu → patch önerisi `test_ok` ile kaydedildi.
 
-### 📋 Dilim D3 — denetimli canlıya alma + watchdog (`patches`/`patch apply|reject` + PROTECTED_PATHS)
+### 📋 Dilim D3 — denetimli canlıya alma + watchdog (`patches`/`patch apply|reject` + PROTECTED_PATHS) — SIRADAKİ (ÖNERİ: Opus)
+
+**D2'den gelen ZEMİN (D3 buna güvenebilir):** yama dalı (`doktor/<slug>`) GERÇEK bir commit
+taşır (boru hattı commit'ler) ve worktree kaldırılmıştır — `git merge --no-ff doktor/<slug>`
+doğrudan çalışır. `patch reject` yalnız DALI silmelidir (worktree zaten yok). Yama kaydında
+`branch`/`files`/`diff`/`testOk` hazır (`store.patchById`).
 
 **Önce oku:** ADR-018 Karar 3+4 · `cli/commands/update.ts` (restart zinciri deseni) · D2'nin
 sandbox.ts'i.

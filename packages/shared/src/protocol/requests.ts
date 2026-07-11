@@ -116,6 +116,20 @@ export const FeedbackSubmitPayloadSchema = z
   })
   .strip();
 
+/**
+ * Kendini geliştirme (ADR-018, Faz 8 Dilim D2): tekrarlayan hata adaylarını sorar — teşhis
+ * DETERMİNİSTİKTİR (eşik tabanlı), LLM'e "hangi hata önemli" sorulmaz.
+ */
+export const DoctorDiagnosePayloadSchema = z.object({}).strip();
+
+/**
+ * Doktor boru hattını başlatır (ADR-018 Karar 2): sandbox (git worktree) aç → teşhis dosyasını
+ * yaz → `doktor` agent'ını koştur → BORU HATTI testleri koşar → yama önerisi kaydedilir.
+ * Cevap koşu başlar başlamaz döner (`doctor.run.ok {runId}`); koşunun kendisi NORMAL agent
+ * olaylarıyla izlenir, yama hazır olunca `doctor.patch.proposed` yayınlanır.
+ */
+export const DoctorRunPayloadSchema = z.object({ errorCode: z.string().min(1) }).strip();
+
 export const REQUEST_PAYLOAD_SCHEMAS = {
   hello: HelloPayloadSchema,
   "state.sync": StateSyncPayloadSchema,
@@ -132,6 +146,8 @@ export const REQUEST_PAYLOAD_SCHEMAS = {
   "usage.query": UsageQueryPayloadSchema,
   "mcp.addServer": McpAddServerPayloadSchema,
   "feedback.submit": FeedbackSubmitPayloadSchema,
+  "doctor.diagnose": DoctorDiagnosePayloadSchema,
+  "doctor.run": DoctorRunPayloadSchema,
 } as const;
 
 export type RequestType = keyof typeof REQUEST_PAYLOAD_SCHEMAS;

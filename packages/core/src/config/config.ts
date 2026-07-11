@@ -52,6 +52,20 @@ export const ConfigSchema = z
       })
       .strip()
       .default({}),
+    /**
+     * Kendini geliştirme (ADR-018, Faz 8): doktor boru hattının ayarları. `repoPath` verilmezse
+     * daemon KENDİ konumundan yukarı doğru `pnpm-workspace.yaml` arar (repo checkout'undan
+     * çalışıyorsa bulur); paketlenmiş (npm-global) kurulumda bulunamaz ve `doctor.run` net
+     * hatayla durur — kendine-yama yalnız kaynak repo'dan çalışan daemon için anlamlıdır.
+     */
+    selfDev: z
+      .object({
+        repoPath: z.string().min(1).optional(),
+        minRecurrence: z.number().int().positive().default(3),
+        windowDays: z.number().int().positive().default(7),
+      })
+      .strip()
+      .default({}),
   })
   .strip();
 

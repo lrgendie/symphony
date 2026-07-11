@@ -120,6 +120,19 @@ Sistem prompt'u burada.`,
     expect(sef.provider).toBeUndefined(); // model boş → router/istek zamanı pinlenir
   });
 
+  it("varsayılan doktor tanımı (Faz 8, ADR-018 Karar 2): coder araç seti, run_agent YOK", () => {
+    ensureDefaultAgent(agentsDir);
+    const doktor = loadAgentDefinition(agentsDir, "doktor");
+    // Yamayı yazabilmesi için tam araç seti gerekir (sandbox'ta çalışır, jail onu hapseder).
+    expect(doktor.tools).toEqual(["read_file", "write_file", "edit", "glob", "grep", "run_command"]);
+    // Devretme YOK — doktor tek başına çalışır (çocuk koşu = ikinci sandbox sorunu).
+    expect(doktor.tools).not.toContain("run_agent");
+    expect(doktor.temperature).toBe(0);
+    expect(doktor.provider).toBeUndefined(); // model boş → router seçer
+    // Teşhis dosyasını okuması sistem prompt'unda AÇIKÇA emredilmiş olmalı (tek veri kanalı).
+    expect(doktor.systemPrompt).toContain("DOKTOR-TESHIS.md");
+  });
+
   it("liste bozuk tanımı atlar, geçerlileri sıralı verir", () => {
     writeFileSync(join(agentsDir, "bozuk.md"), "frontmatter yok", "utf8");
     const ids = listAgentDefinitions(agentsDir).map((d) => d.id);

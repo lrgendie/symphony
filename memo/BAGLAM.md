@@ -49,7 +49,22 @@ protokol WS/REST üzerinden konuşulur.
 - `server/daemon.ts` — Fastify+ws sunucu; TÜM istek işleyicileri buradaki switch'te. `@fastify/
   cors` (Canlı bulgu #4, `origin:true`) Bearer-auth hook'undan ÖNCE kayıtlı — ui webview'inin
   `fetch()`+Bearer REST istekleri CORS preflight'ına takılmasın diye; kayıt SIRASI bozulmamalı
-- `server/bus.ts` — EventBus: olaylar bağlı TÜM istemcilere yayınlanır (ADR-001)
+- `server/bus.ts` — EventBus: olaylar bağlı TÜM istemcilere yayınlanır (ADR-001). `observe()`
+  (ADR-018 D2): daemon-İÇİ dinleyici — doktor boru hattı bir koşunun bitişini böyle bekler;
+  yalnız `broadcast` gözlemcilere düşer, `sendTo` (hedefli cevap) DÜŞMEZ
+- `doctor/` — kendini geliştirme (Faz 8, ADR-018):
+  - `detect.ts` — SAF, testli: `detectRecurring` (eşik + açık/uygulanmış yaması olan kodların
+    elenmesi). LLM'e "hangi hata önemli" SORULMAZ
+  - `sandbox.ts` — git worktree + dal + `pnpm install`; `formatDiagnosis` (SAF: telemetri →
+    `DOKTOR-TESHIS.md`, agent'a giden TEK veri kanalı — DB/`~/.symphony` araç yüzeyine AÇILMAZ);
+    `collectAndCommit` (agent commit ATMAZ → boru hattı DALDA commit'ler, D3'ün merge'ü şart
+    kılıyor; teşhis dosyası yamaya SIZMAZ); `runVerification` (build+test+lint — BORU HATTI
+    koşar, agent beyanına güvenilmez); `findRepoRoot` (node_modules içinden null → paketlenmiş
+    kurulumda kendine-yama YOK); `SandboxOps`/`REAL_SANDBOX_OPS` (git+pnpm yüzeyi, testte sahtelenir)
+  - `pipeline.ts` — orkestrasyon: teşhis → sandbox → teşhis dosyası → agent koşusu (NORMAL
+    `engine.start`, cwd=worktree → jail hapseder) → doğrulama → dalda commit → yama `proposed`.
+    Tek koşu kilidi (`AGENT_DOCTOR_BUSY`). **`run()` beklemez** — WS 30sn zaman aşımına takılmasın
+    diye yalnız doğrulama senkron, gerisi arka planda (`doctor.phase` olaylarıyla duyurulur)
 - `server/token.ts` — daemon token üretimi/yazımı (dinleme başarılı olmadan yazılmaz)
 - `server/delta-batcher.ts` — SAF, testli: `agent.delta`/`chat.delta` WS broadcast'ini anahtar
   (runId/sessionId) başına ~40ms'de toplar (rapor §5.1); `flush(key)` terminal olaydan (completed/
@@ -149,6 +164,11 @@ protokol WS/REST üzerinden konuşulur.
     `symphony sync` (add+commit varsa → `pull --rebase` → push; çakışmada DURUR, elle-çöz mesajı
     — otomatik birleştirme YOK). `simple-git` kullanır; kimlik doğrulama sistemin git credential
     helper'ına bırakılır. `daemon.token`/`data`/`logs` ASLA beyaz listede değil
+  - `doctor.ts` (ADR-018, Dilim D2) — `symphony doctor [--kod X]`: `doctor.diagnose` → aday
+    listesi → `doctor.run` → boru hattını canlı izler (`doctor.phase` ilerleme, agent olayları,
+    izin istekleri terminalden — doktor ayrıcalıklı mod DEĞİL, agent tanımı). Sonuç: yama
+    ÖNERİSİ (`doctor.patch.proposed`) — uygulanmaz, `symphony patch apply` (D3) ile uygulanır.
+    `renderDiff`'i `agent.ts`'ten import eder (tek kaynak)
   - `update.ts` (ADR-017 Karar 4, Dilim F5) — `symphony update` (npm view→install-g→
     `versions.json`→`/api/shutdown`+`ensureDaemonRunning`) + `symphony rollback` (previous'a
     döner, kaydı swap eder). SAF yardımcılar (`readVersions`/`writeVersions`/`nextVersions`/

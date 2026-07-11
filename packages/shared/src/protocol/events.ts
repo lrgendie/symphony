@@ -224,6 +224,48 @@ export const LogEntryPayloadSchema = z
   })
   .strip();
 
+/** Tekrarlayan hata adayı (ADR-018 Karar 1) — `count` son `selfDev.windowDays` günündeki tekrar sayısı. */
+export const DoctorCandidateSchema = z
+  .object({ code: z.string().min(1), count: z.number().int().positive() })
+  .strip();
+export type DoctorCandidate = z.infer<typeof DoctorCandidateSchema>;
+
+export const DoctorDiagnoseOkPayloadSchema = z
+  .object({ candidates: z.array(DoctorCandidateSchema) })
+  .strip();
+
+/**
+ * Doktor boru hattının ilerlemesi (ADR-018 Dilim D2). **`doctor.run.ok` bir ACK'tir, runId
+ * TAŞIMAZ:** boru hattının ilk adımı (git worktree + `pnpm install`) tek başına dakikalarca
+ * sürer — WS istek/cevap zaman aşımı (30sn) buna yetmez. runId ancak agent koşusu başlayınca
+ * doğar; istemci onu bu olaydan (`phase: "agent"`) ya da normal `agent.run.started`'dan alır.
+ * Uzun sessiz adımlarda (kurulum, doğrulama) kullanıcıya ilerleme göstermek de bunun işidir.
+ */
+export const DoctorPhasePayloadSchema = z
+  .object({
+    phase: z.enum(["sandbox", "agent", "verify", "done", "failed"]),
+    message: z.string(),
+    runId: z.string().uuid().optional(),
+  })
+  .strip();
+
+/**
+ * Yama önerisi hazır (ADR-018 Karar 3, Dilim D2). `doctor.run.ok`'ta TAŞINAMAZ: boru hattı
+ * dakikalarca sürer (sandbox + agent koşusu + build/test/lint), patchId ancak sonunda doğar.
+ * `testOk` BORU HATTININ ölçümüdür — agent'ın "testler geçti" beyanı DEĞİL (ADR-018 Karar 2).
+ */
+export const DoctorPatchProposedPayloadSchema = z
+  .object({
+    runId: z.string().uuid(),
+    patchId: z.string().uuid(),
+    errorCode: z.string().min(1),
+    branch: z.string().min(1),
+    files: z.array(z.string()),
+    testOk: z.boolean(),
+    testSummary: z.string(),
+  })
+  .strip();
+
 export const EVENT_PAYLOAD_SCHEMAS = {
   "hello.ok": HelloOkPayloadSchema,
   "state.sync.ok": StateSyncOkPayloadSchema,
@@ -240,6 +282,10 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   "usage.query.ok": UsageQueryOkPayloadSchema,
   "mcp.addServer.ok": McpAddServerOkPayloadSchema,
   "feedback.submit.ok": AckPayloadSchema,
+  "doctor.diagnose.ok": DoctorDiagnoseOkPayloadSchema,
+  "doctor.run.ok": AckPayloadSchema,
+  "doctor.phase": DoctorPhasePayloadSchema,
+  "doctor.patch.proposed": DoctorPatchProposedPayloadSchema,
   "chat.delta": ChatDeltaPayloadSchema,
   "chat.completed": ChatCompletedPayloadSchema,
   "agent.run.started": AgentRunStartedPayloadSchema,

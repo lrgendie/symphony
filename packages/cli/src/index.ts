@@ -14,6 +14,7 @@ import { reportCommand } from "./commands/report.js";
 import { addCommand } from "./commands/add.js";
 import { syncCommand, syncInitCommand } from "./commands/sync.js";
 import { rollbackCommand, updateCommand } from "./commands/update.js";
+import { doctorCommand } from "./commands/doctor.js";
 import { ensureDesktopRunning } from "./client/desktop-launch.js";
 
 const program = new Command();
@@ -116,6 +117,14 @@ sync
   .command("init <uzak-depo-url>")
   .description("İlk kurulum / yeni makine: uzak depoya bağlan, varsa mevcut yapılandırmayı indir")
   .action((url: string) => syncInitCommand(url).catch(fail));
+
+program
+  .command("doctor")
+  .description(
+    "Kendini geliştirme (ADR-018): tekrarlayan hatayı sandbox'ta teşhis edip YAMA ÖNERİSİ üretir",
+  )
+  .option("--kod <hata-kodu>", "belirli bir hata kodu (varsayılan: en sık tekrarlayan)")
+  .action((opts: { kod?: string }) => doctorCommand(opts).catch(fail));
 
 program
   .command("update")

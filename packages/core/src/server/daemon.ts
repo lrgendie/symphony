@@ -40,6 +40,7 @@ import {
 } from "../router/stats.js";
 import { buildReport } from "../report/build.js";
 import { buildContextMap } from "../context-map/build.js";
+import { DoctorPipeline } from "../doctor/pipeline.js";
 import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent } from "../agent/definition.js";
 import { registerMcpServer } from "../agent/mcp.js";
@@ -218,6 +219,19 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     },
     loadMemoryProfile,
     maxOutputTokens: config.limits.maxOutputTokens,
+  });
+
+  /**
+   * Kendini geliştirme (ADR-018, Faz 8 Dilim D2). Motorun TAMAMINI değil yalnız `startRun`
+   * yüzeyini görür — boru hattı normal bir agent koşusu başlatır (doktor bir agent TANIMIDIR,
+   * ayrıcalıklı bir mod değil): izin kapısı, jail ve durum makinesi aynen geçerlidir.
+   */
+  const doctor = new DoctorPipeline({
+    store,
+    bus,
+    log,
+    startRun: (input) => engine.start(input),
+    selfDev: config.selfDev,
   });
 
   async function buildSnapshot(): Promise<Snapshot> {
@@ -677,6 +691,23 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             try {
               engine.cancel(payload.runId);
               bus.sendTo(ws, "agent.cancel.ok", {}, message.id);
+            } catch (error) {
+              sendError(toErrorPayload(error), message.id);
+            }
+            return;
+          }
+          case "doctor.diagnose": {
+            // Deterministik (ADR-018 Karar 1) — LLM'e "hangi hata önemli" sorulmaz.
+            bus.sendTo(ws, "doctor.diagnose.ok", { candidates: doctor.diagnose() }, message.id);
+            return;
+          }
+          case "doctor.run": {
+            const payload = message.payload as RequestPayload<"doctor.run">;
+            try {
+              // Yalnız DOĞRULAMA'yı bekler (repo/kod/meşguliyet); boru hattının kendisi arka
+              // planda ilerler — worktree + pnpm install tek başına WS zaman aşımını (30sn) aşar.
+              await doctor.run(payload.errorCode);
+              bus.sendTo(ws, "doctor.run.ok", {}, message.id);
             } catch (error) {
               sendError(toErrorPayload(error), message.id);
             }

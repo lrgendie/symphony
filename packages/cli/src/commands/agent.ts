@@ -173,8 +173,8 @@ export async function agentRunCommand(
   process.exit(exitCode);
 }
 
-/** Birleşik diff'i +/− renklendirerek basar. */
-function renderDiff(diff: string): string {
+/** Birleşik diff'i +/− renklendirerek basar. (`doctor.ts` de kullanır — tek kaynak.) */
+export function renderDiff(diff: string): string {
   return diff
     .split("\n")
     .map((line) =>

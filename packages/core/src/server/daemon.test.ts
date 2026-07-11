@@ -220,6 +220,38 @@ describe("symphonyd", () => {
     await new Promise<void>((resolve) => ws.once("close", () => resolve()));
   });
 
+  it("doctor.diagnose (ADR-018 Karar 1, Dilim D2): eşiği aşan hata kodunu aday olarak döner; bilinmeyen kodda doctor.run reddedilir", async () => {
+    const { reply, ws } = await roundTrip(
+      createMessage("hello", {
+        token: daemon.token,
+        client: "cli",
+        protocolVersion: PROTOCOL_VERSION,
+      }),
+    );
+    expect(reply.type).toBe("hello.ok");
+
+    // Eşiği (3) aşan tekrarlayan bir hata seed et — teşhis DETERMİNİSTİK, LLM çağrısı YOK.
+    const db = new DataStore(join(testHome, "data", "symphony.db"));
+    try {
+      for (let i = 0; i < 4; i++) {
+        db.recordTelemetry({ scope: "agent", code: "DOKTOR_TEST_KODU", message: `tekrar ${i}` });
+      }
+    } finally {
+      db.close();
+    }
+
+    const diagnose = await request(ws, createMessage("doctor.diagnose", {}));
+    expect(diagnose.type).toBe("doctor.diagnose.ok");
+    const { candidates } = diagnose.payload as { candidates: Array<{ code: string; count: number }> };
+    expect(candidates.some((c) => c.code === "DOKTOR_TEST_KODU" && c.count >= 4)).toBe(true);
+
+    // Telemetride hiç görülmemiş bir kod için boru hattı BAŞLAMAZ (uydurma koşu yok).
+    const bad = await request(ws, createMessage("doctor.run", { errorCode: "HIC_OLMAYAN_KOD" }));
+    expect(bad.type).toBe("error");
+    expect((bad.payload as { code: string }).code).toBe("VALIDATION_DOCTOR_CODE_UNKNOWN");
+    ws.close();
+  });
+
   it("router.suggest örnek göreve gerekçeli öneri verir (Faz 1 kabul testi)", async () => {
     const { reply, ws } = await roundTrip(
       createMessage("hello", {
