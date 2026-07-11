@@ -166,6 +166,12 @@ symphony sync init <depo-url>     ~/.symphony ayarlarını git deposuna bağla (
 symphony sync                     Ayarları uzak depoyla eşitle
 symphony update                   npm'de yeni sürüm varsa kur, daemon'ı yeniden başlat
 symphony rollback                 Son update'ten önceki sürüme dön
+symphony doctor [--kod <kod>]     Tekrarlayan hatayı sandbox'ta teşhis edip yama önerisi üretir
+symphony patches                  Yama önerilerini + kategori sicilini listele
+symphony patch apply <id>         Yamayı canlıya al (build+test+restart; bozuksa otomatik geri alır)
+symphony patch reject <id>        Yama önerisini reddet, dalını sil
+symphony patch trust <kategori>   Kategoriye güven (sonraki temiz yamalar sormadan uygulanır)
+symphony patch untrust <kategori> Kategoriden güveni geri çek
 ```
 
 ## 7. Kurulum, senkronizasyon ve güncelleme akışı
@@ -204,3 +210,28 @@ Güncelleme npm registry'ye delege edilir; kendi otomatik-güncelleme mekanizmas
 arka planda kendiliğinden çalışmaz — her zaman senin tetiklemenle, tek komutla geri
 alınabilir şekilde çalışır. Bu, kendini geliştiren agent'ların (Faz 8) ihtiyaç duyacağı
 "geri alma" güvencesinin de temelidir.
+
+## 8. Kendini geliştirme (Faz 8, ADR-018)
+
+Symphony kendi kaynak koduna karşı çalışabilir — tamamen insan tetiklemeli, hiçbir adımı
+arka planda sessizce yürümez:
+
+1. **Teşhis:** daemon, tekrarlayan hata kodlarını deterministik bir eşikle izler (LLM'e
+   "hangi hata önemli" sorulmaz). Günde bir bu tarama otomatik çalışır ve aday bulunca
+   canlı log akışına bir uyarı düşer.
+2. **`symphony doctor`:** seçilen hata için izole bir `git worktree` açar, teşhis dosyasını
+   yazar, `doktor` agent'ını (sabit model — güvenilir araç çağrısı şart) o sandbox'ta
+   çalıştırır; boru hattı build/test/lint'i **kendisi** koşturur (agent'ın "geçti" beyanına
+   güvenilmez). Sonuç bir **yama önerisidir** — hiçbir şey otomatik uygulanmaz.
+3. **`symphony patch apply <id>`:** öneriyi ana dala merge eder, build+test'i tekrar koşar,
+   daemon'ı yeni kodla yeniden başlatır. Herhangi bir adım (test, ya da daemon'ın yeniden
+   ayağa kalkması) başarısız olursa **otomatik olarak geri alır** ve eski koda döner —
+   izin sistemi (jail, agent tanımları, anahtarlar, token) gibi değişmez dosyalara dokunan
+   yamalar için onay hiçbir bayrakla atlanamaz.
+4. **Güven merdiveni:** bir kategori (hata kodu) tekrar tekrar sağlıklı sonuç verirse
+   `symphony patch trust <kategori>` ile o kategoriye güvenilebilir — sonraki temiz yamalar
+   `symphony doctor` içinde sormadan uygulanır. Değişmez dosyalara dokunan kategoriler asla
+   güvenilir sayılmaz.
+5. **`symphony report`** artık bir "Kendini Geliştirme" bölümü de içerir: güncel tekrarlayan
+   hatalar, önerilen/uygulanan/geri alınan yama sayıları, kategori sicili. Bu rapor haftada
+   bir kendiliğinden de üretilir (`~/.symphony/reports/`).

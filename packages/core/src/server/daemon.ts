@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import Fastify from "fastify";
@@ -17,6 +17,7 @@ import {
   type GpuSample,
   type ModelInfo,
   type ProviderHealth,
+  type ReportResponse,
   type RequestPayload,
   type Snapshot,
   type Usage,
@@ -39,6 +40,7 @@ import {
   type RouterStats,
 } from "../router/stats.js";
 import { buildReport } from "../report/build.js";
+import { decideWeeklyReport, formatReportMarkdown } from "../report/markdown.js";
 import { buildContextMap } from "../context-map/build.js";
 import { DoctorPipeline } from "../doctor/pipeline.js";
 import { AgentEngine } from "../agent/engine.js";
@@ -77,6 +79,12 @@ export interface DaemonOptions {
    * çağrısı + periyodik yayın, olay dizisi bekleyen testleri bozar. Varsayılan: true.
    */
   sampleHardware?: boolean;
+  /**
+   * Haftalık kendini geliştirme raporu (yoksa yaz) + günlük tekrarlayan-hata uyarısı
+   * (ADR-018 Karar 5/6, Faz 8 Dilim D5). Testlerde kapatılır: gerçek dosya yazımı + 24
+   * saatlik zamanlayıcı, olay dizisi bekleyen testleri bozar. Varsayılan: true.
+   */
+  scheduleReports?: boolean;
 }
 
 export interface RunningDaemon {
@@ -233,6 +241,65 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     startRun: (input) => engine.start(input),
     selfDev: config.selfDev,
   });
+
+  /**
+   * REST `/api/report` İLE zamanlanmış haftalık yazım (aşağıda) AYNI mantığı kullanır — "ikinci
+   * gerçek üretilmez" (Z3'ün kendi ilkesi). `patches` ADR-018 Karar 5/6 (Dilim D5): sicil
+   * kümülatiftir, `[from,to]`ile SINIRLANMAZ; `doctor.diagnose()` şu anki adayları verir.
+   */
+  function buildWeeklyReport(from: number, to: number): ReportResponse {
+    const routerStats = computeRouterStats(
+      store.runsSince(from, to),
+      store.turnStatsSince(from, to),
+      classifyFeedbackRows(store.feedbackSince(from, to)),
+    );
+    return buildReport({
+      from,
+      to,
+      usageByModel: store.usageQuery({ from, to, groupBy: "model" }),
+      usageByDay: store.usageQuery({ from, to, groupBy: "day" }),
+      routerStats,
+      topErrors: store.topErrorCodesSince(from, to),
+      feedback: store.feedbackSummarySince(from, to),
+      patches: { recurring: doctor.diagnose(), entries: store.listPatches() },
+    });
+  }
+
+  const REPORT_CHECK_MS = 24 * 60 * 60 * 1000;
+  const REPORT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+  /** Bu haftanın rapor dosyası yoksa üretir + yazar (ADR-018 Karar 5/6, Dilim D5). */
+  function ensureWeeklyReportWritten(): void {
+    const now = Date.now();
+    const decision = decideWeeklyReport(paths.reportsDir, now, existsSync);
+    if (!decision.shouldWrite) return;
+    const report = buildWeeklyReport(now - REPORT_WINDOW_MS, now);
+    writeFileSync(decision.path, formatReportMarkdown(report), "utf8");
+    log.info({ file: decision.path }, "haftalık kendini geliştirme raporu otomatik üretildi");
+  }
+
+  /** Günlük tekrarlayan-hata taraması (ADR-018 Karar 5) — LLM'e sorulmaz, deterministik eşik. */
+  function runDailyDetection(): void {
+    for (const candidate of doctor.diagnose()) {
+      bus.broadcast("log.entry", {
+        level: "warn",
+        source: "doctor",
+        message: `tekrarlayan hata: ${candidate.code} (${candidate.count} kez) — \`symphony doctor\` çalıştır`,
+      });
+    }
+  }
+
+  let reportTimer: NodeJS.Timeout | null = null;
+  if (options.scheduleReports ?? true) {
+    ensureWeeklyReportWritten();
+    runDailyDetection();
+    // unref: yalnız rapor/tespit zamanlaması için süreç ayakta tutulmaz (kapanışı geciktirmez).
+    reportTimer = setInterval(() => {
+      ensureWeeklyReportWritten();
+      runDailyDetection();
+    }, REPORT_CHECK_MS);
+    reportTimer.unref();
+  }
 
   async function buildSnapshot(): Promise<Snapshot> {
     return {
@@ -506,20 +573,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
         message: "from/to epoch ms olmalı ve from <= to sağlanmalı",
       });
     }
-    const routerStats = computeRouterStats(
-      store.runsSince(from, to),
-      store.turnStatsSince(from, to),
-      classifyFeedbackRows(store.feedbackSince(from, to)),
-    );
-    return buildReport({
-      from,
-      to,
-      usageByModel: store.usageQuery({ from, to, groupBy: "model" }),
-      usageByDay: store.usageQuery({ from, to, groupBy: "day" }),
-      routerStats,
-      topErrors: store.topErrorCodesSince(from, to),
-      feedback: store.feedbackSummarySince(from, to),
-    });
+    return buildWeeklyReport(from, to);
   });
 
   // Bağlam haritası (ADR-016 Karar 6, Dilim Z4): mevcut sessions/agent_runs'ın deterministik
@@ -867,6 +921,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
 
   const close = async (): Promise<void> => {
     if (hardwareTimer !== null) clearInterval(hardwareTimer);
+    if (reportTimer !== null) clearInterval(reportTimer);
     engine.cancelAll();
     for (const abort of activeChats.values()) abort.abort();
     // Açık istemci soketleri koparılmazsa app.close() sonsuza dek bekleyebilir.

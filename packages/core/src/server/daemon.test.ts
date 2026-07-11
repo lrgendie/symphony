@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import { createMessage, PROTOCOL_VERSION, type Envelope } from "@symphony/shared";
 import { DataStore } from "../db/store.js";
+import { ensureSymphonyHome } from "../config/paths.js";
+import { reportFilePath } from "../report/markdown.js";
 import { startDaemon, type RunningDaemon } from "./daemon.js";
 
 const testHome = join(tmpdir(), `symphony-daemon-test-${Date.now()}`);
@@ -57,6 +59,7 @@ beforeAll(async () => {
     home: testHome,
     ollamaBaseUrl: `http://127.0.0.1:${ollamaPort}`,
     sampleHardware: false, // gerçek nvidia-smi + periyodik yayın testleri bozar
+    scheduleReports: false, // gerçek dosya yazımı + 24s zamanlayıcı (Dilim D5) testleri bozar
   });
 });
 
@@ -152,7 +155,12 @@ describe("symphonyd", () => {
     // AYRI/ADANMIŞ bir daemon örneği — paylaşılan `daemon`'ı kapatmak dosyadaki TÜM diğer
     // testleri kırardı. Kapandıktan sonra `dedicated.close()` ÇAĞRILMAZ (zaten kapandı).
     const dedicatedHome = mkdtempSync(join(tmpdir(), "symphony-shutdown-test-"));
-    const dedicated = await startDaemon({ port: 0, home: dedicatedHome, sampleHardware: false });
+    const dedicated = await startDaemon({
+      port: 0,
+      home: dedicatedHome,
+      sampleHardware: false,
+      scheduleReports: false,
+    });
     try {
       const unauthorized = await fetch(`http://127.0.0.1:${dedicated.port}/api/shutdown`, {
         method: "POST",
@@ -668,6 +676,22 @@ describe("symphonyd", () => {
       });
       db.recordFeedback({ subjectKind: "run", subjectId: runId, verdict: "good" });
       db.recordTelemetry({ scope: "agent", code: "AGENT_TOOL_LOOP", message: "rapor test hatası" });
+      // Kendini geliştirme özeti (Dilim D5): bir yama + tekrarlayan aday üretecek telemetri.
+      for (let i = 0; i < 4; i++) {
+        db.recordTelemetry({ scope: "agent", code: "RAPOR_TEST_TEKRAR", message: `tekrar ${i}` });
+      }
+      const patchId = crypto.randomUUID();
+      db.createPatch({
+        id: patchId,
+        errorCode: "RAPOR_TEST_KODU",
+        category: "RAPOR_TEST_KODU",
+        branch: "doktor/rapor-test-kodu",
+        files: ["packages/core/src/router/router.ts"],
+        diff: "d",
+        testOk: true,
+        testSummary: "geçti",
+      });
+      db.resolvePatch(patchId, "applied");
     } finally {
       db.close();
     }
@@ -686,6 +710,11 @@ describe("symphonyd", () => {
       feedback: { good: number; bad: number };
       topErrors: Array<{ code: string; count: number }>;
       successTable: Array<{ provider: string; model: string; taskKind: string; runs: number }>;
+      selfDev: {
+        recurring: Array<{ code: string; count: number }>;
+        applied: number;
+        categories: Array<{ category: string; applied: number; total: number }>;
+      };
     };
     expect(body.to - body.from).toBe(7 * 24 * 60 * 60 * 1000); // vars. son 7 gün
     expect(body.feedback.good).toBeGreaterThanOrEqual(1);
@@ -693,6 +722,53 @@ describe("symphonyd", () => {
     expect(
       body.successTable.some((r) => r.provider === "ollama" && r.model === "qwen3:8b" && r.runs >= 1),
     ).toBe(true);
+
+    // Kendini geliştirme özeti (Dilim D5): recurring `doctor.diagnose()`den, kategori sicili
+    // `patches` tablosundan — rapor ARALIĞIYLA sınırlı DEĞİL (kümülatif).
+    expect(body.selfDev.recurring.some((c) => c.code === "RAPOR_TEST_TEKRAR" && c.count >= 4)).toBe(
+      true,
+    );
+    expect(body.selfDev.applied).toBeGreaterThanOrEqual(1);
+    expect(
+      body.selfDev.categories.some(
+        (c) => c.category === "RAPOR_TEST_KODU" && c.applied === 1 && c.total === 1,
+      ),
+    ).toBe(true);
+  });
+
+  it("zamanlanmış rapor (ADR-018 Karar 5/6, Dilim D5): açılışta bu haftanın dosyası YOKSA GERÇEKTEN yazılır ve tekrarlayan hatayı içerir", async () => {
+    // AYRI/ADANMIŞ ev — paylaşılan `daemon` zaten `scheduleReports: false` (bu test dosyasının
+    // diğer tüm testlerini bozmasın diye); zamanlamayı GERÇEKTEN denemek için kendi daemon'ı.
+    const dedicatedHome = mkdtempSync(join(tmpdir(), "symphony-schedule-test-"));
+    const dedicatedPaths = ensureSymphonyHome(dedicatedHome);
+
+    // Daemon başlamadan ÖNCE tekrarlayan bir hata seed et — açılıştaki tek seferlik
+    // taramanın/yazımın GERÇEK veriyi görüp göremediğini kanıtlar.
+    const seedDb = new DataStore(dedicatedPaths.databaseFile);
+    try {
+      for (let i = 0; i < 4; i++) {
+        seedDb.recordTelemetry({ scope: "agent", code: "ZAMANLAMA_TEST_KODU", message: `tekrar ${i}` });
+      }
+    } finally {
+      seedDb.close();
+    }
+
+    const dedicated = await startDaemon({
+      port: 0,
+      home: dedicatedHome,
+      sampleHardware: false,
+      scheduleReports: true,
+    });
+    try {
+      const file = reportFilePath(dedicatedPaths.reportsDir, Date.now());
+      expect(existsSync(file)).toBe(true);
+      const content = readFileSync(file, "utf8");
+      expect(content).toContain("## Kendini Geliştirme");
+      expect(content).toContain("ZAMANLAMA_TEST_KODU");
+    } finally {
+      await dedicated.close();
+      rmSync(dedicatedHome, { recursive: true, force: true });
+    }
   });
 
   it("bağlam haritası (ADR-016 Karar 6, Dilim Z4): auth'suz 401 · gerçek koşu verisinden run+proje düğümü + run→proje kenarı", async () => {

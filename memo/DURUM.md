@@ -3,7 +3,69 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Sonnet — Dilim D4 BİTTİ ve testli, 514 test; güven merdiveni)
+**Son güncelleme:** 2026-07-11 (Sonnet — Dilim D5 BİTTİ ve testli, 525 test; rapor + zamanlama)
+
+## Faz 8 — Dilim D5 (kendini geliştirme raporu + haftalık zamanlama) BİTTİ (2026-07-11, Sonnet)
+
+ADR-018 Karar 5/6 uygulandı. Kural 1 sırası: PROTOKOL (ADDITIVE not) → shared → core → cli.
+
+**BEKLENMEYEN YAPISAL TAŞIMA:** talimat `isoWeekLabel`'in core'a taşınmasını istiyordu; ama
+`formatReportMarkdown` de (chalk KULLANMAYAN, tamamen SAF bir fonksiyon) core'a taşınmak
+ZORUNDAYDI — çünkü daemon artık haftalık raporu KENDİLİĞİNDEN yazıyor ve core, cli'ye bağımlı
+OLAMAZ (`shared`→`core`→`cli` tek yön, CLAUDE.md). Üçü birlikte YENİ `core/src/report/markdown.ts`
+dosyasına taşındı (kopya değil — `cli/commands/report.ts` artık `@symphony/core`dan import eder,
+kendi kopyası kalmadı); eski `cli/commands/report.test.ts` de `core/src/report/markdown.test.ts`e
+taşındı (silinmedi, güncellenerek).
+
+- **shared/rest.ts:** `ReportSelfDevCategorySchema`/`ReportSelfDevSchema` + `ReportResponseSchema`e
+  `selfDev` alanı (ADDITIVE, zorunlu — bu monorepo'da her iki uç da kontrol edildiği için opsiyonel
+  yapmaya gerek yok). PROTOKOL.md'ye not: `/api/report` ADDITIVE, `log.entry`in İLK üreticisi burası.
+- **`report/build.ts`:** `ReportInput.patches: {recurring, entries}` — `recurring` `doctor.
+  diagnose()`nin ŞU ANKİ adayları, `entries` `patches` tablosunun TAM (rapor aralığıyla
+  SINIRLANMAMIŞ) anlık durumu — sicil D4'teki `patch trust` gibi KÜMÜLATİF bir kavram. `buildReport`
+  artık `selfDev` de üretir: durum sayaçları + kategori sicili (D4'ün `trust.ts` `categoryRecord`'ı
+  YENİDEN KULLANILIR — ikinci gerçek üretilmez). `TASK_KIND_LABEL` export edildi (markdown.ts de
+  kullanır, üçüncü kopya açılmadı).
+- **YENİ `report/markdown.ts`:** `isoWeekLabel`/`reportFilePath`/`formatReportMarkdown` (+ yeni
+  "Kendini Geliştirme" bölümü: tekrarlayan hatalar, önerilen/uygulanan/geri alınan/başarısız/
+  reddedilen sayıları, kategori sicil tablosu) + YENİ `decideWeeklyReport(reportsDir, nowMs,
+  exists)` — SAF karar fonksiyonu ("bu hafta dosyası var mı → yaz/yazma"), `exists` ENJEKTE
+  edilir (testte sahte, daemon'da gerçek `existsSync` — D2'nin `SandboxOps` deseniyle aynı ruh).
+- **`daemon.ts`:** `buildWeeklyReport(from,to)` — REST `/api/report` İLE zamanlanmış yazım AYNI
+  fonksiyonu çağırır (ikinci gerçek yok). `DaemonOptions.scheduleReports` (vars. true,
+  `hardwareTimer` deseniyle aynı: `unref()`, `close()`'da `clearInterval`): açılışta + 24 saatte
+  bir `ensureWeeklyReportWritten` (dosya yoksa yazar) + `runDailyDetection` (`doctor.diagnose()`
+  aday bulursa `log.entry` warn yayınlar — bu olayın PROTOKOL'de tanımlı ama hiç ÜRETİLMEDİĞİ ilk
+  yer).
+- **`cli/commands/report.ts`:** sadeleşti — yalnız `reportCommand` kaldı, üç SAF fonksiyon
+  `@symphony/core`dan import ediliyor.
+- **Test:** 514→**525** (+11: `report/build.test.ts` +5 yeni `selfDev` describe'u — boş girdi,
+  `recurring` doğrudan geçirilir, durum sayaçları doğru kovaya düşer, kategori sicili applied/
+  unhealthy/total + proposed/rejected sicile GİRMEZ, kategoriler alfabetik sıralanır;
+  `report/markdown.test.ts` (taşınan 7 test + YENİ 5: `decideWeeklyReport` dosya var/yok/tam
+  yolla çağrılma + Kendini Geliştirme bölümü dolu/boş biçimlendirme); `daemon.test.ts` +1 mevcut
+  `/api/report` testine `selfDev` assertion'ı eklendi + YENİ 1 ADANMIŞ test — `scheduleReports:
+  true` ile GERÇEK bir daemon açılışta bu haftanın dosyasını GERÇEKTEN yazdığını kanıtlıyor
+  (ayrı ev, telemetri daemon başlamadan ÖNCE seed edildi)). `pnpm build && pnpm test && pnpm lint`
+  temiz (61 dosya/525 test — dosya sayısı sabit kaldı: bir test dosyası taşındı, biri silindi).
+- **CANLI DOĞRULAMA:** gerçek daemon D5 koduyla yeniden başlatıldı → GERÇEK `~/.symphony/reports/
+  2026-W28.md` otomatik üretildi (log: "haftalık kendini geliştirme raporu otomatik üretildi") →
+  içerik doğrulandı (`INTERNAL_AGENT_ERROR (7)` tekrarlayan hata olarak göründü, D3 kabul
+  provasının PROVA_* yamaları temizlendiği için sayaçlar 0 — tutarlı). `symphony report` CLI
+  komutu da aynı bölümü gösterdi.
+- **BİLİNÇLİ TEST BOŞLUĞU:** `runDailyDetection`in `bus.broadcast("log.entry", ...)` çağrısı
+  otomatik testle DOĞRULANMADI — WS istemcisi ancak `startDaemon()` tamamlandıktan SONRA
+  bağlanabilir, ama günlük tarama STARTUP'ta (bağlanacak istemci yokken) çalışıyor; canlı ortamda
+  ileride `symphony watch`e `log.entry` işleyicisi eklenirse gözle doğrulanabilir. Alttaki SAF
+  fonksiyon (`doctor.diagnose()`) zaten D1/D2/daemon.test.ts'te kapsamlı test edilmiş durumda.
+
+**REHBER.md'ye YENİ "§8 Kendini geliştirme" bölümü** eklendi (Faz 8'in D2-D5 arasının TAMAMI ilk
+kez kullanıcı rehberine düştü — komut tablosuna `doctor`/`patches`/`patch *` satırları da eklendi).
+
+**Sıradaki: Dilim D6** (bekçi modu v1 — `bekci.json` + log izleme + `doctor --proje`). Sonnet
+yeterli.
+
+## Faz 8 — Dilim D4 (güven merdiveni) BİTTİ (2026-07-11, Sonnet)
 
 ## Faz 8 — Dilim D4 (güven merdiveni) BİTTİ (2026-07-11, Sonnet)
 
@@ -446,7 +508,7 @@ sandbox.ts'i.
 4. Test: trust.ts SAF roundtrip + sicil türetimi + protected reddi; doctor→auto-apply akışı
    MOCK'lu. `pnpm build && pnpm test && pnpm lint` + DURUM.
 
-### 📋 Dilim D5 — kendini geliştirme raporu + haftalık zamanlama
+### ✅ Dilim D5 — kendini geliştirme raporu + haftalık zamanlama — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 1. `report/build.ts` `ReportInput`e `patches` özeti (+shared `ReportResponseSchema`'ya ADDITIVE
    alan — PROTOKOL.md rapor satırına not): saptanan tekrar eden kodlar, önerilen/uygulanan/geri
@@ -460,7 +522,7 @@ sandbox.ts'i.
    dosyası var mı → yaz/yazma"). `pnpm build && pnpm test && pnpm lint` + DURUM + REHBER.md'ye
    kısa bölüm.
 
-### 📋 Dilim D6 — bekçi modu v1 (`bekci.json` + log izleme + `doctor --proje`)
+### 📋 Dilim D6 — bekçi modu v1 (`bekci.json` + log izleme + `doctor --proje`) — SIRADAKİ (Sonnet yeterli)
 
 1. `paths.ts`: `bekciFile`. YENİ SAF `core/src/bekci/registry.ts` (oku/yaz: `{projeler:
    [{ad, repoPath, logFile, testCommand?}]}`) + `core/src/bekci/scan.ts` (SAF: yeni satırlarda

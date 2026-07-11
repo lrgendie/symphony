@@ -48,7 +48,12 @@ protokol WS/REST üzerinden konuşulur.
 ### packages/core/src — daemon (symphonyd)
 - `server/daemon.ts` — Fastify+ws sunucu; TÜM istek işleyicileri buradaki switch'te. `@fastify/
   cors` (Canlı bulgu #4, `origin:true`) Bearer-auth hook'undan ÖNCE kayıtlı — ui webview'inin
-  `fetch()`+Bearer REST istekleri CORS preflight'ına takılmasın diye; kayıt SIRASI bozulmamalı
+  `fetch()`+Bearer REST istekleri CORS preflight'ına takılmasın diye; kayıt SIRASI bozulmamalı.
+  `scheduleReports` (ADR-018 Karar 5/6, Dilim D5, vars. true): açılışta + 24 saatte bir
+  `ensureWeeklyReportWritten` (`decideWeeklyReport` SAF kararı + `buildWeeklyReport` — REST
+  `/api/report` İLE AYNI fonksiyon, ikinci gerçek yok) + `runDailyDetection` (`doctor.diagnose()`
+  aday bulursa `log.entry` warn yayınlar). `hardwareTimer` deseniyle AYNI: `unref()`, `close()`'da
+  `clearInterval`. Testlerde `sampleHardware` gibi KAPATILIR (gerçek dosya yazımı testleri bozar)
 - `server/bus.ts` — EventBus: olaylar bağlı TÜM istemcilere yayınlanır (ADR-001). `observe()`
   (ADR-018 D2): daemon-İÇİ dinleyici — doktor boru hattı bir koşunun bitişini böyle bekler;
   yalnız `broadcast` gözlemcilere düşer, `sendTo` (hedefli cevap) DÜŞMEZ
@@ -101,7 +106,17 @@ protokol WS/REST üzerinden konuşulur.
   döngüsel import (yalnız fonksiyon gövdelerinde kullanılır — modül değerlendirmede değil, ESM'de
   güvenli, build ile doğrulandı). `classifyFeedbackRows` (Dilim Z3): `feedbackSince` satırını
   `FeedbackRow[]`e çevirir — `daemon.ts buildRouterStats` VE `report/build.ts` TEK kaynaktan
-- `report/build.ts` — SAF, testli (ADR-016 Karar 5, Dilim Z3): `buildReport(input):
+- `report/build.ts` — SAF, testli (ADR-016 Karar 5, Dilim Z3 + ADR-018 Karar 5/6 Dilim D5):
+  `buildReport(input): ReportResponse` artık `selfDev` de üretir: durum sayaçları
+  (proposed/applied/reverted/failed/rejected) + kategori sicili (`trust.ts`'in `categoryRecord`'ı
+  YENİDEN kullanılır — ikinci gerçek üretilmez) + `recurring` (`doctor.diagnose()` adayları).
+  Sicil rapor ARALIĞIYLA sınırlı DEĞİL, kümülatiftir (D4'teki `patch trust` ile aynı yaklaşım).
+  `TASK_KIND_LABEL` export edilir (markdown.ts de kullanır — üçüncü kopya yok)
+- `report/markdown.ts` — SAF, testli (Dilim D5): `isoWeekLabel`/`reportFilePath`/
+  `formatReportMarkdown` **CLI'DEN TAŞINDI** (core, daemon içinden haftalık raporu kendiliğinden
+  yazıyor; core→cli bağımlılığı YASAK olduğu için taşıma zorunluydu, kopya değil). YENİ
+  `decideWeeklyReport(reportsDir, nowMs, exists)`: SAF karar — "bu hafta dosyası var mı →
+  yaz/yazma"; `exists` enjekte edilir (testte sahte, daemon'da gerçek `existsSync`)
   ReportResponse` — `routerStats`'tan `successTable` + eşik-tabanlı `findings` (yalnız kanıtlı
   VE `score<0.5`). Sıfır adapter/fetch erişimi (lokallik kabul maddesi) — girdi daemon'da
   ÇOKTAN çekilmiş veridir

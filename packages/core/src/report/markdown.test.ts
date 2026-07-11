@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { join } from "node:path";
 import type { ReportResponse } from "@symphony/shared";
-import { formatReportMarkdown, isoWeekLabel, reportFilePath } from "./report.js";
+import { decideWeeklyReport, formatReportMarkdown, isoWeekLabel, reportFilePath } from "./markdown.js";
+
+/** ADR-016 Karar 5 (Dilim Z3) + ADR-018 Karar 5/6 (Dilim D5) — CLI'den TAŞINDI (core artık
+ * daemon içinden haftalık raporu kendiliğinden yazıyor, bkz. `server/daemon.ts`). */
+
+const emptySelfDev: ReportResponse["selfDev"] = {
+  recurring: [],
+  proposed: 0,
+  applied: 0,
+  reverted: 0,
+  failed: 0,
+  rejected: 0,
+  categories: [],
+};
 
 const sampleReport: ReportResponse = {
   from: Date.UTC(2026, 6, 3),
@@ -24,6 +37,15 @@ const sampleReport: ReportResponse = {
   topErrors: [{ code: "AGENT_TOOL_LOOP", count: 2 }],
   feedback: { good: 3, bad: 1 },
   findings: ["ollama/qwen3:8b, kod işlerinde son 5 koşuda %20 başarı — düşük güven, farklı bir model denemeyi düşün."],
+  selfDev: {
+    recurring: [{ code: "INTERNAL_AGENT_ERROR", count: 4 }],
+    proposed: 1,
+    applied: 2,
+    reverted: 1,
+    failed: 0,
+    rejected: 0,
+    categories: [{ category: "AGENT_TOOL_LOOP", applied: 2, unhealthy: 1, total: 3 }],
+  },
 };
 
 describe("isoWeekLabel — ISO 8601 hafta etiketi (ADR-016 Karar 5)", () => {
@@ -41,6 +63,27 @@ describe("reportFilePath", () => {
   it("reportsDir içinde <isoWeekLabel>.md yolu üretir, DOSYAYA DOKUNMAZ", () => {
     const path = reportFilePath("/home/reports", Date.UTC(2026, 6, 10));
     expect(path).toBe(join("/home/reports", "2026-W28.md"));
+  });
+});
+
+describe("decideWeeklyReport (Dilim D5) — SAF karar: bu hafta dosyası var mı → yaz/yazma", () => {
+  it("dosya YOKSA yaz kararı verir", () => {
+    const decision = decideWeeklyReport("/home/reports", Date.UTC(2026, 6, 10), () => false);
+    expect(decision).toEqual({ path: join("/home/reports", "2026-W28.md"), shouldWrite: true });
+  });
+
+  it("dosya VARSA yazmama kararı verir", () => {
+    const decision = decideWeeklyReport("/home/reports", Date.UTC(2026, 6, 10), () => true);
+    expect(decision.shouldWrite).toBe(false);
+  });
+
+  it("`exists` TAM olarak hesaplanan yolla çağrılır (başka bir dosyaya bakılmaz)", () => {
+    let calledWith: string | undefined;
+    decideWeeklyReport("/home/reports", Date.UTC(2026, 6, 10), (p) => {
+      calledWith = p;
+      return false;
+    });
+    expect(calledWith).toBe(join("/home/reports", "2026-W28.md"));
   });
 });
 
@@ -73,6 +116,21 @@ describe("formatReportMarkdown (ADR-016 Karar 5) — SAF, deterministik, LLM YOK
 
   it("bulgu cümlelerini AYNEN taşır (LLM üretmez, deterministik)", () => {
     expect(markdown).toContain("düşük güven, farklı bir model denemeyi düşün");
+  });
+
+  it("Kendini Geliştirme bölümü: tekrarlayan hatalar + sayaçlar + kategori sicili (Dilim D5)", () => {
+    expect(markdown).toContain("## Kendini Geliştirme");
+    expect(markdown).toContain("INTERNAL_AGENT_ERROR (4)");
+    expect(markdown).toContain("Önerilen: 1");
+    expect(markdown).toContain("Uygulanan: 2");
+    expect(markdown).toContain("Geri alınan: 1");
+    expect(markdown).toContain("| AGENT_TOOL_LOOP | 2/3 |");
+  });
+
+  it("Kendini Geliştirme boşsa 'yok' mesajları gösterir, boş tablo başlığı ÇIKMAZ", () => {
+    const empty = formatReportMarkdown({ ...sampleReport, selfDev: emptySelfDev });
+    expect(empty).toContain("_şu an tekrarlayan (teşhis eşiğini aşan) bir hata yok_");
+    expect(empty).toContain("_henüz sonuçlanmış bir yama yok_");
   });
 
   it("boş bölümler için 'kayıt yok' / 'bulgu yok' gösterir — tablo başlığı boş dizide çıkmaz", () => {

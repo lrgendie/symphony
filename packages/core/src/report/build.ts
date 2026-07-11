@@ -1,5 +1,7 @@
-import type { ReportResponse } from "@symphony/shared";
+import type { DoctorCandidate, ReportResponse, ReportSelfDevCategory } from "@symphony/shared";
+import type { PatchEntry } from "../db/store.js";
 import type { UsageQueryResult } from "../db/store.js";
+import { categoryRecord } from "../doctor/trust.js";
 import { hasEnoughEvidence, scoreOf, type RouterStats } from "../router/stats.js";
 import type { TaskKind } from "../router/router.js";
 
@@ -13,7 +15,8 @@ import type { TaskKind } from "../router/router.js";
  * yalnız rolling-window yerine rapor bir `[from,to]` aralığıyla çağırır (bkz. daemon.ts).
  */
 
-const TASK_KIND_LABEL: Record<TaskKind, string> = {
+/** `report/markdown.ts`in "Başarı tablosu" bölümü de AYNI etiketleri kullanır (üçüncü kopya yok). */
+export const TASK_KIND_LABEL: Record<TaskKind, string> = {
   code: "kod",
   quick: "hızlı özet",
   longContext: "uzun bağlam",
@@ -28,6 +31,15 @@ export interface ReportInput {
   routerStats: RouterStats;
   topErrors: Array<{ code: string; count: number }>;
   feedback: { good: number; bad: number };
+  /**
+   * Kendini geliştirme (ADR-018 Karar 5/6, Dilim D5). `entries` rapor ARALIĞIYLA sınırlanmaz —
+   * `patches` tablosunun ŞU ANKİ tam durumudur (sicil kümülatif bir kavram, D4'teki
+   * `patch trust` ile aynı yaklaşım); `recurring` `doctor.diagnose()`nin ŞU ANKİ adaylarıdır.
+   */
+  patches: {
+    recurring: readonly DoctorCandidate[];
+    entries: readonly PatchEntry[];
+  };
 }
 
 export function buildReport(input: ReportInput): ReportResponse {
@@ -69,5 +81,37 @@ export function buildReport(input: ReportInput): ReportResponse {
     topErrors: input.topErrors,
     feedback: input.feedback,
     findings,
+    selfDev: buildSelfDevSummary(input.patches.recurring, input.patches.entries),
   };
+}
+
+/**
+ * Kendini geliştirme özeti (Dilim D5): durum sayaçları (`patches` tablosu neredeyse hiçbir
+ * zaman büyük olmayacağı için kategori başına O(n) tarama pahalı değil — `trust.ts`'in
+ * `categoryRecord`'ı ile "ikinci gerçek üretme" ilkesi burada da geçerli, D4'ün AYNI mantığı).
+ */
+function buildSelfDevSummary(
+  recurring: readonly DoctorCandidate[],
+  entries: readonly PatchEntry[],
+): ReportResponse["selfDev"] {
+  let proposed = 0;
+  let applied = 0;
+  let reverted = 0;
+  let failed = 0;
+  let rejected = 0;
+  const categoryNames = new Set<string>();
+  for (const p of entries) {
+    categoryNames.add(p.category);
+    if (p.state === "proposed") proposed++;
+    else if (p.state === "applied") applied++;
+    else if (p.state === "reverted") reverted++;
+    else if (p.state === "failed") failed++;
+    else if (p.state === "rejected") rejected++;
+  }
+
+  const categories: ReportSelfDevCategory[] = [...categoryNames]
+    .sort()
+    .map((category) => categoryRecord(entries, category));
+
+  return { recurring: [...recurring], proposed, applied, reverted, failed, rejected, categories };
 }

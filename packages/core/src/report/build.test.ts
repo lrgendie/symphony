@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { UsageQueryResult } from "../db/store.js";
+import type { PatchEntry, UsageQueryResult } from "../db/store.js";
 import { routerStatsKey, type RouterStats } from "../router/stats.js";
 import { buildReport, type ReportInput } from "./build.js";
 
@@ -14,6 +14,25 @@ function baseInput(overrides: Partial<ReportInput> = {}): ReportInput {
     routerStats: new Map(),
     topErrors: [],
     feedback: { good: 0, bad: 0 },
+    patches: { recurring: [], entries: [] },
+    ...overrides,
+  };
+}
+
+function patch(overrides: Partial<PatchEntry> = {}): PatchEntry {
+  return {
+    id: crypto.randomUUID(),
+    createdAt: 1_000,
+    errorCode: "KOD_A",
+    category: "KOD_A",
+    branch: "doktor/kod-a",
+    files: ["packages/core/src/router/router.ts"],
+    diff: "d",
+    testOk: true,
+    testSummary: "geçti",
+    runId: null,
+    state: "applied",
+    resolvedAt: 2_000,
     ...overrides,
   };
 }
@@ -127,5 +146,70 @@ describe("buildReport (ADR-016 Karar 5) — SAF, sıfır provider/fetch erişimi
     const report = buildReport(baseInput({ routerStats: stats }));
     expect(report.successTable[0]?.hasEvidence).toBe(false);
     expect(report.findings).toEqual([]);
+  });
+});
+
+describe("buildReport → selfDev (ADR-018 Karar 5/6, Dilim D5) — kendini geliştirme özeti", () => {
+  it("boş girdide sıfır sayaçlar + boş kategori/tekrar listeleri", () => {
+    const report = buildReport(baseInput());
+    expect(report.selfDev).toEqual({
+      recurring: [],
+      proposed: 0,
+      applied: 0,
+      reverted: 0,
+      failed: 0,
+      rejected: 0,
+      categories: [],
+    });
+  });
+
+  it("recurring (doctor.diagnose() adayları) DOĞRUDAN geçirilir", () => {
+    const report = buildReport(
+      baseInput({ patches: { recurring: [{ code: "KOD_X", count: 5 }], entries: [] } }),
+    );
+    expect(report.selfDev.recurring).toEqual([{ code: "KOD_X", count: 5 }]);
+  });
+
+  it("durum sayaçları: her state doğru kovaya sayılır", () => {
+    const entries = [
+      patch({ state: "proposed" }),
+      patch({ state: "applied" }),
+      patch({ state: "applied" }),
+      patch({ state: "reverted" }),
+      patch({ state: "failed" }),
+      patch({ state: "rejected" }),
+    ];
+    const report = buildReport(baseInput({ patches: { recurring: [], entries } }));
+    expect(report.selfDev).toMatchObject({
+      proposed: 1,
+      applied: 2,
+      reverted: 1,
+      failed: 1,
+      rejected: 1,
+    });
+  });
+
+  it("kategori sicili: applied=sağlıklı, reverted/failed=unhealthy, proposed/rejected sicile GİRMEZ", () => {
+    const entries = [
+      patch({ category: "KOD_A", state: "applied" }),
+      patch({ category: "KOD_A", state: "applied" }),
+      patch({ category: "KOD_A", state: "reverted" }),
+      patch({ category: "KOD_A", state: "proposed" }), // sicile girmemeli
+      patch({ category: "KOD_B", state: "failed" }),
+    ];
+    const report = buildReport(baseInput({ patches: { recurring: [], entries } }));
+    expect(report.selfDev.categories).toEqual([
+      { category: "KOD_A", applied: 2, unhealthy: 1, total: 3 },
+      { category: "KOD_B", applied: 0, unhealthy: 1, total: 1 },
+    ]);
+  });
+
+  it("kategoriler ALFABETİK sıralanır (deterministik çıktı)", () => {
+    const entries = [
+      patch({ category: "ZKOD", state: "applied" }),
+      patch({ category: "AKOD", state: "applied" }),
+    ];
+    const report = buildReport(baseInput({ patches: { recurring: [], entries } }));
+    expect(report.selfDev.categories.map((c) => c.category)).toEqual(["AKOD", "ZKOD"]);
   });
 });

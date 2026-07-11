@@ -26,7 +26,7 @@
 | `GET /api/memory` | Bearer | Kullanıcı profili: `{ content, chars, truncated, updatedAt }`; dosya yoksa boş iskelet |
 | `PUT /api/memory` | Bearer | Profilin TAM içeriğini değiştirir (gövde: `{ content }`) — yalnız insan arayüzünden çağrılır; agent araç yüzeyinde bu uca giden yol YOKTUR (ADR-013 yazma kısıtı) |
 | `GET /api/roadmap?dir=<yol>` | Bearer | `<dir>/ROADMAP.md`'yi ayrıştırıp `{ phases: RoadmapPhase[] }` döner (ADR-015 Karar 3); `dir` eksikse 400, dosya yoksa 404 — istemci (masaüstü webview) dosya sistemine erişemediği için daemon okur |
-| `GET /api/report?from=<ms>&to=<ms>` | Bearer | Kullanım raporu agregasyonu (ADR-016 Karar 5): toplam token/maliyet (gün+model kırılımı), model×görev-türü başarı tablosu, en sık hata kodları, geri bildirim özeti, eşik bulguları. `from`/`to` verilmezse son 7 gün. Deterministik — bu uç hiçbir provider çağrısı yapmaz |
+| `GET /api/report?from=<ms>&to=<ms>` | Bearer | Kullanım raporu agregasyonu (ADR-016 Karar 5): toplam token/maliyet (gün+model kırılımı), model×görev-türü başarı tablosu, en sık hata kodları, geri bildirim özeti, eşik bulguları. `from`/`to` verilmezse son 7 gün. Deterministik — bu uç hiçbir provider çağrısı yapmaz. **ADDITIVE (Faz 8 Dilim D5):** cevaba `selfDev` alanı eklendi — `patches` tablosunun ANLIK durumu (rapor aralığıyla sınırlı değil, kümülatif): tekrarlayan hata adayları (`doctor.diagnose()`), önerilen/uygulanan/geri alınan/başarısız/reddedilen yama sayıları, kategori sicili |
 | `GET /api/context-map?limit=<n>` | Bearer | Bağlam haritası grafı (ADR-016 Karar 6): `{ nodes: [{id, kind: "session"\|"run"\|"project", label, at, meta}], edges: [{from, to, kind: "project"\|"same_day"}] }` — mevcut sessions/agent_runs verisinden deterministik türetim, vars. son 500 düğüm |
 | `POST /api/shutdown` | Bearer | Daemon'ı TEMİZ kapatır (ADR-017 Karar 4): `{ ok: true }` cevabı GÖNDERİLDİKTEN SONRA kapanır (istemci cevabı kaybetmez) — `symphony update`/`rollback`'in "yeni sürümle yeniden başlat" adımı; agent araç yüzeyinde bu uca giden yol YOKTUR |
 
@@ -129,7 +129,7 @@ eş zamanlılığının kaynağı budur).
 | `hardware.updated` | `{ gpus: [{ index, name, utilizationPct, memUsedMb, memTotalMb, temperatureC\|null }], sampledAt }` | Yerel GPU vitalleri; periyodik (~2sn) + yeni bağlanınca son örnek. GPU yoksa yayınlanmaz. NVIDIA v1 (nvidia-smi). |
 | `doctor.phase` | `{ phase: "sandbox"\|"agent"\|"verify"\|"done"\|"failed", message, runId? }` | Doktor boru hattının ilerlemesi (ADR-018 Dilim D2). Boru hattının uzun/sessiz adımları (worktree + `pnpm install`, build/test/lint) dakikalar sürer — kullanıcıya ilerleme bu olayla gösterilir; `runId` agent koşusu doğduğunda (`phase: "agent"`) taşınır |
 | `doctor.patch.proposed` | `{ runId, patchId, errorCode, branch, files, testOk, testSummary }` | Doktor boru hattı yama önerisini kaydetti (ADR-018 Karar 3). **`testOk` BORU HATTININ ölçümüdür** — agent'ın "testler geçti" beyanı değil (ADR-018 Karar 2). Uygulama/ret `symphony patch apply\|reject` ile (Dilim D3) |
-| `log.entry` | `{ level, source, message, runId? }` | Canlı log akışı (UI log paneli) |
+| `log.entry` | `{ level, source, message, runId? }` | Canlı log akışı (UI log paneli). **İlk üreticisi (Faz 8, Dilim D5):** daemon'ın günlük tekrarlayan-hata taraması — `doctor.diagnose()` aday bulursa `source: "doctor"`, `level: "warn"` ile yayınlanır |
 
 ## 5. Agent durum makinesi
 

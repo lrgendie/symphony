@@ -122,6 +122,35 @@ export const ReportFeedbackSummarySchema = z
   .strip();
 export type ReportFeedbackSummary = z.infer<typeof ReportFeedbackSummarySchema>;
 
+/**
+ * Kendini geliştirme özeti (ADR-018 Karar 5/6, Faz 8 Dilim D5) — `patches` tablosunun anlık
+ * durumu (rapor ARALIĞIYLA sınırlı DEĞİL; sicil kümülatif bir kavramdır, D4'teki `patch trust`
+ * ile AYNI yaklaşım). `recurring`: `doctor.diagnose()`nin ŞU ANKİ adayları (aynı deterministik
+ * eşik, LLM YOK).
+ */
+export const ReportSelfDevCategorySchema = z
+  .object({
+    category: z.string().min(1),
+    applied: z.number().int().nonnegative(),
+    unhealthy: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+  })
+  .strip();
+export type ReportSelfDevCategory = z.infer<typeof ReportSelfDevCategorySchema>;
+
+export const ReportSelfDevSchema = z
+  .object({
+    recurring: z.array(ReportErrorRowSchema),
+    proposed: z.number().int().nonnegative(),
+    applied: z.number().int().nonnegative(),
+    reverted: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    rejected: z.number().int().nonnegative(),
+    categories: z.array(ReportSelfDevCategorySchema),
+  })
+  .strip();
+export type ReportSelfDev = z.infer<typeof ReportSelfDevSchema>;
+
 export const ReportResponseSchema = z
   .object({
     /** epoch ms — sorgu aralığı (dahil). */
@@ -135,6 +164,7 @@ export const ReportResponseSchema = z
     feedback: ReportFeedbackSummarySchema,
     /** Eşik-tabanlı, deterministik öneri cümleleri (Türkçe) — LLM üretmez. */
     findings: z.array(z.string()),
+    selfDev: ReportSelfDevSchema,
   })
   .strip();
 export type ReportResponse = z.infer<typeof ReportResponseSchema>;
