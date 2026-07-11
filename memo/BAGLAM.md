@@ -65,6 +65,11 @@ protokol WS/REST üzerinden konuşulur.
     KENDİSİ, izin sistemi/jail/engine, secrets/, token.ts, VE bu listenin kendisi) +
     `touchesProtected`/`protectedMatches`. Bu yollara dokunan yama hiçbir güven kaydıyla
     otomatikleşemez — `--evet` bile geçmez, elle "EVET" yazılır
+  - `trust.ts` — SAF, testli (ADR-018 Karar 5): `readTrust`/`writeTrust` (`~/.symphony/
+    trust.json`, `{trusted: string[]}`) + `categoryRecord` (sicil `patches` tablosundan
+    TÜRETİLİR, ayrı tablo YOK — applied=sağlıklı, reverted/failed=unhealthy, proposed/rejected
+    sicile GİRMEZ) + `categoryTouchedProtected` (kategori geçmişte korumalı yola dokunduysa
+    `patch trust` REDDEDER — Karar 4 blanket-trust ile atlanamaz)
   - `pipeline.ts` — orkestrasyon: teşhis → sandbox → teşhis dosyası → agent koşusu (NORMAL
     `engine.start`, cwd=worktree → jail hapseder) → doğrulama → dalda commit → yama `proposed`.
     Tek koşu kilidi (`AGENT_DOCTOR_BUSY`). **`run()` beklemez** — WS 30sn zaman aşımına takılmasın
@@ -180,12 +185,17 @@ protokol WS/REST üzerinden konuşulur.
     izin istekleri terminalden — doktor ayrıcalıklı mod DEĞİL, agent tanımı). Sonuç: yama
     ÖNERİSİ (`doctor.patch.proposed`) — uygulanmaz, `symphony patch apply` (D3) ile uygulanır.
     `renderDiff`'i `agent.ts`'ten import eder (tek kaynak)
-  - `patch.ts` (ADR-018 Karar 3+4, Dilim D3) — `symphony patches` · `patch apply <id>` ·
+  - `patch.ts` (ADR-018 Karar 3+4+5, Dilim D3+D4) — `symphony patches` · `patch apply <id>` ·
     `patch reject <id>`. **Apply zinciri (WATCHDOG):** ön koşullar (repo TEMİZ olmalı; yama
     `proposed`; dal var) → onay (korumalı yolda "EVET" şart) → `git merge --no-ff` → `pnpm build`
     → `pnpm test` (ANA DALDA — sandbox yeşili merge sonrası dünyayı kanıtlamaz) → daemon kapat →
     yeni kodla başlat → sağlık → **başarısızsa `reset --hard` + YENİDEN DERLE + eski kodla başlat
-    + `reverted`**. Yeniden derleme ŞART: yoksa daemon bir sonraki açılışta bozuk `dist`i yükler
+    + `reverted`**. Yeniden derleme ŞART: yoksa daemon bir sonraki açılışta bozuk `dist`i yükler.
+    `patch trust <kod>`/`untrust <kod>` (D4): sicili gösterir + onay ister (untrust ONAYSIZ —
+    sıkılaştırma güvenlidir); `patches` çıktısına sicil satırı ("N/M sağlıklı" + [GÜVENİLİR])
+  - `doctor.ts` (D4 eki): `doctor.patch.proposed` alınca kategori GÜVENİLİR + test yeşili +
+    korumalı yol YOK ise `patchApplyCommand`ı SORMADAN çağırır (aynı süreç içinde — insan zaten
+    `symphony doctor`u başlattı); üç koşuldan biri eksikse eskisi gibi öneri olarak biter
   - `update.ts` (ADR-017 Karar 4, Dilim F5) — `symphony update` (npm view→install-g→
     `versions.json`→`/api/shutdown`+`ensureDaemonRunning`) + `symphony rollback` (previous'a
     döner, kaydı swap eder). SAF yardımcılar (`readVersions`/`writeVersions`/`nextVersions`/

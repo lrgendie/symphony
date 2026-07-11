@@ -1,7 +1,9 @@
 import { createInterface } from "node:readline/promises";
 import chalk from "chalk";
+import { getSymphonyPaths, isTrusted, readTrust, touchesProtected } from "@symphony/core";
 import { connectToDaemon } from "../client/daemon-client.js";
 import { renderDiff } from "./agent.js";
+import { patchApplyCommand } from "./patch.js";
 
 /**
  * `symphony doctor [--kod <HATA_KODU>]` (ADR-018, Faz 8 Dilim D2) — kendini geliştirme döngüsünün
@@ -124,13 +126,35 @@ export async function doctorCommand(options: { kod?: string }): Promise<void> {
           `— ${payload.testSummary.split("\n")[0] ?? ""}`,
         )}`,
       );
+
+      // Güven merdiveni (ADR-018 Karar 5, Dilim D4): kategori GÜVENİLİR + test yeşili + korumalı
+      // yol YOK ise, insan `symphony doctor`u zaten başlattığı için ayrıca SORMADAN uygula —
+      // aynı süreç içinde, ayrı bir `symphony patch apply` çağrısı gerekmez.
+      // v1 (D2 pipeline.ts): kategori = hata kodu.
+      const trust = readTrust(getSymphonyPaths().trustFile);
+      const autoApply = payload.testOk && isTrusted(trust, payload.errorCode) && !touchesProtected(payload.files);
+
+      if (!autoApply) {
+        console.log(
+          chalk.dim(
+            `\nyama UYGULANMADI (öneri olarak kaydedildi). ` +
+              `Uygulamak için: symphony patch apply ${payload.patchId.slice(0, 8)}`,
+          ),
+        );
+        resolveExit(payload.testOk ? 0 : 1);
+        return;
+      }
+
       console.log(
-        chalk.dim(
-          `\nyama UYGULANMADI (öneri olarak kaydedildi). ` +
-            `Uygulamak için: symphony patch apply ${payload.patchId.slice(0, 8)}`,
-        ),
+        chalk.green(`\n✔ kategori GÜVENİLİR (${payload.errorCode}) — sormadan uygulanıyor…`),
       );
-      resolveExit(payload.testOk ? 0 : 1);
+      patchApplyCommand(payload.patchId, { evet: true }).then(
+        () => resolveExit(0),
+        (error: unknown) => {
+          console.error(chalk.red(`✘ otomatik uygulama başarısız: ${String(error)}`));
+          resolveExit(1);
+        },
+      );
     });
 
     process.on("SIGINT", () => {

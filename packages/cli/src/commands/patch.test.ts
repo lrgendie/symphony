@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -41,17 +44,21 @@ vi.mock("node:readline/promises", () => ({
   createInterface: () => ({ question: questionMock, close: vi.fn() }),
 }));
 
+// Gerçek dosyaya yazar (trust.ts'in readTrust/writeTrust'ı GERÇEK kalır — ...actual ile) ki
+// `patch trust`in dosya kalıcılığı da kanıtlansın, yalnız iç mantığı değil.
+let trustFile = "";
 vi.mock("@symphony/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@symphony/core")>();
   return {
-    ...actual, // protectedMatches GERÇEK kalır — güvenlik kapısı sahtelenmez
+    ...actual, // protectedMatches/readTrust/writeTrust/categoryRecord GERÇEK kalır
     findRepoRoot: () => "/repo",
-    getSymphonyPaths: () => ({ home: "/home" }),
+    getSymphonyPaths: () => ({ home: "/home", trustFile }),
     loadConfig: () => ({ selfDev: { repoPath: "/repo" }, daemon: { port: 7770 } }),
   };
 });
 
-import { patchApplyCommand } from "./patch.js";
+import { patchApplyCommand, patchTrustCommand, patchUntrustCommand } from "./patch.js";
+import { readTrust, writeTrust } from "@symphony/core";
 
 const PATCH = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -86,6 +93,7 @@ function execaSteps(): string[] {
 }
 
 let exitSpy: ReturnType<typeof vi.spyOn>;
+let trustDir: string;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -104,11 +112,16 @@ beforeEach(() => {
   exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
     throw new Error("__EXIT__");
   });
+  // trust.json GERÇEK bir dosyaya yazılır (readTrust/writeTrust mock'lanmadı — trust.test.ts
+  // iç mantığı zaten kanıtlıyor; burada CLI komutunun dosya kalıcılığını da kanıtlıyoruz).
+  trustDir = mkdtempSync(join(tmpdir(), "symphony-patch-trust-"));
+  trustFile = join(trustDir, "trust.json");
 });
 
 afterEach(() => {
   exitSpy.mockRestore();
   vi.unstubAllGlobals();
+  rmSync(trustDir, { recursive: true, force: true });
 });
 
 describe("patch apply — ÖN KOŞULLAR (merge'e HİÇ ulaşmadan reddeder)", () => {
@@ -237,5 +250,72 @@ describe("patch apply — DEĞİŞMEZLER (ADR-018 Karar 4)", () => {
 
     expect(questionMock).toHaveBeenCalled();
     expect(gitCommands()).toEqual([]); // iptal
+  });
+});
+
+describe("patch trust <kategori> (ADR-018 Karar 5, Dilim D4)", () => {
+  it("sonuçlanmış (applied/reverted/failed) yama yoksa reddeder — sicil yok", async () => {
+    requestMock.mockImplementation(async (type: string) =>
+      type === "patches.list" ? patchList({ state: "proposed" }) : {},
+    );
+    await expect(patchTrustCommand("AGENT_TOOL_LOOP")).rejects.toThrow(/sicil yok/);
+    expect(questionMock).not.toHaveBeenCalled(); // onay bile SORULMAZ
+  });
+
+  it("kategori GEÇMİŞTE korumalı yola dokunduysa reddeder (Karar 4 — blanket-trust değişmezi anlamsız kılmaz)", async () => {
+    requestMock.mockImplementation(async (type: string) =>
+      type === "patches.list"
+        ? {
+            patches: [
+              { ...PATCH, state: "applied" },
+              {
+                ...PATCH,
+                id: crypto.randomUUID(),
+                state: "reverted",
+                files: ["packages/core/src/agent/engine.ts"],
+              },
+            ],
+          }
+        : {},
+    );
+    await expect(patchTrustCommand("AGENT_TOOL_LOOP")).rejects.toThrow(/KORUMALI/);
+    expect(readTrust(trustFile).trusted).toEqual([]);
+  });
+
+  it("onaylanırsa trust.json'a KALICI olarak yazılır", async () => {
+    requestMock.mockImplementation(async (type: string) =>
+      type === "patches.list" ? patchList({ state: "applied" }) : {},
+    );
+    questionMock.mockImplementation(async () => "e");
+
+    await patchTrustCommand("AGENT_TOOL_LOOP");
+
+    expect(readTrust(trustFile).trusted).toContain("AGENT_TOOL_LOOP");
+  });
+
+  it("onaylanmazsa YAZILMAZ", async () => {
+    requestMock.mockImplementation(async (type: string) =>
+      type === "patches.list" ? patchList({ state: "applied" }) : {},
+    );
+    questionMock.mockImplementation(async () => "h");
+
+    await patchTrustCommand("AGENT_TOOL_LOOP");
+
+    expect(readTrust(trustFile).trusted).not.toContain("AGENT_TOOL_LOOP");
+  });
+});
+
+describe("patch untrust <kategori>", () => {
+  it("güvenilir değilse yalnız mesaj verir, çökmez", () => {
+    expect(() => patchUntrustCommand("HIC_GUVENILMEMIS_KOD")).not.toThrow();
+  });
+
+  it("güveniliyse ONAYSIZ kaldırır — sıkılaştırma her zaman güvenlidir", () => {
+    writeTrust(trustFile, { trusted: ["AGENT_TOOL_LOOP"] });
+
+    patchUntrustCommand("AGENT_TOOL_LOOP");
+
+    expect(readTrust(trustFile).trusted).not.toContain("AGENT_TOOL_LOOP");
+    expect(questionMock).not.toHaveBeenCalled();
   });
 });

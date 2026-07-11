@@ -15,7 +15,13 @@ import { addCommand } from "./commands/add.js";
 import { syncCommand, syncInitCommand } from "./commands/sync.js";
 import { rollbackCommand, updateCommand } from "./commands/update.js";
 import { doctorCommand } from "./commands/doctor.js";
-import { patchApplyCommand, patchRejectCommand, patchesCommand } from "./commands/patch.js";
+import {
+  patchApplyCommand,
+  patchRejectCommand,
+  patchesCommand,
+  patchTrustCommand,
+  patchUntrustCommand,
+} from "./commands/patch.js";
 import { ensureDesktopRunning } from "./client/desktop-launch.js";
 
 const program = new Command();
@@ -144,6 +150,24 @@ patch
   .command("reject <id>")
   .description("Yamayı reddet ve dalını sil")
   .action((id: string) => patchRejectCommand(id).catch(fail));
+
+patch
+  .command("trust <kategori>")
+  .description(
+    "Kategoriye güven (sicili göster + onay iste) — sonraki test-yeşili yamalar doctor içinde sormadan uygulanır (Karar 5)",
+  )
+  .action((kategori: string) => patchTrustCommand(kategori).catch(fail));
+
+patch
+  .command("untrust <kategori>")
+  .description("Kategoriden güveni geri çek (onaysız — sıkılaştırma güvenlidir)")
+  .action((kategori: string) => {
+    try {
+      patchUntrustCommand(kategori);
+    } catch (error) {
+      fail(error);
+    }
+  });
 
 program
   .command("update")

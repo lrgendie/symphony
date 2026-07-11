@@ -32,6 +32,8 @@ export interface SymphonyPaths {
   reportsDir: string;
   /** ADR-017 Karar 4 (Dilim F5): `symphony update`/`rollback`'in sürüm geçmişi ({previous,current,at}). */
   versionsFile: string;
+  /** ADR-018 Karar 5 (Dilim D4): güvenilen yama kategorileri ({trusted: string[]}). */
+  trustFile: string;
 }
 
 export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPaths {
@@ -52,6 +54,7 @@ export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPath
     desktopPidFile: join(home, "desktop.pid"),
     reportsDir: join(home, "reports"),
     versionsFile: join(home, "versions.json"),
+    trustFile: join(home, "trust.json"),
   };
 }
 

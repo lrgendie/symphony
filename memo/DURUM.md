@@ -3,7 +3,45 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Opus — Dilim D3 BİTTİ ve testli, 490 test; canlı apply provası KULLANICIYA)
+**Son güncelleme:** 2026-07-11 (Sonnet — Dilim D4 BİTTİ ve testli, 514 test; güven merdiveni)
+
+## Faz 8 — Dilim D4 (güven merdiveni) BİTTİ (2026-07-11, Sonnet)
+
+ADR-018 Karar 5 uygulandı. Kural 1 sırası: PROTOKOL yok (yeni mesaj/olay YOK — bu dilim tamamen
+yerel: `trust.json` + mevcut `patches.list`ten türetilen sicil).
+
+- **`paths.ts`:** `trustFile` (`~/.symphony/trust.json`).
+- **YENİ `core/src/doctor/trust.ts`** (SAF, testli): `readTrust`/`writeTrust` (`{trusted:
+  string[]}`, bozuk/eksik JSON çökmeden boş listeye düşer) + `categoryRecord(patches, category)`
+  — **sicil `patches` tablosundan TÜRETİLİR, ayrı tablo YOK**: `applied`=sağlıklı,
+  `reverted`/`failed`=unhealthy (ikisi de "gerçek dünyada sorun çıkardı" demek — biri canlıda
+  bozdu, öteki ana dalda testi düşürdü), `proposed`/`rejected` sicile GİRMEZ (henüz/hiç kanıt
+  üretmediler) + `categoryTouchedProtected` (kategorinin GEÇMİŞ bir yaması korumalı yola
+  dokunduysa `patch trust` bu kategoriyi REDDEDER — Karar 4'ün blanket-trust ile atlanmasını önler).
+- **`cli/commands/patch.ts`:** `patchTrustCommand`/`patchUntrustCommand` + `patchesCommand`e
+  sicil satırı ("N/M sağlıklı" + `[GÜVENİLİR]` işareti). `trust`: sicil YOKSA ya da kategori
+  KORUMALI'ya dokunduysa reddeder (onay bile sorulmaz); varsa sicili gösterip onay ister.
+  `untrust`: ONAYSIZ kaldırır (sıkılaştırma her zaman güvenlidir).
+- **`cli/commands/doctor.ts` eki:** `doctor.patch.proposed` alınca üç koşul BİRLİKTE
+  sağlanıyorsa (`testOk` + kategori `isTrusted` + `!touchesProtected(files)`) `patchApplyCommand`ı
+  **aynı süreç içinde, sormadan** çağırır — insan zaten `symphony doctor`u başlattığı için ikinci
+  bir `symphony patch apply` çağrısına gerek yok. Üç koşuldan biri eksikse eskisi gibi "öneri
+  kaydedildi" mesajıyla biter.
+- **Test:** 490→**514** (+24: `trust.test.ts` YENİ 13 — roundtrip/bozuk JSON'da çökmeden boş
+  liste, `withTrust` tekrar eklemeyi çoğaltmaz, sicil türetimi applied/unhealthy/total,
+  proposed/rejected sicile girmez, başka kategori karışmaz, `categoryTouchedProtected` yalnız O
+  kategoriyi etkiler; `patch.test.ts` +6 — sicil yoksa/korumalıysa reddeder (onay sorulmaz),
+  onayla/onaysız trust.json'a yazma-yazmama, untrust onaysız kaldırır; `doctor.test.ts` YENİ 5 —
+  güvenilir değilse otomatik uygulamaz, üç koşul birlikteyken sormadan `patchApplyCommand`
+  çağırır, testi düşmüşse/korumalıysa TEK BAŞINA güven yetmez, `patchApplyCommand` fırlatırsa
+  hata basıp sonlanır). `pnpm build && pnpm test && pnpm lint` temiz (61 dosya/514 test).
+- **CANLI DUMAN TESTİ:** daemon D4 koduyla yeniden başlatıldı → `symphony patch trust
+  HIC_OLMAYAN_KOD` (sicil yok, doğru reddetti) ve `patch untrust HIC_OLMAYAN_KOD` (zaten
+  güvenilir değil mesajı) gerçek daemon'a karşı çalıştı.
+
+**Sıradaki: Dilim D5** (kendini geliştirme raporu + haftalık zamanlama). Sonnet yeterli.
+
+## Faz 8 — Dilim D3 (denetimli canlıya alma + watchdog) BİTTİ (2026-07-11, Opus)
 
 ## Faz 8 — Dilim D3 (denetimli canlıya alma + watchdog) BİTTİ (2026-07-11, Opus)
 
@@ -394,7 +432,7 @@ sandbox.ts'i.
    D2'deki gerçek öneriyle `patch apply` — kasıtlı bozuk bir yamada revert zincirinin çalıştığı
    AYRICA denenir (ROADMAP kabul maddesi).
 
-### 📋 Dilim D4 — güven merdiveni (sicil + `patch trust` + doktor→apply akışı) — SIRADAKİ (Sonnet yeterli)
+### ✅ Dilim D4 — güven merdiveni — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 1. `paths.ts`: `trustFile` (`~/.symphony/trust.json`). YENİ SAF modül `core/src/doctor/trust.ts`:
    `readTrust`/`writeTrust` (`{trusted: string[]}`) + `categoryRecord(patches)` (kategori →

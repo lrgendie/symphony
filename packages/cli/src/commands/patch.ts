@@ -5,6 +5,15 @@ import { simpleGit } from "simple-git";
 import type { PatchSummary } from "@symphony/shared";
 import { findRepoRoot, getSymphonyPaths, loadConfig } from "@symphony/core";
 import { protectedMatches } from "@symphony/core";
+import {
+  categoryRecord,
+  categoryTouchedProtected,
+  isTrusted,
+  readTrust,
+  withoutTrust,
+  withTrust,
+  writeTrust,
+} from "@symphony/core";
 import { connectToDaemon, ensureDaemonRunning, type DaemonClient } from "../client/daemon-client.js";
 import { shutdownDaemonIfRunning } from "./update.js";
 
@@ -57,7 +66,7 @@ function fmtState(state: PatchSummary["state"]): string {
   return paint(state);
 }
 
-/** `symphony patches` — yama önerilerini listeler. */
+/** `symphony patches` — yama önerilerini + kategori sicilini listeler ("12/12 sağlıklı"). */
 export async function patchesCommand(): Promise<void> {
   const client = await connectToDaemon();
   try {
@@ -66,17 +75,98 @@ export async function patchesCommand(): Promise<void> {
       console.log(chalk.dim("yama önerisi yok — `symphony doctor` ile üret."));
       return;
     }
+    const trust = readTrust(getSymphonyPaths().trustFile);
     for (const p of patches) {
       const tests = p.testOk ? chalk.green("test ✔") : chalk.red("test ✘");
       const korumali = protectedMatches(p.files).length > 0 ? chalk.red(" [KORUMALI]") : "";
+      const record = categoryRecord(patches, p.category);
+      const sicil = record.total > 0 ? `${record.applied}/${record.total} sağlıklı` : "sicil yok";
+      const guvenilir = isTrusted(trust, p.category) ? chalk.green(" [GÜVENİLİR]") : "";
       console.log(
         `${chalk.bold(p.id.slice(0, 8))}  ${fmtState(p.state).padEnd(18)} ${tests}  ` +
-          `${p.errorCode}  ${chalk.dim(`${p.files.length} dosya`)}${korumali}`,
+          `${p.errorCode}  ${chalk.dim(`${p.files.length} dosya`)}${korumali}\n` +
+          `           ${chalk.dim(sicil)}${guvenilir}`,
       );
     }
   } finally {
     client.close();
   }
+}
+
+/**
+ * `symphony patch trust <kategori>` (ADR-018 Karar 5) — bir kategorinin geçmiş sicilini
+ * gösterir + onay ister; onaylanırsa o kategoriden gelecek TEST-YEŞİLİ ve KORUMASIZ yamalar
+ * `symphony doctor` içinde SORMADAN uygulanır (bkz. `doctor.ts`).
+ *
+ * PROTECTED kategori REDDEDİLİR (ADR-018 Karar 4): bu kategorinin geçmiş bir yaması korumalı
+ * bir yola dokunduysa, blanket-trust bu değişmezi anlamsız kılardı.
+ */
+export async function patchTrustCommand(category: string): Promise<void> {
+  const client = await connectToDaemon();
+  let patches: PatchSummary[];
+  try {
+    ({ patches } = await client.request("patches.list", {}));
+  } finally {
+    client.close();
+  }
+
+  const record = categoryRecord(patches, category);
+  if (record.total === 0) {
+    throw new Error(
+      `'${category}' kategorisinden hiç SONUÇLANMIŞ (applied/reverted/failed) yama yok — ` +
+        `güvenilecek bir sicil yok.`,
+    );
+  }
+  if (categoryTouchedProtected(patches, category)) {
+    throw new Error(
+      `'${category}' kategorisinin geçmişte KORUMALI yollara dokunan yaması var — bu kategori ` +
+        `güvenilir SAYILAMAZ (ADR-018 Karar 4). Her yaması elle onaylanmalı.`,
+    );
+  }
+
+  console.log(chalk.bold(`\nkategori: ${category}`));
+  console.log(
+    `  sicil: ${record.applied}/${record.total} sağlıklı` +
+      (record.unhealthy > 0 ? chalk.red(` (${record.unhealthy} geri alındı/başarısız)`) : ""),
+  );
+  if (record.unhealthy > 0) {
+    console.log(
+      chalk.yellow("\n⚠ bu kategoride geçmişte BAŞARISIZ bir yama var — yine de güvenmeden önce düşün."),
+    );
+  }
+
+  const readline = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = (
+    await readline.question("\nBu kategoriye güven? Sonraki yamalar SORMADAN uygulanacak. [e/H] ")
+  )
+    .trim()
+    .toLowerCase();
+  readline.close();
+  if (answer !== "e") {
+    console.log(chalk.yellow("iptal edildi."));
+    return;
+  }
+
+  const paths = getSymphonyPaths();
+  writeTrust(paths.trustFile, withTrust(readTrust(paths.trustFile), category));
+  console.log(
+    chalk.green(
+      `✔ '${category}' artık GÜVENİLİR — test geçen ve korumalı yol içermeyen gelecek ` +
+        `yamalar 'symphony doctor' içinde sormadan uygulanacak.`,
+    ),
+  );
+}
+
+/** `symphony patch untrust <kategori>` — güveni geri çeker (daima onaysız; sıkılaştırma güvenlidir). */
+export function patchUntrustCommand(category: string): void {
+  const paths = getSymphonyPaths();
+  const trust = readTrust(paths.trustFile);
+  if (!isTrusted(trust, category)) {
+    console.log(chalk.dim(`'${category}' zaten güvenilir değil.`));
+    return;
+  }
+  writeTrust(paths.trustFile, withoutTrust(trust, category));
+  console.log(chalk.green(`✔ '${category}' artık güvenilir değil — sonraki yamalar yine onay isteyecek.`));
 }
 
 /** `symphony patch reject <id>` — öneriyi reddeder ve dalı siler (worktree D2'de zaten kalktı). */
