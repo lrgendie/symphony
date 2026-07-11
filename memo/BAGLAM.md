@@ -334,9 +334,20 @@ protokol WS/REST üzerinden konuşulur.
 - `map/layout.ts` — SAF, testli (ADR-016 Karar 6, Dilim Z5): `layoutContextMap(graph, width,
   height)` — d3-force YALNIZ konum hesaplar (deterministik başlangıç: indekse göre çember),
   render `map/ContextMap.tsx`'in SVG'si. `d3-force` bağımlılığı (GEREKSINIMLER.md'de işli)
+- `map/viewbox.ts` — SAF, testli (kullanıcı isteği, 2026-07-11): `zoomViewBox`/`panViewBox` —
+  `ui` paketinde React bileşen testi altyapısı (jsdom/testing-library) YOK, bu yüzden yakınlaştır/
+  kaydır matematiği `ContextMap.tsx`'ten AYRILDI ki `layout.ts` deseniyle (saf girdi/çıktı) test
+  edilebilsin. `zoomViewBox`: "zoom to cursor" (imlecin altındaki dünya noktası SABİT kalır,
+  MIN/MAX genişlikte kırpılır). `panViewBox`: HER ÇAĞRIDA sürüklemenin BAŞLANGIÇ viewBox'ından
+  hesaplanır (birikmez, kaymayı önler)
 - `map/ContextMap.tsx` — Bağlam Haritası (Dilim Z5): dashboard'dan AYRI görünüm, `App.tsx`'teki
   `view` sekme state'iyle açılır. Düğüm rengi=tür (session cyan/run magenta/project violet),
-  tıkla→yan panel (run/project meta'dan anında, session `fetchSessionDetail` ile REST)
+  tıkla→yan panel (run/project meta'dan anında, session `fetchSessionDetail` ile REST). Yakınlaştır/
+  kaydır (2026-07-11): SVG `viewBox` durumu React state'inde; fare tekerleği `zoomViewBox` çağırır
+  (native `wheel` dinleyici — React'ın sentetik `onWheel`'i passive olabilir, `preventDefault`
+  sessizce yok sayılırdı); tekerlek tuşu (orta tık, `e.button===1`) basılıyken sürükleme
+  `panViewBox` çağırır (window seviyesinde dinlenir — fare SVG dışına çıksa bile doğru biter).
+  Düğüm tıklaması (sol tık) ETKİLENMEDİ — viewBox ne olursa olsun gerçek kullanıcı-uzayı koordinatı
 - `index.css` — marka paleti (cyan/magenta/red, logo ile aynı); düz CSS; `.map-*`/`.view-tab*`
   (Dilim Z5)
 

@@ -763,6 +763,11 @@ body {
   background: #05060a;
   border: 1px solid var(--line);
   border-radius: 10px;
+  /* Tekerlek tuşu basılı sürükleme (kaydırma) geri bildirimi. */
+  cursor: grab;
+}
+.map-canvas-panning {
+  cursor: grabbing;
 }
 .map-edge {
   stroke: var(--line);
