@@ -661,7 +661,8 @@ yerleşsin — karmaşık güncel graf yerine düzenli, tarihsel dökümantasyon
 reddedildi). Mevcut zemin: v1 (ADR-016 Karar 6) tamamen türetilmiş ve uçucu — kürasyonun
 kalıcılaşacağı hiçbir yer yok; model bilgisi düğüm değil meta.
 
-**Karar 1 — Kürasyon KALICIDIR; türetilen türetilmiş kalır. Göç v6: `map_nodes` + `map_edges`.**
+**Karar 1 — Kürasyon KALICIDIR; türetilen türetilmiş kalır. Göç v7: `map_nodes` + `map_edges`
+(v6 = ADR-018'in `patches` tablosu — sıradaki boş numara v7).**
 ADR-016 Karar 1'in ruhu korunur: türetilebilen HİÇBİR ŞEY saklanmaz (session/run/proje/model/
 agent/hafta düğümleri sorgu zamanında kurulmaya devam eder); yalnız TÜRETİLEMEYEN insan emeği
 saklanır. `map_nodes(id, kind: "context"|"group", title, created_at, ref_kind: "session"|"run"|
@@ -725,10 +726,10 @@ girdi zaten yakalanıyor, tek komut ayrıştırması. CLI: `symphony harita ekle
 [--baslik X]` + `symphony harita liste` (kürasyon düğümlerini gösterir).
 
 **Karar 7 — Paketleme/güncelleme etkileri (Faz 7 zinciriyle uyum; 2026-07-11 kullanıcı sorusu).**
-(a) **Göç v6 SALT EKLEMELİ olmak ZORUNDA** (yeni tablolar; mevcut tabloya ALTER/yeniden-kurma
+(a) **Göç v7 SALT EKLEMELİ olmak ZORUNDA** (yeni tablolar; mevcut tabloya ALTER/yeniden-kurma
 YOK): `migrate()` eski kodda `version >= MIGRATIONS.length → return` der (store.ts) — yani
-`symphony rollback` (F5) v6'ya göçmüş DB ile sorunsuz çalışır, map tabloları eski kodda âtıl
-durur. Bu değişmez H1'in kabul koşuludur; ileride v6'yı genişletmek gerekirse YENİ göç açılır.
+`symphony rollback` (F5) v7'ye göçmüş DB ile sorunsuz çalışır, map tabloları eski kodda âtıl
+durur. Bu değişmez H1'in kabul koşuludur; ileride v7'yi genişletmek gerekirse YENİ göç açılır.
 `symphony update` tarafında elle adım yok — daemon ilk açılışta kendisi göçer.
 (b) **Eski istemci toleransı:** REST cevabındaki YENİ enum değerleri (`week|model|...`) eski
 istemcinin katı zod enum'unda parse hatası üretir → harita "bağlantı yok" sanır. Bugün dışarıda
@@ -745,7 +746,7 @@ edilmez" kuralı geçerli). Çok-makine talebi doğarsa `symphony harita disari-
 (JSON) ayrı karar olarak gelir. (f) REHBER.md'ye yeni komutlar/harita davranışı H4'te işlenir.
 
 **Dikey dilimler (Kural 7):**
-H1 kürasyon temeli: göç v6 + SAF `context-map/curation.ts` + PROTOKOL + shared + daemon
+H1 kürasyon temeli: göç v7 + SAF `context-map/curation.ts` + PROTOKOL + shared + daemon
 işleyicileri (Sonnet) → H2 graf v2: katlanma + model/agent düğümleri + kürasyon bindirmesi +
 `?week=` (Sonnet) → H3 masaüstü v2: yeni düğüm görselleri (yerel/API ayrımı), hafta kenarı
 yerleşimi, kürasyon UI + bağla modu + drill-down (Opus önerilir — etkileşim yoğun) →

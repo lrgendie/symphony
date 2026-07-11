@@ -21,28 +21,29 @@ olsun; agent koşusu agent→koşu→model ÜÇLÜSÜ olarak okunsun; **en önem
 otomatik tek düğüme katlanıp kenara yerleşsin — düzenli, tarihsel, takip edilebilir. Görsel
 katman kullanıcıya soruldu, **Yaşayan 2D** seçildi (tam-3D reddedildi, ADR-019 Karar 5).
 
-**Tasarımın 6 kararı ADR-019'da** (KARARLAR.md — H dilimlerine başlamadan MUTLAKA oku).
-Çekirdek ilkeler: türetilebilen SAKLANMAZ (yalnız kürasyon kalıcı: göç v6 `map_nodes`/
-`map_edges`); haftalık katlanma SORGU-ZAMANI kuralıdır (zamanlayıcı/tablo YOK, hafta tanımı
-`isoWeekLabel`'dan); kürasyon WS istekleri `map.*` (önce PROTOKOL.md!); sabitlenmiş öğe asla
-katlanmaz; türetilmiş düğüm asla silinemez.
+**Tasarımın 7 kararı ADR-019'da** (KARARLAR.md — H dilimlerine başlamadan MUTLAKA oku).
+Çekirdek ilkeler: türetilebilen SAKLANMAZ (yalnız kürasyon kalıcı: göç **v7** `map_nodes`/
+`map_edges` — v6 ADR-018'in `patches` tablosu, DİKKAT); haftalık katlanma SORGU-ZAMANI
+kuralıdır (zamanlayıcı/tablo YOK, hafta tanımı `isoWeekLabel`'dan); kürasyon WS istekleri
+`map.*` (önce PROTOKOL.md!); sabitlenmiş öğe asla katlanmaz; türetilmiş düğüm asla silinemez.
 
-### 📋 Dilim H1 — kürasyon temeli (Sonnet): göç v6 + curation.ts + PROTOKOL + shared + daemon
+### 📋 Dilim H1 — kürasyon temeli (Sonnet): göç v7 + curation.ts + PROTOKOL + shared + daemon
 1. `docs/PROTOKOL.md`: `map.pin` / `map.node.rename` / `map.node.delete` / `map.group.create` /
    `map.member.add|remove` / `map.link.add|remove` istekleri + `.ok` cevapları + hata kodları
    (`VALIDATION_MAP_NODE_UNKNOWN`, `VALIDATION_MAP_NODE_PROTECTED`, `VALIDATION_MAP_REF_UNKNOWN`).
    Ayrıntılı payload şekilleri ADR-019 Karar 2'de.
 2. `shared/src/protocol/requests.ts`: zod şemaları (ref'siz `map.pin`de `title` zorunlu —
    `.superRefine` ile). `events.ts`: cevap şemaları. Şemasız mesaj çıkamaz (envelope kuralı).
-3. `core/src/db/store.ts`: göç v6 — `map_nodes(id TEXT PK, kind TEXT CHECK(context|group),
-   title TEXT, created_at INTEGER, ref_kind TEXT NULL, ref_id TEXT NULL)` +
-   `map_edges(id TEXT PK, from_id TEXT, to_id TEXT, kind TEXT CHECK(link|member),
+3. `core/src/db/store.ts`: göç **v7** (MIGRATIONS dizisinde 7. eleman — v6 ADR-018'in
+   `patches` tablosu, sakın üzerine yazma) — `map_nodes(id TEXT PK, kind TEXT
+   CHECK(context|group), title TEXT, created_at INTEGER, ref_kind TEXT NULL, ref_id TEXT
+   NULL)` + `map_edges(id TEXT PK, from_id TEXT, to_id TEXT, kind TEXT CHECK(link|member),
    created_at INTEGER)`. Metodlar: `insertMapNode/renameMapNode/deleteMapNode(+kenar kaskadı)/
    listMapNodes/insertMapEdge/deleteMapEdge/listMapEdges`.
-   **PAKETLEME DEĞİŞMEZİ (ADR-019 Karar 7a):** v6 SALT EKLEMELİDİR — mevcut tabloya ALTER/
-   yeniden-kurma YASAK; böylece `symphony rollback` (F5) sonrası ESKİ kod v6 DB ile sorunsuz
-   açılır (`migrate()`: `version >= MIGRATIONS.length → return`). Test: v6'ya göçmüş DB'de
-   MIGRATIONS'ı 5'e kırpılmış sahte eski store'un hatasız açıldığı + eski tabloların okunmaya
+   **PAKETLEME DEĞİŞMEZİ (ADR-019 Karar 7a):** v7 SALT EKLEMELİDİR — mevcut tabloya ALTER/
+   yeniden-kurma YASAK; böylece `symphony rollback` (F5) sonrası ESKİ kod v7 DB ile sorunsuz
+   açılır (`migrate()`: `version >= MIGRATIONS.length → return`). Test: v7'ye göçmüş DB'de
+   MIGRATIONS'ı 6'ya kırpılmış sahte eski store'un hatasız açıldığı + eski tabloların okunmaya
    devam ettiği bir testle kanıtlanır.
 4. YENİ SAF `core/src/context-map/curation.ts`: doğrulama mantığı — türetilmiş id koruması
    (`project:`/`model:`/`agent:`/`week:` önekleri + session/run varlığı store'dan enjekte edilen
@@ -105,9 +106,13 @@ saatin kenarlarında dash akış nabzı, yeni düğüm spring doğuşu, katlanma
 `prefers-reduced-motion` desteği (geri dönüş koşulu). Saf matematik (varsa) ayrı modülde testli;
 görsel doğrulama kullanıcıyla. `pnpm build && pnpm test && pnpm lint`; DURUM güncelle.
 
-**Sıradaki:** H1'den başla (Sonnet yeterli). Ayrıca cepte bekleyen iş: Fable'ın yarım kalan
-mimari tarama raporu (build+test+lint 617/617 temiz çıktı; güvenlik çekirdeği + motor okundu,
-rapor yazılmadı) — H dilimlerinden bağımsız, Fable dönünce tamamlanacak.
+**Sıradaki:** H1'den başla (Sonnet yeterli). ✅ Fable'ın mimari tarama raporu TAMAMLANDI →
+**`rapor/mimari-tarama-2026-07-11.md`** — 2 ORTA bulgu (B1 bekçi poll'u daemon'ı düşürebilir;
+B2 patch apply'da merge çakışması yarım-merge bırakır) + B3 belge-test-kod uyuşmazlığı
+(readTrust/readBekciRegistry gerçekten bozuk JSON'da FIRLATIR, test yalnız yanlış-şekli
+sınıyor) + düşük bulgular ve N1 (Türkçe tanımlayıcı) kararı. Önerilen sıra raporda §7:
+B1+B3 birlikte (Sonnet) → B2 (Sonnet) → N1 kararı kullanıcıyla. H dilimlerinden bağımsız,
+önce yapılabilir.
 
 ## Dilim D7 — agent tanım-güncelleme önerisi BİTTİ (2026-07-11, Sonnet) — Faz 6'nın son açık maddesi kapandı
 

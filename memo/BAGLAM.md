@@ -156,7 +156,8 @@ protokol WS/REST üzerinden konuşulur.
   (`DaemonOptions.sampleHardware`, testte kapalı)
 - `db/store.ts` — SQLite (better-sqlite3, WAL); göçler `MIGRATIONS` dizisinde
   (v1 requests+telemetry, v2 sessions+messages, v3 agent_runs+agent_steps, v4 agent_runs
-  CHECK'ine awaiting_user — tablo yeniden kurma; migrate() göç sırasında FK'yı kapatır).
+  CHECK'ine awaiting_user — tablo yeniden kurma; **v5 feedback, v6 patches [ADR-018 D1] —
+  sıradaki boş numara v7 [ADR-019 kürasyon]**; migrate() göç sırasında FK'yı kapatır).
   `saveConversation` (2.3b): tam mesaj listesini sessions/messages'a REPLACE eder — chat.start
   (`saveChatTurn` buna delege) VE konuşmalı-agent (engine) aynı kalıcılık modelini paylaşır.
   `runsSince`/`turnStatsSince`/`feedbackSince` (ADR-016 Karar 1, Dilim Z1) opsiyonel `untilMs`
