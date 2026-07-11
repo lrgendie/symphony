@@ -18,7 +18,7 @@
 | Ollama | Faz 1 | Yerel LLM çalıştırıcı (localhost:11434) | ⬜ kurulacak |
 | Rust toolchain (rustup + MSVC) | Faz 4 | Tauri masaüstü kabuğunun derlenmesi | ✅ kuruldu 2026-07-05 — rustc 1.96.1 (stable-x86_64-pc-windows-msvc); MSVC (VS 18 Community) + Windows SDK 10.0.26100 + WebView2 149 zaten vardı |
 | VS Code (öneri) | — | Geliştirme editörü | — |
-| GitHub Actions | Faz 7 | Release matrix: 4 platform Tauri installer + npm publish (ADR-017 Karar 2, Dilim F6 — `.github/workflows/release.yml`) | ⬜ F6'da kurulacak |
+| GitHub Actions | Faz 7 | Release matrix: 4 platform Tauri installer + npm publish (ADR-017 Karar 2, Dilim F6 — `.github/workflows/release.yml`) | ✅ workflow yazıldı 2026-07-11; `NPM_TOKEN` repo secret'ı KULLANICI eklemeli (F2 sonrası), gerçek tag ile TETİKLENMEDİ |
 | npm hesabı (+ scope/org) | Faz 7 | `shared`/`core`/`cli` halka açık yayını (ADR-017 Karar 1; scope yayın anında bağlanır, Dilim F2) | ⬜ F2'de kullanıcıyla |
 
 ## 2. Kütüphaneler (paket bazında)

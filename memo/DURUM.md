@@ -3,7 +3,35 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Sonnet — Dilim F5 BİTTİ ve testli, 418 test)
+**Son güncelleme:** 2026-07-11 (Sonnet — Dilim F6 yazıldı, CANLI TETİKLENMEDİ; test sayısı sabit 418)
+
+## Faz 7 — Dilim F6 (GitHub Actions release matrix) YAZILDI, canlı tetiklenmedi (2026-07-11, Sonnet)
+
+ADR-017 Karar 2 uygulandı. Kod DOKUNULMADI — yalnız YENİ `.github/workflows/release.yml`.
+- Tetik: `push: tags: v*`. **Job 1 `test`** (windows-latest, mevcut `ci.yml` adımlarının AYNISI —
+  bundle/publish bu YEŞİL olmadan başlamaz). **Job 2 `bundle`** (needs: test, matrix: windows-
+  latest[x64] · windows-11-arm · macos-13[Intel] · macos-14[Apple Silicon], `fail-fast:false` —
+  biri kırılsa diğerleri denenmeye devam eder): `dtolnay/rust-toolchain@stable` + `tauri-apps/
+  tauri-action@v0` (`projectPath: packages/desktop`) — release'i KENDİSİ oluşturur/artifact ekler,
+  `releaseDraft:true` (kullanıcı yayımlamadan önce gözden geçirir), gövdede ADR-017 Karar 2'nin
+  "macOS imzasız/doğrulanmamış" notu otomatik. **Job 3 `publish-npm`** (needs: test, paralel):
+  `actions/setup-node` `registry-url` + `pnpm -r publish --no-git-checks`, `NODE_AUTH_TOKEN:
+  secrets.NPM_TOKEN`.
+- **Yerel doğrulama (F6'nın kendi sınırı — "yalnız YAML lint/mantık mümkün"):** Python
+  `yaml.safe_load` ile sözdizimi doğrulandı (`YAML OK`); iş/matrix/adım tasarımı ADR-017 Karar
+  2'yle satır satır eşleştirildi (elle inceleme — CI'ya özgü `actionlint` kurulu değildi).
+- **GEREKSINIMLER.md güncellendi:** GitHub Actions satırı ✅ (workflow yazıldı), ama `NPM_TOKEN`
+  repo secret'ı KULLANICI eklemeli (Settings → Secrets and variables → Actions) — F2'nin (npm
+  login/scope) tamamlanmasına bağlı, henüz yapılmadı.
+- **BİLİNÇLİ OLARAK YAPILMADI:** gerçek bir sürüm etiketi (`git tag v0.1.1 && git push --tags`)
+  hiç atılmadı — bu, GERÇEK bir GitHub Release oluşturur, 4 platformda gerçek CI dakikası harcar
+  ve (NPM_TOKEN varsa) GERÇEK bir npm yayını tetikler; geri alınması zor/görünür bir eylem
+  olduğu için kullanıcının açık onayı/tetiklemesi bekleniyor. `NPM_TOKEN` da hiç eklenmedi.
+
+**Sıradaki:** F6'nın CANLI kabulü kullanıcıyla — `NPM_TOKEN` secret'ı eklenip (F2 sonrası) gerçek
+bir tag push'landığında Actions'ın 4 platformda yeşile döndüğü görülmeli; ARM/macOS runner'ı
+kırılırsa ADR'nin geri dönüşü (matrix'ten çıkar, Windows x64 kalır) uygulanır. O zamana dek F7'ye
+(REHBER.md + docs:pdf, F2/F6'dan BAĞIMSIZ) geçilebilir.
 
 ## Faz 7 — Dilim F5 (`symphony update` + `symphony rollback`) BİTTİ (2026-07-11, Sonnet)
 
@@ -283,7 +311,7 @@ Kök+3 paket sürümü zaten 0.1.0 (lockstep başlangıcı hazır).
    npm çağrıları testte MOCK (gerçek global kurulum testte yok; execa çağrı argümanları doğrulanır).
 5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
 
-### 📋 Dilim F6 — GitHub Actions release matrix (4 platform + npm publish) — SIRADAKİ
+### ✅ Dilim F6 — GitHub Actions release matrix (4 platform + npm publish) — YAZILDI (yukarıda ayrıntı; canlı tetiklenmedi, orijinal talimat aşağıda arşivlendi)
 
 **Önce oku:** ADR-017 Karar 2 + geri dönüş koşulları.
 1. YENİ `.github/workflows/release.yml`: tetik `push: tags: v*`. Job 1 `test` (windows-latest):
@@ -299,7 +327,7 @@ Kök+3 paket sürümü zaten 0.1.0 (lockstep başlangıcı hazır).
    git push --tags` → Actions yeşil → Releases'ta 4 installer + npm'de yeni sürüm. ARM/macOS
    runner kırılırsa ADR geri dönüşü: matrix'ten çıkar, Windows x64 kalır, DURUM'a not düş.
 
-### 📋 Dilim F7 — REHBER.md + docs:pdf (BAĞIMSIZ — istenirse öne alınabilir)
+### 📋 Dilim F7 — REHBER.md + docs:pdf (BAĞIMSIZ — istenirse öne alınabilir) — SIRADAKİ
 
 1. `md-to-pdf` köke devDependency (ÖNCE `docs/GEREKSINIMLER.md` envanterine işle — puppeteer
    tabanlı, yalnız dev-time). Kök package.json'a `"docs:pdf": "md-to-pdf docs/REHBER.md"`.

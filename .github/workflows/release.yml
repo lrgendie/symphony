@@ -1,0 +1,109 @@
+name: Release
+
+# ADR-017 Karar 2 (Faz 7, Dilim F6): sürüm etiketi (v*) push'landığında 3 iş paralel/sıralı
+# koşar — test (yeşil olmadan bundle/publish başlamaz), 4-platform Tauri installer bundle'ı,
+# npm yayını. macOS/ARM64 imzasız (kabul edilen risk); bu makinede DOĞRULANMADI (Mac erişimi yok).
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Bağımlılıkları kur
+        run: pnpm install --frozen-lockfile
+
+      - name: Derle
+        run: pnpm build
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+  bundle:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            label: windows-x64
+          - platform: windows-11-arm
+            label: windows-arm64
+          - platform: macos-13
+            label: macos-intel
+          - platform: macos-14
+            label: macos-arm64
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Bağımlılıkları kur
+        run: pnpm install --frozen-lockfile
+
+      # tauri-action release'i kendisi oluşturur (ilk platform) / var olana artifact ekler
+      # (sonraki platformlar) — draft bırakılır, kullanıcı yayımlamadan önce gözden geçirir.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: packages/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: "Symphony ${{ github.ref_name }}"
+          releaseBody: |
+            Otomatik derleme (${{ matrix.label }}).
+
+            **macOS paketleri imzasız ve Mac üzerinde doğrulanmamıştır** (ADR-017 Karar 2) —
+            Gatekeeper uyarısı beklenir. Windows x64 bu depoda gerçek kurulumla doğrulandı
+            (ADR-017, Dilim F3); ARM64/macOS henüz doğrulanmadı.
+          releaseDraft: true
+          prerelease: false
+
+  publish-npm:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Bağımlılıkları kur
+        run: pnpm install --frozen-lockfile
+
+      - name: Derle
+        run: pnpm build
+
+      # NPM_TOKEN repo ayarlarına (Settings → Secrets and variables → Actions) EKLENMEDEN
+      # bu iş başarısız olur (ADR-017 Dilim F2 — npm login/scope kullanıcıyla henüz kararlaştırılmadı).
+      - name: npm'e yayınla (shared→core→cli, workspace:* gerçek sürüme çevrilir)
+        run: pnpm -r publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
