@@ -44,9 +44,31 @@ ADR-018 Karar 3+4 uygulandı. Kural 1 sırası: PROTOKOL → shared → core →
   (59 dosya/490 test).
 - **CANLI DUMAN TESTİ:** daemon D3 koduyla yeniden başlatıldı → `symphony patches` (boş liste
   mesajı) ve `symphony patch apply <olmayan-id>` (net hata) gerçek daemon'a karşı çalıştı.
-- **KABUL PROVASI KULLANICIYA (ROADMAP kabul maddesi):** gerçek bir yamayla `symphony patch apply`
-  + **kasıtlı bozuk bir yamada geri alma zincirinin çalıştığı**. Bunun için önce bir doktor koşusu
-  gerekiyor (artık D2.5 sayesinde ~$1-2). Repo TEMİZ olmalı (apply kirli ağaçta reddeder).
+### ✅ D3 KABUL PROVASI YAPILDI (2026-07-11, kullanıcıyla) — ÜÇ SONUCUN ÜÇÜ DE KANITLANDI
+
+ROADMAP Faz 8 kabul maddeleri ("test geçmeyen yama canlıya çıkamıyor", "bozuk sürüm otomatik geri
+alınıyor") GERÇEK repo + GERÇEK daemon üzerinde doğrulandı. Doktorun tek adayı
+(`INTERNAL_AGENT_ERROR`) haklı olarak "kod zaten doğru" deyip yama üretmediği için **sentetik
+yamalar** kullanıldı — dürüst bir prova: D3'ün zinciri yamanın NASIL üretildiğini bilmez, DB'den
+`branch`/`files`/`testOk` okur (doktor→yama üretimi zaten D2'de kanıtlandı).
+
+- **Senaryo 1 — testi düşen yama** (`pricing.ts`'te fiyat bozuldu → `pricing.test.ts` düşer):
+  merge → build GEÇTİ → **test DÜŞTÜ** → `reset --hard` + yeniden derleme → `failed`.
+  **Daemon'a HİÇ dokunulmadı** (restart'a ulaşılmadı) ✔ HEAD geri döndü, bozuk kod yok.
+- **Senaryo 2 — WATCHDOG (asıl sınav):** `main.ts`'e `throw` eklendi — **derlenir ve testleri
+  GEÇER** (testler `main.ts`'i çalıştırmaz, yalnız varlığına bakar; önceden doğrulandı) ama gerçek
+  daemon açılışta ÇÖKER. Zincir: merge → build ✔ → test ✔ → daemon restart → **AYAĞA KALKMADI** →
+  otomatik `reset --hard` + **yeniden derleme** + eski kodla restart → `reverted`.
+  **KRİTİK DOĞRULAMA:** `dist/main.js`'te bozuk kod KALMADI — D3'te kapatılan "bayat dist"
+  boşluğunun gerçek hayattaki kanıtı (o düzeltme olmasaydı daemon bir sonraki açılışta bozuk
+  kodu yükleyecekti). Daemon eski kodla ayakta kaldı ✔
+- **Senaryo 3 — sağlam yama** (`store.ts`'te gerçek bir belge düzeltmesi): merge → build ✔ →
+  test ✔ → daemon YENİ kodla ayağa kalktı → `applied` + dal otomatik silindi.
+  **Symphony kendi kodunu canlıya aldı** ✔ (merge commit `99f90a1`, değişiklik kaynakta).
+- **YAN KANIT:** kirli-repo kapısı gerçek hayatta çalıştı — provanın geçici script'i repoda
+  duruyorken apply merge'e HİÇ ulaşmadan reddetti ("repo temiz değil").
+- Prova artıkları temizlendi (dallar silindi, `PROVA_*` yama kayıtları DB'den kaldırıldı);
+  yalnız Senaryo 3'ün gerçek merge commit'i repoda kaldı (zaten yararlı bir düzeltme).
 
 ## D2.5 — Prompt cache (Bulgu C'nin çözümü) BİTTİ (2026-07-11, Opus)
 
