@@ -48,7 +48,7 @@
 | `tinyglobby` | Agent `glob`/`grep` araçlarının dosya tarayıcısı (fast-glob'dan küçük, vitest de kullanıyor) ✅ 2026-07-04 |
 | `picomatch` | İzin kurallarında glob desen eşleme (`permissions.json`) ✅ 2026-07-04 |
 | `diff` | İzin isteklerindeki birleşik diff üretimi (SPEC-AGENT §6) ✅ 2026-07-04 |
-| `simple-git` | Agent'ın git işlemleri + oturum yedekleme. **ADR-017 (Faz 7, Dilim F4):** `symphony sync` bunu kullanır — `cli` paketine kurulur (`~/.symphony` içi git repo, beyaz listeli eşitleme) |
+| `simple-git` | Agent'ın git işlemleri + oturum yedekleme. **ADR-017 (Faz 7, Dilim F4):** `symphony sync` bunu kullanır — `cli` paketine ✅ kuruldu 2026-07-11 (`~/.symphony` içi git repo, beyaz listeli eşitleme) |
 
 ### `packages/cli` — `symphony` komutu
 | Kütüphane | Amaç |

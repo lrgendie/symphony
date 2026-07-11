@@ -3,7 +3,42 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-10/11 (Sonnet, Auto Mode gece oturumu — F1 BİTTİ; F2 KISMEN; F3 KISMEN; kullanım limiti nedeniyle DURDU)
+**Son güncelleme:** 2026-07-11 (Sonnet — Dilim F4 BİTTİ ve testli, 409 test; CI Linux'tan Windows'a çevrildi)
+
+## Faz 7 — Dilim F4 (`symphony sync`) BİTTİ (2026-07-11, Sonnet)
+
+ADR-017 Karar 3 uygulandı.
+- **`simple-git`** `cli` paketine kuruldu (GEREKSINIMLER.md güncellendi). **Not:** `simpleGit`
+  DEFAULT import DEĞİL, NAMED import (`import { simpleGit } from "simple-git"`) — default import
+  `tsc`'de "not callable" hatası verdi (ESM/CJS interop). `checkIsRepo` gerçek bir TS enum
+  (`CheckRepoActions.IS_REPO_ROOT`) ister, düz `"root"` string'i KABUL ETMEZ.
+- **YENİ `cli/src/commands/sync-plan.ts`** (SAF, testli): `SYNC_WHITELIST` + `buildGitignoreContent`
+  + `planLocalBackup`. **Bulgu:** `.gitignore` içeriği `*` ile başlayınca dosyanın KENDİSİ de
+  yoksayılıp `git add .gitignore` reddediliyordu ("ignored by one of your .gitignore files") —
+  düzeltme: içerik `!.gitignore` ile kendini de negatifliyor.
+- **YENİ `cli/src/commands/sync.ts`:** `syncInitCommand(url, home?)` + `syncCommand(home?)` —
+  ADR'deki akış birebir (yeni-makine: `.bak` + checkout; ilk-makine: commit+push; senkron:
+  add+commit(varsa)+`pull --rebase`+push; rebase çakışmasında `process.exit(1)` + elle-çöz mesajı).
+  `index.ts`: `symphony sync` (bare, `memory show` ile AYNI `{isDefault:true}` deseni) +
+  `symphony sync init <uzak-depo-url>`.
+- **Test:** 399→**409** (+10: `sync-plan.test.ts` 7 — gitignore içeriği/dizin-negatifleri/kendi-
+  negatifi, backup planı, whitelist tam eşleşme; `sync.test.ts` 3 — GERÇEK git, ağ YOK [yerel bare
+  repo=uzak]: ilk+ikinci makine akışı UÇTAN UCA [`daemon.token`/`data` asla senkronlanmadığı
+  `git ls-files`le kanıtlı], çakışan değişiklik→DUR mesajı, `sync init` öncesi `sync`→net hata).
+  **Ders:** test repolarına ÖNCEDEN yerel `user.name`/`user.email` set edilmeli (host makinenin
+  global git config'inden bağımsız — yoksa "Author identity unknown" patlar); gerçek-git testleri
+  tam paket koşusunda 5000ms varsayılan timeout'u aşabiliyor, `it(..., 15000)` ile büyütüldü
+  (izole koşuda sorun yoktu — sistem yükü etkisi). `pnpm build && pnpm test && pnpm lint` temiz
+  (51 dosya/409 test).
+- **CANLI DENENMEDİ (kullanıcı gerekiyor):** gerçek bir uzak depo (GitHub vb.) ile `symphony sync
+  init <url>` — test yerel bare repo'yla kanıtlandı, gerçek barındırıcıya karşı denenmedi.
+
+**Ayrı bulgu (bu oturumda, F4'ten bağımsız): `.github/workflows/ci.yml` `ubuntu-latest`'ten
+`windows-latest`'e çevrildi** — Linux'ta `node:path` POSIX davranıyor (Windows yollarını
+ayrıştıramıyor), CI günlerdir (Z4'ten beri) bu yüzden kırıktı, yerelde hep yeşildi. Artık yeşil.
+
+**Sıradaki:** F2'nin bekleyen kısmı hâlâ duruyor (npm login + `@symphony` org denemesi —
+kullanıcı yapmalı). F2 tamamlanınca ya da beklerken F5'e (`symphony update`/`rollback`) geçilebilir.
 
 ## Faz 7 — Dilim F3 (Windows installer + kurulu masaüstünü bulma) KISMEN (2026-07-10, Sonnet)
 
@@ -176,7 +211,7 @@ Kök+3 paket sürümü zaten 0.1.0 (lockstep başlangıcı hazır).
 4. **Kabul (canlı, kullanıcıyla):** .msi kur → terminalde `symphony` → kurulu masaüstü otomatik
    açılıyor, token'ı okuyor, canlı akış görünüyor. `pnpm build && pnpm test && pnpm lint` + DURUM.
 
-### 📋 Dilim F4 — `symphony sync` (beyaz liste + git akışı)
+### ✅ Dilim F4 — `symphony sync` (beyaz liste + git akışı) — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 **Önce oku:** ADR-017 Karar 3 · `cli/src/commands/report.ts` (komut deseni) · `config/paths.ts`.
 1. `simple-git`'i `cli`'ye ekle (GEREKSINIMLER envanterinde planlıydı — satırı "✅ + symphony
@@ -196,7 +231,7 @@ Kök+3 paket sürümü zaten 0.1.0 (lockstep başlangıcı hazır).
    değiştirir, ikincide DUR mesajı.
 5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
 
-### 📋 Dilim F5 — `symphony update` + `symphony rollback`
+### 📋 Dilim F5 — `symphony update` + `symphony rollback` — SIRADAKİ
 
 **Önce oku:** ADR-017 Karar 4 · `docs/PROTOKOL.md` §1.1 · `daemon.ts` REST bölümü.
 1. **PROTOKOL önce (Kural 1):** PROTOKOL.md §1.1'e `POST /api/shutdown` satırı (Bearer; daemon

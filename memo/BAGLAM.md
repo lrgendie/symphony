@@ -136,8 +136,17 @@ protokol WS/REST üzerinden konuşulur.
 - `index.ts` — commander kayıtları; argümansız → TUI
 - `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`) +
   REST geçmiş sorguları (`listSessions`/`sessionDetail` — Bearer token, shared şema, 404→null)
-- `commands/` — status/models/watch/history/memory/agents/agent/feedback/report/add (her komut tek dosya)
+- `commands/` — status/models/watch/history/memory/agents/agent/feedback/report/add/sync (her komut tek dosya)
   - `add.ts` — `symphony add <npm-paketi>`: eklenti sistemi, `mcp.addServer` isteği atar
+  - `sync-plan.ts` (ADR-017 Karar 3, Dilim F4) — SAF, testli: `SYNC_WHITELIST` (config/providers/
+    agents/memory/mcp-servers) + `buildGitignoreContent` (`*` yoksay + beyaz liste negatifleri;
+    `.gitignore` KENDİSİ de negatiflenir yoksa kendini yoksayıp `git add`i reddeder) +
+    `planLocalBackup` (yeni-makine çakışmasında `.bak` hedefleri)
+  - `sync.ts` (ADR-017 Karar 3, Dilim F4) — `symphony sync init <url>` (ilk kurulum/yeni makine:
+    uzakta `main` VARSA çakışan dosyaları `.bak`layıp checkout eder, YOKSA commit+push) +
+    `symphony sync` (add+commit varsa → `pull --rebase` → push; çakışmada DURUR, elle-çöz mesajı
+    — otomatik birleştirme YOK). `simple-git` kullanır; kimlik doğrulama sistemin git credential
+    helper'ına bırakılır. `daemon.token`/`data`/`logs` ASLA beyaz listede değil
   - `feedback.ts` (ADR-016 Karar 4, Dilim Z2) — `symphony feedback <runId> iyi|kötü [-n not]`:
     Türkçe değeri wire'a çevirir, `feedback.submit` atar. **Tam UUID gerekir** (history'nin
     aksine id ön eki DESTEKLENMEZ — prefix için "agent runs listesi" ucu gerekirdi, kapsam dışı)

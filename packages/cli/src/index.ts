@@ -12,6 +12,7 @@ import { agentRunCommand } from "./commands/agent.js";
 import { feedbackCommand } from "./commands/feedback.js";
 import { reportCommand } from "./commands/report.js";
 import { addCommand } from "./commands/add.js";
+import { syncCommand, syncInitCommand } from "./commands/sync.js";
 import { ensureDesktopRunning } from "./client/desktop-launch.js";
 
 const program = new Command();
@@ -100,6 +101,20 @@ memory
   .action((dizin: string, opts: { bulut?: boolean }) =>
     memoryDistillCommand(dizin, opts).catch(fail),
   );
+
+const sync = program
+  .command("sync")
+  .description("~/.symphony ayarlarını özel git deposuyla eşitle (config/agents/memory, ADR-017)");
+
+sync
+  .command("run", { isDefault: true })
+  .description("Beyaz listeyi commit'le, uzaktan al (rebase), gönder")
+  .action(wrap(syncCommand));
+
+sync
+  .command("init <uzak-depo-url>")
+  .description("İlk kurulum / yeni makine: uzak depoya bağlan, varsa mevcut yapılandırmayı indir")
+  .action((url: string) => syncInitCommand(url).catch(fail));
 
 // Argümansız `symphony` → TUI (model seçici + sohbet)
 program.action(
