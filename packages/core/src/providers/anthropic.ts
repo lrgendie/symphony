@@ -2,6 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { streamText, type LanguageModel } from "ai";
 import type { ModelInfo } from "@symphony/shared";
 import type { SecretStore } from "../secrets/secret-store.js";
+import { applyPromptCacheBreakpoints } from "../agent/prompt-cache.js";
 import { computeCostUsd } from "./pricing.js";
 import { extractCacheTokens, parseRateLimits } from "./telemetry.js";
 import type { ChatStreamRequest, ChatUsageResult, ProviderAdapter } from "./types.js";
@@ -59,9 +60,14 @@ export class AnthropicAdapter implements ProviderAdapter {
   }
 
   async *streamChat(request: ChatStreamRequest): AsyncGenerator<string, ChatUsageResult, void> {
+    // D2.5: prompt cache — sohbet de her turda TAM geçmişi yeniden gönderir (PROTOKOL §3),
+    // yani agent döngüsüyle AYNI karesel maliyet sorununu yaşar. Aynı SAF yardımcı kullanılır.
+    // Not: istemcinin gönderdiği diziyi yerinde işaretler; `messages` tur başına yeniden kurulur.
+    const messages = [...request.messages];
+    applyPromptCacheBreakpoints(messages);
     const result = streamText({
       model: await this.languageModel(request.model),
-      messages: request.messages,
+      messages,
       // ADR-013: profil `instructions` üzerinden — v7 `messages` içinde system KABUL ETMEZ.
       ...(request.instructions !== undefined ? { instructions: request.instructions } : {}),
       ...(request.maxTokens !== undefined ? { maxOutputTokens: request.maxTokens } : {}),
@@ -84,7 +90,9 @@ export class AnthropicAdapter implements ProviderAdapter {
     return {
       inputTokens,
       outputTokens,
-      costUsd: computeCostUsd(request.model, inputTokens, outputTokens),
+      // D2.5: cache'lenen token'lar indirimli fiyatlanır (okuma %10, yazma %125) — `inputTokens`
+      // onları TAM sayıyla içerir, ham çarpım defteri şişirirdi.
+      costUsd: computeCostUsd(request.model, inputTokens, outputTokens, cache),
       cacheReadTokens: cache.read,
       cacheCreationTokens: cache.creation,
       ...(limits !== null ? { limits } : {}),

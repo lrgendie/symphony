@@ -44,7 +44,23 @@ describe("parseRateLimits", () => {
 });
 
 describe("extractCacheTokens", () => {
-  it("anthropic providerMetadata'dan cache token'larını çıkarır", () => {
+  it("GERÇEK Anthropic şeması (2026-07-11 canlı ölçüm): anthropic.usage.* snake_case", () => {
+    // Bu şekil GERÇEK sağlayıcıdan izole script'le ALINDI (D2.5). Önceki uygulama
+    // `anthropic.cacheReadInputTokens` (üst seviye, camelCase) okuyordu — TAHMİNDİ ve hep 0
+    // dönüyordu; testi de aynı tahmini doğruladığı için bug 4 ay görünmez kaldı.
+    const c = extractCacheTokens({
+      anthropic: {
+        usage: {
+          input_tokens: 2,
+          cache_read_input_tokens: 10842,
+          cache_creation_input_tokens: 128,
+        },
+      },
+    });
+    expect(c).toEqual({ read: 10842, creation: 128 });
+  });
+
+  it("eski (camelCase/üst seviye) şekil geriye dönük olarak DA okunur — SDK şekli değişirse sayaç sıfırlanmasın", () => {
     const c = extractCacheTokens({
       anthropic: { cacheReadInputTokens: 6656, cacheCreationInputTokens: 128 },
     });

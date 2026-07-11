@@ -3,7 +3,57 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Opus — Dilim D2 BİTTİ ve testli, 456 test; canlı kabul provası KULLANICIYA)
+**Son güncelleme:** 2026-07-11 (Opus — Dilim D2.5 BİTTİ: prompt cache, 468 test; maliyet 9x düştü)
+
+## D2.5 — Prompt cache (Bulgu C'nin çözümü) BİTTİ (2026-07-11, Opus)
+
+D2'nin canlı provasında çıkan **$13.08/koşu** sorunu çözüldü. Kural: "SDK davranışını tahmin etme,
+GERÇEK sağlayıcıya izole script'le sor" (DEVIR.md dersi) — bu dilim baştan sona böyle yapıldı.
+
+**İKİ GERÇEK BUG BULUNDU (ikisi de "tahmin edilmiş şema" hatası):**
+1. **Cache HİÇ AÇILMIYORDU.** `engine.ts`/`anthropic.ts` isteğe cache kontrolü göndermiyordu →
+   agent döngüsü her turda TÜM konuşmayı tam fiyattan yeniden gönderiyordu (karesel maliyet).
+2. **Cache sayacı YANLIŞ YERDEN OKUNUYORDU (4 aydır sessizce 0).** `extractCacheTokens`
+   `anthropic.cacheReadInputTokens` (üst seviye, camelCase) arıyordu; **gerçek şema
+   `anthropic.usage.cache_read_input_tokens`** (usage ALTINDA, snake_case). Model panosundaki
+   "önbellek" sayacı bu yüzden hiç dolmadı. **Testi de aynı tahmini doğruluyordu** — kod ve test
+   aynı yanlışı paylaştığı için bug görünmez kaldı. Ders: sağlayıcı şeması TAHMİNLE test edilemez.
+
+**Uygulama:**
+- **YENİ `agent/prompt-cache.ts`** (SAF, testli): `applyPromptCacheBreakpoints(messages)` — İKİ
+  breakpoint (SDK sınırı 4): **SABİT** ilk mesaj (system + araç tanımları + görev; koşu boyunca
+  değişmez → her tur cache'ten OKUNUR) + **HAREKETLİ** son mesaj (biriken konuşmayı cache'e
+  YAZAR; sonraki tur onu okur → büyüyen önek de cache'lenir). Eski breakpoint'ler her turda
+  TEMİZLENİR (yoksa 4 sınırı aşılır, fazlası sessizce yok sayılırdı).
+  `providerOptions` AD-ALANLI (`anthropic`) → OpenAI/Google/Ollama sessizce yok sayar, dallanma yok.
+- **`engine.ts`:** her `streamText` öncesi breakpoint'ler; `recordTurnUsage`e cache token'ları
+  geçer. **`anthropic.ts` (sohbet):** aynı yardımcı — sohbet de her turda TAM geçmişi gönderiyor
+  (PROTOKOL §3), aynı sorunu yaşıyordu.
+- **`pricing.ts`:** `computeCostUsd(model, in, out, cache?)` — cache okuma ×0.1, yazma ×1.25.
+  Gerekçe: AI SDK `inputTokens`'ı cache'lenenleri TAM sayıyla içerir (ölçüm: input=10844 =
+  uncached 2 + cache_read 10842); ham çarpım kendi defterimizi 10 kat şişirirdi.
+- **`telemetry.ts`:** `extractCacheTokens` gerçek şemayı okur (eski şekil geriye dönük olarak DA
+  denenir — SDK şekli değişirse sayaç sessizce sıfırlanmasın).
+
+**CANLI ÖLÇÜMLER (gerçek Anthropic, izole script + gerçek daemon):**
+- **A/B (izole):** cache KAPALI → her tur $0.0456/$0.0457/$0.0458 (tam fiyat, cache okuma 0).
+  cache AÇIK → tur1 $0.0569 (cache YAZIMI, %25 zam), tur2 **$0.0051**, tur3 **$0.0051** → 2.
+  turdan itibaren **~9 kat ucuz**. Artımlı cache de çalışıyor (tur3, tur2'nin eklerini de okudu).
+- **Gerçek daemon agent koşusu** (asistan, sonnet, 3 dosya okuma / 4 tur): `cacheOKU=13981`
+  `cacheYAZ=9181` → motor içinde cache AKTİF. Maliyet $0.0490 (cache'siz aynı koşu $0.0799
+  olurdu) → kısa koşuda bile **%39** tasarruf; uzun koşularda (doktorun 25 turu) kazanç kat kat.
+- **Test:** 456→**468** (+12: `prompt-cache.test.ts` YENİ 6 — boş dizi, tek mesajda çifte
+  breakpoint konmaz, ilk+son işaretlenir/ortadakiler işaretlenmez, ESKİ breakpoint temizlenir
+  (4 sınırı korunur), başka sağlayıcıların `providerOptions`'ı KORUNUR, yalnız-anthropic
+  alanında `providerOptions` tamamen kalkar; `pricing.test.ts` +5 — okuma %10, yazma %125,
+  karışık gerçek tur, cache'siz geriye uyumluluk, bozuk veride negatif maliyet ÜRETİLMEZ;
+  `telemetry.test.ts` +1 — GERÇEK şema (eski test "tahmin"i doğruluyordu, o da korundu)).
+  `pnpm build && pnpm test && pnpm lint` temiz (57 dosya/468 test).
+
+**Sıradaki: Dilim D3** (denetimli canlıya alma + watchdog). Artık doktor koşuları çok daha ucuz —
+D3'ün canlı kabul provası (gerçek `patch apply` + revert) makul maliyetle yapılabilir.
+
+## Faz 8 — Dilim D2 (sandbox + doktor koşusu) BİTTİ (2026-07-11, Opus)
 
 ## Faz 8 — Dilim D2 (sandbox + doktor koşusu) BİTTİ (2026-07-11, Opus)
 

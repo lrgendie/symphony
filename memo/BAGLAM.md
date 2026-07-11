@@ -72,7 +72,14 @@ protokol WS/REST üzerinden konuşulur.
 - `providers/types.ts` — `ProviderAdapter` arayüzü (streamChat + languageModel)
 - `providers/{anthropic,openai,google,ollama}.ts` — 4 adapter; temperature iletimi
   adapter'a özgü (Claude 4.7+/GPT-5 KABUL ETMEZ → iletilmez; Gemini/Ollama iletilir)
-- `providers/pricing.ts` — USD/1M token tablosu; bilinmeyen model = 0 (yerel)
+- `providers/pricing.ts` — USD/1M token tablosu; bilinmeyen model = 0 (yerel). `computeCostUsd`
+  CACHE-FARKINDA (D2.5): AI SDK'nın `inputTokens`'ı cache okuma/yazmayı TAM sayıyla içerir ama
+  Anthropic okumayı %10, yazmayı %125 fiyatlar — ham çarpım kendi defterimizi 10x şişirirdi
+- `agent/prompt-cache.ts` — SAF, testli (D2.5): `applyPromptCacheBreakpoints` — İKİ breakpoint
+  (SABİT ilk mesaj = system+araçlar+görev; HAREKETLİ son mesaj = biriken konuşma). Eski
+  breakpoint'ler her turda TEMİZLENİR (SDK sınırı 4). `providerOptions` ad-alanlı → diğer
+  sağlayıcılar yok sayar. **Canlı ölçüm:** cache kapalıyken tur başına $0.0457; açıkken 2.
+  turdan itibaren $0.0051 (~9x). Hem `engine.ts` (agent) hem `anthropic.ts` (sohbet) kullanır
 - `providers/telemetry.ts` — SAF, testli: `parseRateLimits` (cevap header'larından rate-limit,
   ek-toleranslı) + `extractCacheTokens` (Anthropic providerMetadata). adapter+engine kullanır →
   `provider.limits` yayını + `usage.updated` cache alanları

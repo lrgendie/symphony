@@ -18,8 +18,40 @@ const PRICES_PER_MTOK: Record<string, { input: number; output: number }> = {
   "gemini-2.5-flash": { input: 0.3, output: 2.5 },
 };
 
-export function computeCostUsd(model: string, inputTokens: number, outputTokens: number): number {
+/**
+ * Prompt cache çarpanları (Anthropic, D2.5): cache'ten OKUNAN token normal girdinin ~%10'u,
+ * cache'e YAZILAN token ~%125'i (5 dk TTL) kadar ücretlendirilir.
+ */
+export const CACHE_READ_MULTIPLIER = 0.1;
+export const CACHE_WRITE_MULTIPLIER = 1.25;
+
+export interface CacheTokens {
+  /** Cache'ten okunan token — `inputTokens`in İÇİNDE sayılır (AI SDK toplamı böyle verir). */
+  read: number;
+  /** Cache'e yazılan token — `inputTokens`in İÇİNDE sayılır. */
+  creation: number;
+}
+
+/**
+ * Maliyet. `cache` verilirse (D2.5) cache'lenen token'lar İNDİRİMLİ fiyatlanır:
+ * AI SDK'nın `usage.inputTokens`'ı cache okumasını/yazımını TAM sayıyla içerir (canlı ölçüm:
+ * input=10844 = uncached 2 + cache_read 10842) — hepsini tam fiyattan saymak, gerçekte %10'a
+ * okunan token'ı 10 kat pahalı göstermek olurdu (kendi defterimizi şişirirdik).
+ */
+export function computeCostUsd(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cache?: CacheTokens,
+): number {
   const price = PRICES_PER_MTOK[model];
   if (!price) return 0;
-  return (inputTokens * price.input + outputTokens * price.output) / 1_000_000;
+  const read = Math.min(cache?.read ?? 0, inputTokens);
+  const creation = Math.min(cache?.creation ?? 0, Math.max(0, inputTokens - read));
+  const uncached = Math.max(0, inputTokens - read - creation);
+  const inputCost =
+    uncached * price.input +
+    read * price.input * CACHE_READ_MULTIPLIER +
+    creation * price.input * CACHE_WRITE_MULTIPLIER;
+  return (inputCost + outputTokens * price.output) / 1_000_000;
 }

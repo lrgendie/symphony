@@ -62,15 +62,26 @@ export function parseRateLimits(
 }
 
 /**
- * Anthropic prompt-cache token'ları (bu cevaba ait). AI SDK `providerMetadata` yapısı:
- * `{ anthropic: { cacheReadInputTokens, cacheCreationInputTokens } }`. Yoksa 0.
+ * Anthropic prompt-cache token'ları (bu cevaba ait).
+ *
+ * **GERÇEK YAPI (2026-07-11, izole script'le CANLI ölçüldü — D2.5):**
+ * `{ anthropic: { usage: { cache_read_input_tokens, cache_creation_input_tokens } } }`
+ * — `usage` ALTINDA ve **snake_case**. Önceki uygulama `anthropic.cacheReadInputTokens`
+ * (üst seviye, camelCase) okuyordu → HER ZAMAN 0 dönüyordu; model panosundaki "önbellek"
+ * sayacı bu yüzden hiç dolmadı. Tahmin edilmiş bir şema idi; şimdi sağlayıcıya sorulmuş
+ * gerçekle değiştirildi. Eski (camelCase/üst seviye) yol geriye dönük olarak DA denenir —
+ * SDK sürümü şekli değiştirirse sayaç sessizce sıfırlanmasın.
  */
 export function extractCacheTokens(providerMetadata: unknown): { read: number; creation: number } {
-  const anthropic = (providerMetadata as { anthropic?: Record<string, unknown> } | undefined)
-    ?.anthropic;
+  const anthropic = (
+    providerMetadata as { anthropic?: Record<string, unknown> } | undefined
+  )?.anthropic;
+  const usage = anthropic?.["usage"] as Record<string, unknown> | undefined;
   const num = (v: unknown): number => (typeof v === "number" && v >= 0 ? v : 0);
+  const pick = (snake: string, camel: string): number =>
+    num(usage?.[snake]) || num(anthropic?.[camel]);
   return {
-    read: num(anthropic?.["cacheReadInputTokens"]),
-    creation: num(anthropic?.["cacheCreationInputTokens"]),
+    read: pick("cache_read_input_tokens", "cacheReadInputTokens"),
+    creation: pick("cache_creation_input_tokens", "cacheCreationInputTokens"),
   };
 }

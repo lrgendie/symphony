@@ -16,7 +16,8 @@ import {
 } from "@symphony/shared";
 import type { DataStore } from "../db/store.js";
 import { formatProfileContext } from "../memory/profile.js";
-import { computeCostUsd } from "../providers/pricing.js";
+import { computeCostUsd, type CacheTokens } from "../providers/pricing.js";
+import { applyPromptCacheBreakpoints } from "./prompt-cache.js";
 import { extractCacheTokens, parseRateLimits } from "../providers/telemetry.js";
 import type { ProviderAdapter } from "../providers/types.js";
 import type { EventBus } from "../server/bus.js";
@@ -548,6 +549,11 @@ export class AgentEngine {
       for (;;) {
         this.transition(run, "thinking");
         const turnStartedAt = Date.now();
+        // D2.5: prompt cache breakpoint'leri (SAF yardımcı, testli) — agent döngüsü her turda TÜM
+        // konuşmayı yeniden gönderir; cache olmadan uzun koşular karesel maliyet üretir (canlı
+        // ölçüm: bir doktor koşusu 4.28M girdi token / $13.08). Diğer sağlayıcılar bu ad-alanlı
+        // alanı sessizce yok sayar.
+        applyPromptCacheBreakpoints(messages);
         // streamText SENKRON döner (await YOK); vaatler akış tüketilince çözülür (ADR-012).
         const result = streamText({
           model: languageModel,
@@ -580,7 +586,12 @@ export class AgentEngine {
             "Sağlayıcı akışı hata ile bitti (finishReason: error) — model turu tamamlanamadı",
           );
         }
-        this.recordTurnUsage(run, await result.usage, turnStartedAt);
+        // D2.5: cache token'ları maliyete girer — AI SDK'nın `inputTokens`'ı cache okumasını TAM
+        // sayıyla içerir ama Anthropic onu %10'a fiyatlar; ham sayıyla çarpmak kendi defterimizi
+        // 10 kat şişirirdi. AYNI ölçüm aşağıda `usage.updated`ın önbellek sayaçlarını da besler
+        // (tek `extractCacheTokens` çağrısı — ikinci gerçek üretilmez).
+        const turnCache = extractCacheTokens(await result.providerMetadata);
+        this.recordTurnUsage(run, await result.usage, turnStartedAt, turnCache);
         // Kaçak üretim sigortası (SPEC §4, canlı bulgu #1): tavana çarpan tur YARIM'dır —
         // metni kesik, varsa araç çağrısı bozuk. Sessizce "nihai cevap" saymak, kullanıcıya
         // kesik bir yanıtı tamammış gibi göstermek olurdu. Usage'ı ÖNCE kaydediyoruz:
@@ -593,10 +604,10 @@ export class AgentEngine {
               `agent tanımındaki maxOutputTokens ile yükseltebilirsin.`,
           );
         }
-        // Telemetri: rate-limit her turda en taze; cache token'ları koşu boyunca birikir.
-        const cache = extractCacheTokens(await result.providerMetadata);
-        run.cacheReadTokens += cache.read;
-        run.cacheCreationTokens += cache.creation;
+        // Telemetri: rate-limit her turda en taze; cache token'ları koşu boyunca birikir
+        // (`turnCache` yukarıda maliyet için zaten ölçüldü — aynı değeri kullanırız).
+        run.cacheReadTokens += turnCache.read;
+        run.cacheCreationTokens += turnCache.creation;
         const limits = parseRateLimits(response.headers);
         if (limits !== null) {
           this.deps.bus.broadcast("provider.limits", {
@@ -1056,10 +1067,11 @@ export class AgentEngine {
     run: ActiveRunRecord,
     usage: { inputTokens?: number | undefined; outputTokens?: number | undefined } | undefined,
     startedAt: number,
+    cache?: CacheTokens,
   ): void {
     const inputTokens = usage?.inputTokens ?? 0;
     const outputTokens = usage?.outputTokens ?? 0;
-    const costUsd = computeCostUsd(run.model, inputTokens, outputTokens);
+    const costUsd = computeCostUsd(run.model, inputTokens, outputTokens, cache);
     run.usage = {
       inputTokens: run.usage.inputTokens + inputTokens,
       outputTokens: run.usage.outputTokens + outputTokens,
