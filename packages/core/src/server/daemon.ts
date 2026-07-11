@@ -696,6 +696,30 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             }
             return;
           }
+          case "patches.list": {
+            // `diff` BİLİNÇLE dışarıda — büyük olabilir; liste yüzeyinde taşınmaz.
+            const patches = store.listPatches().map(({ diff: _diff, ...summary }) => summary);
+            bus.sendTo(ws, "patches.list.ok", { patches }, message.id);
+            return;
+          }
+          case "patch.resolve": {
+            // Daemon yalnız SONUCU yazar — merge/build/test/restart/geri-alma zinciri CLI'de
+            // (ADR-018 Karar 3: daemon kendi bacağını kesemez).
+            const payload = message.payload as RequestPayload<"patch.resolve">;
+            if (store.patchById(payload.patchId) === null) {
+              sendError(
+                {
+                  code: "VALIDATION_PATCH_UNKNOWN",
+                  message: `Bilinmeyen yama id'si: ${payload.patchId}`,
+                },
+                message.id,
+              );
+              return;
+            }
+            store.resolvePatch(payload.patchId, payload.state);
+            bus.sendTo(ws, "patch.resolve.ok", {}, message.id);
+            return;
+          }
           case "doctor.diagnose": {
             // Deterministik (ADR-018 Karar 1) — LLM'e "hangi hata önemli" sorulmaz.
             bus.sendTo(ws, "doctor.diagnose.ok", { candidates: doctor.diagnose() }, message.id);

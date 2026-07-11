@@ -220,6 +220,60 @@ describe("symphonyd", () => {
     await new Promise<void>((resolve) => ws.once("close", () => resolve()));
   });
 
+  it("patches.list / patch.resolve (ADR-018 Karar 3, Dilim D3): yama listelenir (diff TAŞINMAZ), durum yazılır, bilinmeyen id reddedilir", async () => {
+    const { reply, ws } = await roundTrip(
+      createMessage("hello", {
+        token: daemon.token,
+        client: "cli",
+        protocolVersion: PROTOCOL_VERSION,
+      }),
+    );
+    expect(reply.type).toBe("hello.ok");
+
+    const patchId = crypto.randomUUID();
+    const db = new DataStore(join(testHome, "data", "symphony.db"));
+    try {
+      db.createPatch({
+        id: patchId,
+        errorCode: "D3_TEST_KODU",
+        category: "D3_TEST_KODU",
+        branch: "doktor/d3-test-kodu",
+        files: ["packages/core/src/router/router.ts"],
+        diff: "--- a\n+++ b\n" + "x".repeat(5000), // büyük diff: listede TAŞINMAMALI
+        testOk: true,
+        testSummary: "hepsi geçti",
+      });
+    } finally {
+      db.close();
+    }
+
+    const list = await request(ws, createMessage("patches.list", {}));
+    expect(list.type).toBe("patches.list.ok");
+    const { patches } = list.payload as { patches: Array<Record<string, unknown>> };
+    const mine = patches.find((p) => p.id === patchId);
+    expect(mine).toMatchObject({ errorCode: "D3_TEST_KODU", testOk: true, state: "proposed" });
+    // `diff` BİLİNÇLE dışarıda (büyük olabilir) — şema `.strip()` ettiği için sızmamalı.
+    expect(mine).not.toHaveProperty("diff");
+
+    const ok = await request(ws, createMessage("patch.resolve", { patchId, state: "applied" }));
+    expect(ok.type).toBe("patch.resolve.ok");
+
+    const after = await request(ws, createMessage("patches.list", {}));
+    const updated = (after.payload as { patches: Array<{ id: string; state: string }> }).patches.find(
+      (p) => p.id === patchId,
+    );
+    expect(updated?.state).toBe("applied");
+
+    // Bilinmeyen id → hata (sessizce yutulmaz).
+    const bad = await request(
+      ws,
+      createMessage("patch.resolve", { patchId: crypto.randomUUID(), state: "rejected" }),
+    );
+    expect(bad.type).toBe("error");
+    expect((bad.payload as { code: string }).code).toBe("VALIDATION_PATCH_UNKNOWN");
+    ws.close();
+  });
+
   it("doctor.diagnose (ADR-018 Karar 1, Dilim D2): eşiği aşan hata kodunu aday olarak döner; bilinmeyen kodda doctor.run reddedilir", async () => {
     const { reply, ws } = await roundTrip(
       createMessage("hello", {

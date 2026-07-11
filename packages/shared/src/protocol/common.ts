@@ -106,3 +106,29 @@ export const ModelInfoSchema = z
   })
   .strip();
 export type ModelInfo = z.infer<typeof ModelInfoSchema>;
+
+/**
+ * Yama önerisi özeti (ADR-018 Karar 3, Faz 8 Dilim D3). `diff` BİLİNÇLE YOK — büyük olabilir;
+ * liste yüzeyinde taşınmaz (`symphony patch show` gerekirse ayrı bir uçla gelir).
+ */
+export const PatchStateSchema = z.enum(["proposed", "applied", "rejected", "reverted", "failed"]);
+export type PatchState = z.infer<typeof PatchStateSchema>;
+
+export const PatchSummarySchema = z
+  .object({
+    id: z.string().uuid(),
+    /** epoch ms */
+    createdAt: z.number().int().nonnegative(),
+    errorCode: z.string().min(1),
+    category: z.string().min(1),
+    /** `doktor/<slug>` — `patch apply`ın merge edeceği dal (D2 boru hattı commit'ledi). */
+    branch: z.string().min(1),
+    files: z.array(z.string()),
+    /** BORU HATTININ ölçümü (agent beyanı DEĞİL, ADR-018 Karar 2). */
+    testOk: z.boolean(),
+    testSummary: z.string(),
+    state: PatchStateSchema,
+    resolvedAt: z.number().int().nonnegative().nullable(),
+  })
+  .strip();
+export type PatchSummary = z.infer<typeof PatchSummarySchema>;

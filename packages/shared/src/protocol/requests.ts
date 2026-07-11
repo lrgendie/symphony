@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ChatMessageSchema } from "./common.js";
+import { ChatMessageSchema, PatchStateSchema } from "./common.js";
 
 /**
  * İstemci → Daemon istekleri (PROTOKOL.md §3).
@@ -130,6 +130,18 @@ export const DoctorDiagnosePayloadSchema = z.object({}).strip();
  */
 export const DoctorRunPayloadSchema = z.object({ errorCode: z.string().min(1) }).strip();
 
+/** Yama önerileri (ADR-018 Karar 3, Dilim D3) — `diff` taşınmaz (büyük olabilir). */
+export const PatchesListPayloadSchema = z.object({}).strip();
+
+/**
+ * Bir yamanın durumunu değiştirir. **Uygulamanın KENDİSİ burada DEĞİL** — merge/build/test/
+ * restart/geri-alma zinciri CLI'nin `symphony patch apply` komutundadır (ADR-018 Karar 3:
+ * "restart'ı daemon'ın içinden yönetmek kendi bacağını kesmektir"). Daemon yalnız SONUCU yazar.
+ */
+export const PatchResolvePayloadSchema = z
+  .object({ patchId: z.string().uuid(), state: PatchStateSchema })
+  .strip();
+
 export const REQUEST_PAYLOAD_SCHEMAS = {
   hello: HelloPayloadSchema,
   "state.sync": StateSyncPayloadSchema,
@@ -148,6 +160,8 @@ export const REQUEST_PAYLOAD_SCHEMAS = {
   "feedback.submit": FeedbackSubmitPayloadSchema,
   "doctor.diagnose": DoctorDiagnosePayloadSchema,
   "doctor.run": DoctorRunPayloadSchema,
+  "patches.list": PatchesListPayloadSchema,
+  "patch.resolve": PatchResolvePayloadSchema,
 } as const;
 
 export type RequestType = keyof typeof REQUEST_PAYLOAD_SCHEMAS;

@@ -55,7 +55,7 @@ function readOwnPackage(): OwnPackage {
  * yoksa (hiç başlatılmamış) sessizce atlanır; istek başarısız olsa da (daemon zaten kapanmış
  * olabilir) sorun değil, `ensureDaemonRunning` devamını halleder.
  */
-async function shutdownDaemonIfRunning(home?: string): Promise<void> {
+export async function shutdownDaemonIfRunning(home?: string): Promise<void> {
   const paths = getSymphonyPaths(home);
   if (!existsSync(paths.daemonTokenFile)) return;
   const config = loadConfig(paths);

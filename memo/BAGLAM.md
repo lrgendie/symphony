@@ -61,6 +61,10 @@ protokol WS/REST üzerinden konuşulur.
     kılıyor; teşhis dosyası yamaya SIZMAZ); `runVerification` (build+test+lint — BORU HATTI
     koşar, agent beyanına güvenilmez); `findRepoRoot` (node_modules içinden null → paketlenmiş
     kurulumda kendine-yama YOK); `SandboxOps`/`REAL_SANDBOX_OPS` (git+pnpm yüzeyi, testte sahtelenir)
+  - `protected.ts` — SAF, testli (ADR-018 Karar 4): `PROTECTED_PATHS` (updater, patch.ts'in
+    KENDİSİ, izin sistemi/jail/engine, secrets/, token.ts, VE bu listenin kendisi) +
+    `touchesProtected`/`protectedMatches`. Bu yollara dokunan yama hiçbir güven kaydıyla
+    otomatikleşemez — `--evet` bile geçmez, elle "EVET" yazılır
   - `pipeline.ts` — orkestrasyon: teşhis → sandbox → teşhis dosyası → agent koşusu (NORMAL
     `engine.start`, cwd=worktree → jail hapseder) → doğrulama → dalda commit → yama `proposed`.
     Tek koşu kilidi (`AGENT_DOCTOR_BUSY`). **`run()` beklemez** — WS 30sn zaman aşımına takılmasın
@@ -176,6 +180,12 @@ protokol WS/REST üzerinden konuşulur.
     izin istekleri terminalden — doktor ayrıcalıklı mod DEĞİL, agent tanımı). Sonuç: yama
     ÖNERİSİ (`doctor.patch.proposed`) — uygulanmaz, `symphony patch apply` (D3) ile uygulanır.
     `renderDiff`'i `agent.ts`'ten import eder (tek kaynak)
+  - `patch.ts` (ADR-018 Karar 3+4, Dilim D3) — `symphony patches` · `patch apply <id>` ·
+    `patch reject <id>`. **Apply zinciri (WATCHDOG):** ön koşullar (repo TEMİZ olmalı; yama
+    `proposed`; dal var) → onay (korumalı yolda "EVET" şart) → `git merge --no-ff` → `pnpm build`
+    → `pnpm test` (ANA DALDA — sandbox yeşili merge sonrası dünyayı kanıtlamaz) → daemon kapat →
+    yeni kodla başlat → sağlık → **başarısızsa `reset --hard` + YENİDEN DERLE + eski kodla başlat
+    + `reverted`**. Yeniden derleme ŞART: yoksa daemon bir sonraki açılışta bozuk `dist`i yükler
   - `update.ts` (ADR-017 Karar 4, Dilim F5) — `symphony update` (npm view→install-g→
     `versions.json`→`/api/shutdown`+`ensureDaemonRunning`) + `symphony rollback` (previous'a
     döner, kaydı swap eder). SAF yardımcılar (`readVersions`/`writeVersions`/`nextVersions`/

@@ -3,7 +3,52 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Opus — Dilim D2.5 BİTTİ: prompt cache, 468 test; maliyet 9x düştü)
+**Son güncelleme:** 2026-07-11 (Opus — Dilim D3 BİTTİ ve testli, 490 test; canlı apply provası KULLANICIYA)
+
+## Faz 8 — Dilim D3 (denetimli canlıya alma + watchdog) BİTTİ (2026-07-11, Opus)
+
+ADR-018 Karar 3+4 uygulandı. Kural 1 sırası: PROTOKOL → shared → core → cli.
+
+**TALİMATTA OLMAYAN ÜÇ GÜVENLİK BOŞLUĞU KAPATILDI (uygulama sırasında görüldü):**
+1. **Kirli çalışma ağacı.** `git merge` kaydedilmemiş iş üstüne yapılırsa kullanıcının işini
+   mahveder → apply artık `git status` temiz DEĞİLSE merge'e HİÇ ulaşmadan reddediyor.
+2. **Geri alma sonrası BAYAT `dist` (sessiz felaket).** Merge sonrası `pnpm build`, YAMALI kodu
+   `dist`e yazar. Sadece `git reset --hard` yapıp bırakırsak daemon bir sonraki açılışında BOZUK
+   dist'i yükler — merge geri alınmış olmasına rağmen. → **Her geri almadan sonra `pnpm build`
+   TEKRAR koşuluyor** (testle kanıtlı: `pnpm build` çağrı sayısı 2 olmalı).
+3. **`patch.resolve` daemon kapalıyken çağrılamaz.** Zincir daemon'ı kapatıp yeniden başlattığı
+   için CLI'nin WS bağlantısı ölüyor → restart sonrası YENİDEN BAĞLANIP durum yazılıyor.
+- **PROTOKOL §3 + shared:** `patches.list {}` → `.ok {patches: PatchSummary[]}` (**`diff`
+  BİLİNÇLE taşınmaz** — büyük olabilir; testle kanıtlı) · `patch.resolve {patchId, state}` →
+  `.ok {}`. `PatchSummarySchema`/`PatchStateSchema` shared/common.ts'te.
+- **`daemon.ts`:** iki handler. **Daemon yalnız SONUCU yazar** — merge/restart/geri-alma zinciri
+  CLI'de (ADR-018 Karar 3: "daemon kendi bacağını kesemez"). Bilinmeyen id →
+  `VALIDATION_PATCH_UNKNOWN` (sessizce yutulmaz).
+- **YENİ `core/src/doctor/protected.ts`** (SAF, testli): `PROTECTED_PATHS` — updater
+  (`update.ts`), **yama zincirinin KENDİSİ (`patch.ts`)**, izin sistemi (`permissions.ts`/
+  `engine.ts`/`jail.ts`), `secrets/` (dizin), `token.ts` **ve bu listenin KENDİSİ**. Sonuncusu
+  kritik: aksi hâlde ilk yama listeyi boşaltıp sonraki tüm yamalara serbest geçiş açardı.
+- **YENİ `cli/commands/patch.ts`:** `symphony patches` · `patch apply <id>` · `patch reject <id>`.
+  Apply zinciri yukarıdaki gibi. **`--evet` KORUMALI yolda GEÇMEZ** — kullanıcı tam olarak "EVET"
+  yazmak zorunda (ADR-018 Karar 4: değişmezler hiçbir bayrakla otomatikleşemez). Sandbox testleri
+  düşmüş yamada da ayrı uyarı + onay.
+- **Test:** 468→**490** (+22: `protected.test.ts` YENİ 11 — liste KENDİNİ korur, izin sistemi/
+  updater/patch.ts/secrets dizini/token korumalı, sıradan dosyalar DEĞİL, Windows ayracı ve `./`
+  normalize, **benzer-ama-farklı yollar eşleşmez** (`permissions.test.ts` korumalı DEĞİL), liste
+  kazara boşaltılırsa test düşer; `patch.test.ts` YENİ 10 — ön koşullar (kirli repo/yanlış state/
+  dal yok → merge'e HİÇ ulaşmaz), mutlu yol SIRASI, **test düşerse reset+YENİDEN DERLE+failed ve
+  daemon HİÇ yeniden başlatılmaz**, build düşerse aynısı, **yeni daemon kalkmazsa geri al+ESKİ
+  kodla başlat+reverted**, korumalı yolda `--evet` onayı ATLAYAMAZ, "EVET" yazılırsa uygulanır,
+  testi düşmüş yamada onay şart; `daemon.test.ts` +1 — patches.list/patch.resolve roundtrip,
+  diff sızmıyor, bilinmeyen id reddediliyor). `pnpm build && pnpm test && pnpm lint` temiz
+  (59 dosya/490 test).
+- **CANLI DUMAN TESTİ:** daemon D3 koduyla yeniden başlatıldı → `symphony patches` (boş liste
+  mesajı) ve `symphony patch apply <olmayan-id>` (net hata) gerçek daemon'a karşı çalıştı.
+- **KABUL PROVASI KULLANICIYA (ROADMAP kabul maddesi):** gerçek bir yamayla `symphony patch apply`
+  + **kasıtlı bozuk bir yamada geri alma zincirinin çalıştığı**. Bunun için önce bir doktor koşusu
+  gerekiyor (artık D2.5 sayesinde ~$1-2). Repo TEMİZ olmalı (apply kirli ağaçta reddeder).
+
+## D2.5 — Prompt cache (Bulgu C'nin çözümü) BİTTİ (2026-07-11, Opus)
 
 ## D2.5 — Prompt cache (Bulgu C'nin çözümü) BİTTİ (2026-07-11, Opus)
 
@@ -296,7 +341,7 @@ yoksa doktor net hatayla durur (bilinçli sınır).
    kasıtlı telemetri hatası enjekte et (test-DB değil gerçek DB'ye 3 sahte kayıt) → `symphony
    doctor` → aday görünüyor → koşu → patch önerisi `test_ok` ile kaydedildi.
 
-### 📋 Dilim D3 — denetimli canlıya alma + watchdog (`patches`/`patch apply|reject` + PROTECTED_PATHS) — SIRADAKİ (ÖNERİ: Opus)
+### ✅ Dilim D3 — denetimli canlıya alma + watchdog — BİTTİ (yukarıda ayrıntı + ÜÇ güvenlik boşluğunun kapatılması; orijinal talimat aşağıda arşivlendi)
 
 **D2'den gelen ZEMİN (D3 buna güvenebilir):** yama dalı (`doktor/<slug>`) GERÇEK bir commit
 taşır (boru hattı commit'ler) ve worktree kaldırılmıştır — `git merge --no-ff doktor/<slug>`
@@ -327,7 +372,7 @@ sandbox.ts'i.
    D2'deki gerçek öneriyle `patch apply` — kasıtlı bozuk bir yamada revert zincirinin çalıştığı
    AYRICA denenir (ROADMAP kabul maddesi).
 
-### 📋 Dilim D4 — güven merdiveni (sicil + `patch trust` + doktor→apply akışı)
+### 📋 Dilim D4 — güven merdiveni (sicil + `patch trust` + doktor→apply akışı) — SIRADAKİ (Sonnet yeterli)
 
 1. `paths.ts`: `trustFile` (`~/.symphony/trust.json`). YENİ SAF modül `core/src/doctor/trust.ts`:
    `readTrust`/`writeTrust` (`{trusted: string[]}`) + `categoryRecord(patches)` (kategori →

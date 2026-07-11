@@ -15,6 +15,7 @@ import { addCommand } from "./commands/add.js";
 import { syncCommand, syncInitCommand } from "./commands/sync.js";
 import { rollbackCommand, updateCommand } from "./commands/update.js";
 import { doctorCommand } from "./commands/doctor.js";
+import { patchApplyCommand, patchRejectCommand, patchesCommand } from "./commands/patch.js";
 import { ensureDesktopRunning } from "./client/desktop-launch.js";
 
 const program = new Command();
@@ -125,6 +126,24 @@ program
   )
   .option("--kod <hata-kodu>", "belirli bir hata kodu (varsayılan: en sık tekrarlayan)")
   .action((opts: { kod?: string }) => doctorCommand(opts).catch(fail));
+
+program
+  .command("patches")
+  .description("Doktorun ürettiği yama önerilerini listele (ADR-018 Karar 3)")
+  .action(wrap(patchesCommand));
+
+const patch = program.command("patch").description("Yama önerisini uygula / reddet (Faz 8)");
+
+patch
+  .command("apply <id>")
+  .description("Yamayı canlıya al: merge → build+test → daemon restart → bozuksa GERİ AL")
+  .option("--evet", "sıradan yamalarda onayı atla (KORUMALI yollarda GEÇMEZ)")
+  .action((id: string, opts: { evet?: boolean }) => patchApplyCommand(id, opts).catch(fail));
+
+patch
+  .command("reject <id>")
+  .description("Yamayı reddet ve dalını sil")
+  .action((id: string) => patchRejectCommand(id).catch(fail));
 
 program
   .command("update")

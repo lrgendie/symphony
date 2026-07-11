@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   AgentSummarySchema,
+  PatchSummarySchema,
   ErrorPayloadSchema,
   ModelInfoSchema,
   ProviderHealthSchema,
@@ -266,6 +267,10 @@ export const DoctorPatchProposedPayloadSchema = z
   })
   .strip();
 
+export const PatchesListOkPayloadSchema = z
+  .object({ patches: z.array(PatchSummarySchema) })
+  .strip();
+
 export const EVENT_PAYLOAD_SCHEMAS = {
   "hello.ok": HelloOkPayloadSchema,
   "state.sync.ok": StateSyncOkPayloadSchema,
@@ -282,6 +287,8 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   "usage.query.ok": UsageQueryOkPayloadSchema,
   "mcp.addServer.ok": McpAddServerOkPayloadSchema,
   "feedback.submit.ok": AckPayloadSchema,
+  "patches.list.ok": PatchesListOkPayloadSchema,
+  "patch.resolve.ok": AckPayloadSchema,
   "doctor.diagnose.ok": DoctorDiagnoseOkPayloadSchema,
   "doctor.run.ok": AckPayloadSchema,
   "doctor.phase": DoctorPhasePayloadSchema,
