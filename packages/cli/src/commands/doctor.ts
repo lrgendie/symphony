@@ -1,22 +1,33 @@
 import { createInterface } from "node:readline/promises";
 import chalk from "chalk";
 import { getSymphonyPaths, isTrusted, readTrust, touchesProtected } from "@symphony/core";
-import { connectToDaemon } from "../client/daemon-client.js";
+import { connectToDaemon, type DaemonClient } from "../client/daemon-client.js";
 import { renderDiff } from "./agent.js";
 import { patchApplyCommand } from "./patch.js";
 
 /**
- * `symphony doctor [--kod <HATA_KODU>]` (ADR-018, Faz 8 Dilim D2) — kendini geliştirme döngüsünün
- * insan tetikleyicisi:
- *   1. `doctor.diagnose` → tekrarlayan hata adayları (deterministik eşik, LLM yok).
+ * `symphony doctor [--kod <HATA_KODU>] [--proje <AD>]` (ADR-018, Faz 8 Dilim D2+D6) — kendini
+ * geliştirme döngüsünün insan tetikleyicisi:
+ *   1. `--proje` yoksa: `doctor.diagnose` → tekrarlayan hata adayları (deterministik eşik).
+ *      `--proje <AD>` verilmişse bu adım ATLANIR — kullanıcı zaten hangi projeyi kastettiğini
+ *      biliyor (ADR-018 Karar 7, bekçi modu: AYNI boru hattı, farklı repo/doğrulama).
  *   2. `doctor.run` → sandbox (git worktree) + doktor agent koşusu + BORU HATTI doğrulaması.
- *   3. Sonuç bir YAMA ÖNERİSİ'dir — uygulanmaz. Uygulama `symphony patch apply` ile (Dilim D3).
+ *   3. Sonuç bir YAMA ÖNERİSİ'dir — uygulanmaz (kategori GÜVENİLİR değilse). Uygulama
+ *      `symphony patch apply` ile (Dilim D3) ya da güven merdiveniyle otomatik (Dilim D4).
  *
  * Koşu izin isteklerini normal agent koşusu gibi terminalden sorar (doktor ayrıcalıklı bir mod
  * DEĞİL, bir agent tanımıdır — SPEC-AGENT §5 aynen geçerli).
  */
-export async function doctorCommand(options: { kod?: string }): Promise<void> {
+export async function doctorCommand(options: { kod?: string; proje?: string }): Promise<void> {
   const client = await connectToDaemon();
+
+  if (options.proje !== undefined) {
+    console.log(chalk.bold(`🩺 bekçi modu: proje '${options.proje}'`));
+    const exitCode = await watchDoctorRun(client, { proje: options.proje });
+    client.close();
+    process.exit(exitCode);
+    return;
+  }
 
   const { candidates } = await client.request("doctor.diagnose", {});
   if (candidates.length === 0) {
@@ -42,6 +53,21 @@ export async function doctorCommand(options: { kod?: string }): Promise<void> {
     );
   }
 
+  console.log(chalk.bold(`🩺 doktor başlatılıyor: ${chosen}`));
+  const exitCode = await watchDoctorRun(client, { errorCode: chosen });
+  client.close();
+  process.exit(exitCode);
+}
+
+/**
+ * Boru hattını başlatır + tüm ilerlemesini/izin isteklerini/sonucunu izler — kendine-yama VE
+ * bekçi modu (`--proje`) AYNI izleyiciyi paylaşır (Karar 7: "kod tekrarı değil, parametre
+ * değişimi"). `request` doğrudan `doctor.run`a geçer.
+ */
+async function watchDoctorRun(
+  client: DaemonClient,
+  request: { errorCode?: string; proje?: string },
+): Promise<number> {
   const readline = createInterface({ input: process.stdin, output: process.stdout });
 
   const exitCode = await new Promise<number>((resolveExit) => {
@@ -166,14 +192,12 @@ export async function doctorCommand(options: { kod?: string }): Promise<void> {
       }
     });
 
-    console.log(chalk.bold(`🩺 doktor başlatılıyor: ${chosen}`));
-    client.request("doctor.run", { errorCode: chosen }).catch((error: unknown) => {
+    client.request("doctor.run", request).catch((error: unknown) => {
       console.error(chalk.red(`✘ ${error instanceof Error ? error.message : String(error)}`));
       resolveExit(1);
     });
   });
 
   readline.close();
-  client.close();
-  process.exit(exitCode);
+  return exitCode;
 }

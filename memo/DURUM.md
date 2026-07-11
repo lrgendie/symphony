@@ -3,7 +3,89 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Sonnet — Dilim D5 BİTTİ ve testli, 525 test; rapor + zamanlama)
+**Son güncelleme:** 2026-07-11 (Sonnet — Dilim D6 BİTTİ ve testli, 578 test; Faz 8 D1-D6 TAMAMEN kapandı)
+
+## Faz 8 — Dilim D6 (bekçi modu v1) BİTTİ (2026-07-11, Sonnet) — Faz 8 D1-D6 TAMAMEN KAPANDI
+
+ADR-018 Karar 7 uygulandı. Kural 1 sırası: shared (doctor.run'a `proje` alanı, ADDITIVE) →
+PROTOKOL.md → core → cli.
+
+**CANLI PROVADA GERÇEK BİR GÜVENLİK BOŞLUĞU BULUNDU VE KAPATILDI (talimatta yoktu):**
+Bir bekçi projesi kaydedip `repoPath`'i git repo KÖKÜ OLMAYAN bir dizine (kullanıcının
+scratchpad'i) verdim. D2'nin `git worktree add`i böyle durumda SESSİZCE dizin ağacında YUKARI
+arar ve bir ATA dizinin `.git`ini bulup worktree'yi ORAYA açar. **Canlı provada bu gerçekten
+oldu**: kullanıcının ev dizini (`C:\Users\brkn2`) kendisi BOŞ/commit'siz bir git repo çıktı —
+`doctor --proje` çalıştırıldığında worktree SESSİZCE oraya açıldı, orada bir `doktor/*` dalı
+oluştu. Zararsızdı (repo commit'siz olduğu için kaybedilecek bir şey yoktu) ama İLKESEL olarak
+ciddi: gerçek bir repo olsaydı alakasız bir kullanıcı repo'suna yama dalı sızabilirdi. Temizlendi
+(`git worktree remove` + `prune`) ve İKİ KATMANLI düzeltme yapıldı:
+1. **Kayıt anında (CLI):** `symphony bekci ekle` artık `repoPath`'in GERÇEKTEN bir repo KÖKÜ
+   olduğunu (`simple-git` `checkIsRepo(IS_REPO_ROOT)`) doğrular — değilse net bir hatayla
+   reddedilir, `bekci.json`a hiç yazılmaz.
+2. **Koşu anında (boru hattı, savunma katmanı):** `runForProject` da AYNI kontrolü BAĞIMSIZ
+   olarak yapar (`SandboxOps.isRepoRoot`, testte sahtelenir) — elle düzenlenmiş ya da düzeltmeden
+   ÖNCE kaydedilmiş bir `bekci.json` girdisi de yakalanır; CLI doğrulamasına körü körüne güvenilmez.
+
+- **shared/requests.ts:** `DoctorRunPayloadSchema` — `errorCode` artık OPSİYONEL, YENİ `proje?`
+  alanı. `proje` verilirse `errorCode` YOK SAYILIR (kod daemon'ca `bekciErrorCode(ad)` ile
+  türetilir — istemci yanlış ad-alanı üretemez). PROTOKOL.md'ye not (ADDITIVE); `log.entry`in
+  İKİNCİ üreticisi de not düşüldü (bekçi izleyicisi).
+- **YENİ `core/src/bekci/registry.ts`** (SAF, testli): `readBekciRegistry`/`writeBekciRegistry`
+  (`~/.symphony/bekci.json`, `trust.json`/D4 ile AYNI desen — protokol mesajı YOK) +
+  `findBekciProject`/`withBekciProject` (upsert) + `bekciErrorCode(ad)` → `BEKCI_<AD>` (D4/D5'in
+  kategori ad-alanını PAYLAŞIR — bir bekçi kategorisi de `patch trust`/rapor sicili KAPSAMINA girer).
+- **YENİ `core/src/bekci/scan.ts`** (SAF, testli): `findMatches(lines, radius)` —
+  `/(error|exception|traceback|fatal)/i`, eşleşen satırın ÇEVRESİNİ kesit olarak döner +
+  `shouldRecordBekciMatch(lastRecordedAtMs, nowMs)` — 5dk debounce SAF kararı.
+- **`doctor/sandbox.ts`:** YENİ `isRepoRoot(path)` (yukarıdaki güvenlik düzeltmesi, `SandboxOps`'a
+  eklendi) + YENİ `runProjectVerification(worktreePath, testCommand)` — bekçi projesinin KENDİ
+  doğrulama komutu (`execa(..., {shell:true})` — sabit `pnpm build/test/lint` zincirinin YERİNE
+  geçer; komut arbitrer bir dize olduğu için shell gerekir).
+- **`doctor/pipeline.ts`:** `execute()` artık bir `DoctorRunSpec` (`repoPath`, `errorCode`,
+  `count`, `rows`, `verify`) alır — `run()` (self-patch) ve YENİ `runForProject(ad)` (bekçi) AYNI
+  `execute()`u FARKLI spec'le çağırır (Karar 7: "kod tekrarı değil, parametre değişimi", ikinci
+  orkestrasyon YAZILMADI). `runForProject`: busy → bekciFile yapılandırılmış mı → proje kayıtlı
+  mı → **repo kökü mü (yeni)** → en az 1 bekçi telemetri kaydı var mı (recurrence şartı YOK —
+  kullanıcı zaten `--proje` ile bilinçli tetikliyor) → `verify` (testCommand varsa onunla,
+  yoksa dürüstçe `testOk:false` + "test komutu tanımsız" özeti — ASLA sessizce geçmez).
+- **`daemon.ts`:** `doctor.run` handler `proje` alanına göre `doctor.run`/`runForProject`e
+  dallanır; `errorCode` de `proje` de yoksa `VALIDATION_DOCTOR_ERRORCODE_REQUIRED`. YENİ bekçi
+  poll döngüsü (`DaemonOptions.watchBekci`/`bekciPollMs`, vars. true/10sn, `hardwareTimer`
+  deseniyle aynı `unref()`+`close()` temizliği): her tick `bekci.json`yi YENİDEN okur (restart
+  gerekmez), her projenin log dosyasını dosya-ofseti ile (bellekte) izler, **İLK GÖRÜŞTE var olan
+  içeriği ATLAR** (restart'ta geçmiş hatalar yeniden yakalanmasın diye), yeni satırlarda
+  `findMatches` + debounce ile `store.recordTelemetry(scope:'bekci', code:BEKCI_<AD>)` +
+  `log.entry` warn yayınlar. Log döndürülürse (rotate, dosya küçülürse) ofset sıfırlanır.
+- **`cli/commands/bekci.ts`** (YENİ): `symphony bekci ekle <ad> <repo> <log> [--test]` (repo kökü
+  doğrulaması yukarıda) / `bekci liste`.
+- **`cli/commands/doctor.ts`:** `--proje <ad>` eklendi; dev `doctor.diagnose`+aday seçimi
+  ATLANIR. İzleme mantığı (`watchDoctorRun`) self-patch ile bekçi modu ARASINDA REFAKTOR EDİLİP
+  PAYLAŞILDI — tek izleyici fonksiyonu, iki farklı `doctor.run` payload'ı üretiyor.
+- **Test:** 525→**578** (+53: `bekci/registry.test.ts` YENİ 17 — roundtrip, bozuk JSON elenir,
+  upsert alfabetik, `bekciErrorCode` deterministik; `bekci/scan.test.ts` YENİ 12 — kesit çıkarımı,
+  harf duyarsız, debounce sınırları; `sandbox.verify.test.ts` YENİ 3 — GERÇEK `exit 0`/`exit 1`/
+  bulunamayan komut; `sandbox.git.test.ts` +4 — `isRepoRoot` GERÇEK git (kök/alt-klasör/repo-dışı/
+  var-olmayan); `pipeline.test.ts` +7 — bekciFile yok/proje yok/kanıt yok/**repo kökü değilse
+  reddeder**/başarılı yol (repoPath+kod doğru, sabit zincir HİÇ çağrılmaz)/testCommand ile GERÇEK
+  execa/busy; `daemon.test.ts` +2 (errorCode/proje ikisi de yoksa red + proje kayıtsız red) ve
+  YENİ 1 ADANMIŞ GERÇEK entegrasyon testi (log dosyasına GERÇEK satır eklenir, İLK GÖRÜŞTE eski
+  içerik atlandığı, YENİ satırın yakalandığı, debounce'un ikinci satırı ENGELLEDİĞİ kanıtlanır);
+  `cli/bekci.test.ts` YENİ 10 (GERÇEK git ile repo kökü reddi + alt-klasör reddi); `cli/doctor.
+  test.ts` +3 (--proje diagnose'u atlar, doctor.run reddi, --proje --kod'a ÖNCELİKLİDİR).
+  `pnpm build && pnpm test && pnpm lint` temiz (65 dosya/578 test).
+- **CANLI DOĞRULAMA:** gerçek daemon D6 koduyla yeniden başlatıldı → `bekci ekle`/`liste` çalıştı
+  → GERÇEK bir log dosyasına GERÇEK bir hata satırı eklendi, daemon 10sn içinde yakaladı, telemetri
+  yazıldı, `symphony doctor --proje` sandbox'ı GERÇEKTEN o projenin `repoPath`'inden açtı (LLM
+  adımına kadar denendi, maliyet için orada durduruldu) → **güvenlik boşluğu bulundu, düzeltildi,
+  düzeltme canlıda tekrar denenip reddin çalıştığı doğrulandı**. Test artıkları (`bekci.json`,
+  telemetri kaydı, ev dizinindeki worktree/dal) temizlendi.
+
+**Faz 8 (ADR-018) D1→D2→D3→D4→D5→D6 TAMAMEN KAPANDI.** ROADMAP'in kabul maddeleri (kasıtlı hata
+→ yama+test raporu; test geçmeyen yama canlıya çıkamaz; bozuk sürüm denetimli geri alınır;
+korumalı yollar asla otomatikleşmez) D2/D3'te kullanıcıyla canlı kanıtlandı; D4-D6 mekanik
+genişlemeler + kendi canlı bulgularıyla (prompt cache, home-repo worktree sızıntısı) tamamlandı.
+
+## Faz 8 — Dilim D5 (kendini geliştirme raporu + haftalık zamanlama) BİTTİ (2026-07-11, Sonnet)
 
 ## Faz 8 — Dilim D5 (kendini geliştirme raporu + haftalık zamanlama) BİTTİ (2026-07-11, Sonnet)
 
@@ -522,7 +604,7 @@ sandbox.ts'i.
    dosyası var mı → yaz/yazma"). `pnpm build && pnpm test && pnpm lint` + DURUM + REHBER.md'ye
    kısa bölüm.
 
-### 📋 Dilim D6 — bekçi modu v1 (`bekci.json` + log izleme + `doctor --proje`) — SIRADAKİ (Sonnet yeterli)
+### ✅ Dilim D6 — bekçi modu v1 — BİTTİ (yukarıda ayrıntı + güvenlik boşluğu bulunup kapatıldı; orijinal talimat aşağıda arşivlendi)
 
 1. `paths.ts`: `bekciFile`. YENİ SAF `core/src/bekci/registry.ts` (oku/yaz: `{projeler:
    [{ad, repoPath, logFile, testCommand?}]}`) + `core/src/bekci/scan.ts` (SAF: yeni satırlarda

@@ -302,19 +302,19 @@ symphony/
   geri getiriyor ✅ (F4, testle kanıtlı); güncelleme tek komutla geri alınabiliyor ✅ (F5,
   execa/versions.json testle kanıtlı — gerçek npm registry'ye karşı KULLANICI ile doğrulanacak).
 
-### Faz 8 — Kendini Geliştiren Symphony (20. hafta ve sonrası, sürekli) ⭐ nihai hedef — tasarım ✅ ADR-018 (2026-07-11); dilimler D1-D6 Sonnet'e hazır
+### Faz 8 — Kendini Geliştiren Symphony ✅ TAMAMLANDI (2026-07-11) — ADR-018, dilimler D1-D6
 > Symphony'nin kod agent'ı vardır; kendini geliştirmek = agent'ın hedef olarak **kendi reposunu** alması.
 > Güvenliği dört sigorta sağlar: test paketi (Faz 0), hata telemetrisi (Faz 1), rollback (Faz 7), onay kapısı.
 
-- [ ] **Doktor agent:** hata telemetrisini periyodik okur, tekrarlayan hataları saptar, kök neden analizi yapar
-- [ ] **Kendine yama döngüsü:** Doktor agent hatayı sandbox'ta (ayrı git branch + izole süreç) yeniden üretir → düzeltme yazar → tüm test paketini çalıştırır → geçerse diff + test raporu ile onayına sunar
-- [ ] **Onaylı canlıya alma:** onayladığın yama sürüm olarak derlenir, daemon kendini yeniden başlatarak günceller; sorun çıkarsa watchdog otomatik bir önceki sürüme döner
-- [ ] **Güven merdiveni:** yama kategorileri bazında sicil tutulur ("null hatası düzeltmeleri: 12/12 başarılı"); istediğin kategorilere "artık sormadan uygula" yetkisi verebilirsin — varsayılan her zaman "sor"
-- [ ] **Bekçi modu (senin projelerin için):** Symphony'de kayıtlı programlarının loglarını/çıktılarını izler; hata veya crash görünce seni uyarır ve tek tıkla "düzeltme öner" akışını başlatır — kendi hatalarını kapattığı mekanizmanın aynısı senin kodun için de çalışır
-- [ ] **Kendini geliştirme raporu:** haftalık özet — hangi hatalar yakalandı, hangi yamalar uygulandı, router isabeti nasıl değişti, hangi yeni yetenek öneriliyor
-- [ ] Değişmezler (asla otomatikleşmez): güncelleyici çekirdek, izin sistemi, API anahtar yönetimi — bunlara dokunan her değişiklik her zaman insan onayı ister
+- [x] **Doktor agent:** hata telemetrisini periyodik okur, tekrarlayan hataları saptar, kök neden analizi yapar (D1/D2)
+- [x] **Kendine yama döngüsü:** Doktor agent hatayı sandbox'ta (git worktree + izole süreç) yeniden üretir → düzeltme yazar → tüm test paketini çalıştırır → geçerse diff + test raporu ile onayına sunar (D2)
+- [x] **Onaylı canlıya alma:** onayladığın yama sürüm olarak derlenir, daemon kendini yeniden başlatarak günceller; sorun çıkarsa watchdog otomatik bir önceki sürüme döner (D3 — kullanıcıyla canlı kanıtlandı: kasıtlı bozuk yama gerçekten geri alındı)
+- [x] **Güven merdiveni:** yama kategorileri bazında sicil tutulur ("null hatası düzeltmeleri: 12/12 başarılı"); istediğin kategorilere "artık sormadan uygula" yetkisi verebilirsin — varsayılan her zaman "sor" (D4)
+- [x] **Bekçi modu (senin projelerin için):** Symphony'de kayıtlı programlarının loglarını izler; hata veya crash görünce seni uyarır, `symphony doctor --proje` ile aynı boru hattını senin kodun için çalıştırır (D6)
+- [x] **Kendini geliştirme raporu:** haftalık özet — hangi hatalar yakalandı, hangi yamalar uygulandı, kategori sicili; her hafta kendiliğinden de üretilir (D5)
+- [x] Değişmezler (asla otomatikleşmez): güncelleyici çekirdek, izin sistemi, API anahtar yönetimi — bunlara dokunan her değişiklik her zaman insan onayı ister (D3/D4, `PROTECTED_PATHS`)
 - **Çıktı:** Hatasını gören, yamasını yazan, test eden, onayınla kendini güncelleyen ve sicili büyüdükçe daha bağımsızlaşan sistem.
-- **Kabul testi:** Kasıtlı enjekte edilen bir hatayı Doktor agent telemetriden saptayıp sandbox'ta yama + geçen test raporu üretiyor; testleri geçmeyen yama canlıya çıkamıyor; bozuk sürüm watchdog ile otomatik geri alınıyor; değişmez bileşenlere (güncelleyici, izin sistemi, anahtar yönetimi) dokunan yama otomatik uygulanamıyor.
+- **Kabul testi:** Kasıtlı enjekte edilen bir hatayı Doktor agent telemetriden saptayıp sandbox'ta yama + geçen test raporu üretiyor ✅; testleri geçmeyen yama canlıya çıkamıyor ✅; bozuk sürüm watchdog ile otomatik geri alınıyor ✅; değişmez bileşenlere (güncelleyici, izin sistemi, anahtar yönetimi) dokunan yama otomatik uygulanamıyor ✅. Üç senaryonun üçü de gerçek repo + gerçek daemon üzerinde D3'te canlı kanıtlandı (`memo/DURUM.md`).
 
 ---
 

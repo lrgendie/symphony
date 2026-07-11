@@ -6,6 +6,7 @@ import { pino } from "pino";
 import type { MessageType } from "@symphony/shared";
 import { DataStore } from "../db/store.js";
 import { EventBus } from "../server/bus.js";
+import { writeBekciRegistry } from "../bekci/registry.js";
 import { DoctorPipeline } from "./pipeline.js";
 import type { SandboxOps } from "./sandbox.js";
 
@@ -36,6 +37,7 @@ const SANDBOX = { worktreePath: "/tmp/sahte-worktree", branch: "doktor/kod" };
 function fakeOps(overrides: Partial<SandboxOps> = {}): SandboxOps {
   return {
     findRepoRoot: () => "/repo",
+    isRepoRoot: async () => true,
     createSandbox: vi.fn(async () => SANDBOX),
     writeDiagnosis: vi.fn(),
     collectAndCommit: vi.fn(async () => ({ files: ["a.ts"], diff: "--- a\n+++ b\n" })),
@@ -287,5 +289,157 @@ describe("DoctorPipeline.run — boru hattı (sahte git/pnpm, gerçek store+bus)
     await waitForSettle(events);
 
     await expect(pipeline.run("KOD")).resolves.toBeUndefined();
+  });
+});
+
+describe("DoctorPipeline.runForProject (ADR-018 Karar 7, Dilim D6) — bekçi modu, AYNI boru hattı", () => {
+  function bekciFileFor(bekciDir: string): string {
+    return join(bekciDir, "bekci.json");
+  }
+
+  it("bekciFile yapılandırılmamışsa VALIDATION_BEKCI_NOT_CONFIGURED", async () => {
+    openStore();
+    const { bus } = busWithLog();
+    const pipeline = new DoctorPipeline({
+      store,
+      bus,
+      log,
+      startRun: async () => ({ runId: crypto.randomUUID() }),
+      selfDev,
+      ops: fakeOps(),
+      // bekciFile YOK
+    });
+    await expect(pipeline.runForProject("proje-a")).rejects.toThrow(/yapılandırılmamış/);
+  });
+
+  it("proje kayıtlı değilse VALIDATION_BEKCI_PROJECT_UNKNOWN", async () => {
+    openStore();
+    const bekciFile = bekciFileFor(dir);
+    writeBekciRegistry(bekciFile, { projeler: [] });
+    const { bus } = busWithLog();
+    const pipeline = new DoctorPipeline({
+      store,
+      bus,
+      log,
+      startRun: async () => ({ runId: crypto.randomUUID() }),
+      selfDev,
+      ops: fakeOps(),
+      bekciFile,
+    });
+    await expect(pipeline.runForProject("hic-olmayan")).rejects.toThrow(/Kayıtlı bekçi projesi yok/);
+  });
+
+  it("kayıtlı ama hiç bekçi telemetrisi yoksa VALIDATION_BEKCI_NO_EVIDENCE (uydurma koşu başlamaz)", async () => {
+    openStore();
+    const bekciFile = bekciFileFor(dir);
+    writeBekciRegistry(bekciFile, {
+      projeler: [{ ad: "proje-a", repoPath: "/proje/a", logFile: "/proje/a/log.txt" }],
+    });
+    const { bus } = busWithLog();
+    const pipeline = new DoctorPipeline({
+      store,
+      bus,
+      log,
+      startRun: async () => ({ runId: crypto.randomUUID() }),
+      selfDev,
+      ops: fakeOps(),
+      bekciFile,
+    });
+    await expect(pipeline.runForProject("proje-a")).rejects.toThrow(/henüz bir hata yakalanmadı/);
+  });
+
+  it("proje kayıtlı olsa da repoPath GERÇEK bir repo KÖKÜ DEĞİLSE VALIDATION_BEKCI_NOT_A_REPO (canlı bulgu: ata repo'ya sızmayı önler)", async () => {
+    openStore();
+    seedTelemetry("BEKCI_PROJE_A", 1);
+    const bekciFile = bekciFileFor(dir);
+    writeBekciRegistry(bekciFile, {
+      projeler: [{ ad: "proje-a", repoPath: "/proje/a", logFile: "/proje/a/log.txt" }],
+    });
+    const { bus } = busWithLog();
+    const pipeline = new DoctorPipeline({
+      store,
+      bus,
+      log,
+      startRun: async () => ({ runId: crypto.randomUUID() }),
+      selfDev,
+      ops: fakeOps({ isRepoRoot: async () => false }),
+      bekciFile,
+    });
+    await expect(pipeline.runForProject("proje-a")).rejects.toThrow(/git repo KÖKÜ değil/);
+  });
+
+  it("başarılı koşu: sandbox PROJENİN repoPath'inden açılır, kod BEKCI_<AD>'dir, testCommand YOKSA testOk:false + dürüst özet", async () => {
+    openStore();
+    seedTelemetry("BEKCI_PROJE_A", 1); // bekçi modunda TEK kayıt bile yeterli (recurrence şartı yok)
+    const bekciFile = bekciFileFor(dir);
+    writeBekciRegistry(bekciFile, {
+      projeler: [{ ad: "proje-a", repoPath: "/proje/a", logFile: "/proje/a/log.txt" }],
+      // testCommand YOK
+    });
+    const { bus, events } = busWithLog();
+    const { startRun, calls } = startRunEmitting(bus, "completed");
+    const ops = fakeOps();
+    const pipeline = new DoctorPipeline({ store, bus, log, startRun, selfDev, ops, bekciFile });
+
+    await pipeline.runForProject("proje-a");
+    await waitForSettle(events);
+
+    expect(ops.createSandbox).toHaveBeenCalledWith("/proje/a", "BEKCI_PROJE_A");
+    expect(calls).toEqual([{ agentId: "doktor", cwd: SANDBOX.worktreePath }]);
+    // Boru hattının SABİT pnpm build/test/lint zinciri (self-patch'in ops.runVerification'ı) HİÇ çağrılmaz.
+    expect(ops.runVerification).not.toHaveBeenCalled();
+
+    const patch = store.listPatches()[0];
+    expect(patch).toMatchObject({ errorCode: "BEKCI_PROJE_A", category: "BEKCI_PROJE_A", testOk: false });
+    expect(patch?.testSummary).toContain("test komutu tanımsız");
+  });
+
+  it("testCommand VARSA belirtilen komutla doğrular (gerçek execa çağrısı — worktree'de koşar)", async () => {
+    openStore();
+    seedTelemetry("BEKCI_PROJE_B", 1);
+    const bekciFile = bekciFileFor(dir);
+    // "exit 0" hem cmd.exe (Windows shell:true) hem sh'de geçerli — gerçek başarı sinyali.
+    writeBekciRegistry(bekciFile, {
+      projeler: [{ ad: "proje-b", repoPath: "/proje/b", logFile: "/proje/b/log.txt", testCommand: "exit 0" }],
+    });
+    const { bus, events } = busWithLog();
+    const { startRun } = startRunEmitting(bus, "completed");
+    // GERÇEK worktree gerekir (execa gerçekten `exit 0`u koşar) — sahte "/tmp/..." yol değil.
+    const realWorktree = mkdtempSync(join(tmpdir(), "symphony-bekci-verify-"));
+    const ops = fakeOps({ createSandbox: vi.fn(async () => ({ worktreePath: realWorktree, branch: "doktor/kod" })) });
+    const pipeline = new DoctorPipeline({ store, bus, log, startRun, selfDev, ops, bekciFile });
+
+    try {
+      await pipeline.runForProject("proje-b");
+      await waitForSettle(events);
+
+      const patch = store.listPatches()[0];
+      expect(patch?.testOk).toBe(true);
+      expect(patch?.testSummary).toContain("exit 0");
+    } finally {
+      rmSync(realWorktree, { recursive: true, force: true });
+    }
+  });
+
+  it("busy iken reddedilir (self-patch ile AYNI meşguliyet kilidi)", async () => {
+    openStore();
+    seedTelemetry("BEKCI_PROJE_A", 1);
+    const bekciFile = bekciFileFor(dir);
+    writeBekciRegistry(bekciFile, {
+      projeler: [{ ad: "proje-a", repoPath: "/proje/a", logFile: "/proje/a/log.txt" }],
+    });
+    const { bus } = busWithLog();
+    const pipeline = new DoctorPipeline({
+      store,
+      bus,
+      log,
+      startRun: async () => ({ runId: crypto.randomUUID() }),
+      selfDev,
+      ops: fakeOps({ createSandbox: () => new Promise(() => undefined) }),
+      bekciFile,
+    });
+
+    await pipeline.runForProject("proje-a");
+    await expect(pipeline.runForProject("proje-a")).rejects.toThrow(/doktor koşusu/i);
   });
 });

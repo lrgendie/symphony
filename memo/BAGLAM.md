@@ -49,6 +49,10 @@ protokol WS/REST üzerinden konuşulur.
 - `server/daemon.ts` — Fastify+ws sunucu; TÜM istek işleyicileri buradaki switch'te. `@fastify/
   cors` (Canlı bulgu #4, `origin:true`) Bearer-auth hook'undan ÖNCE kayıtlı — ui webview'inin
   `fetch()`+Bearer REST istekleri CORS preflight'ına takılmasın diye; kayıt SIRASI bozulmamalı.
+  `watchBekci`/`bekciPollMs` (ADR-018 Karar 7, Dilim D6, vars. true/10sn): `bekci.json`yi HER
+  poll'da YENİDEN okur (restart gerekmez), ofset+debounce BELLEKTE (`bekciState` Map). İLK GÖRÜŞTE
+  var olan log içeriği ATLANIR (geçmiş hatalar restart'ta yeniden yakalanmaz). `hardwareTimer`
+  deseniyle AYNI: `unref()`, `close()`'da `clearInterval`.
   `scheduleReports` (ADR-018 Karar 5/6, Dilim D5, vars. true): açılışta + 24 saatte bir
   `ensureWeeklyReportWritten` (`decideWeeklyReport` SAF kararı + `buildWeeklyReport` — REST
   `/api/report` İLE AYNI fonksiyon, ikinci gerçek yok) + `runDailyDetection` (`doctor.diagnose()`
@@ -60,12 +64,23 @@ protokol WS/REST üzerinden konuşulur.
 - `doctor/` — kendini geliştirme (Faz 8, ADR-018):
   - `detect.ts` — SAF, testli: `detectRecurring` (eşik + açık/uygulanmış yaması olan kodların
     elenmesi). LLM'e "hangi hata önemli" SORULMAZ
-  - `sandbox.ts` — git worktree + dal + `pnpm install`; `formatDiagnosis` (SAF: telemetri →
+  - `sandbox.ts` — git worktree + dal + `pnpm install`; `isRepoRoot(path)` (Dilim D6, canlı
+    prova bulgusu — SandboxOps'un parçası, testte sahtelenir): `repoPath` GERÇEK bir repo KÖKÜ
+    değilse `git worktree add` sessizce bir ATA dizinin `.git`ine sızar; bekçi projeleri hem
+    kayıt anında (CLI) hem koşu anında (pipeline, savunma katmanı) bununla doğrulanır.
+    `runProjectVerification(worktreePath, testCommand)` — bekçi projesinin KENDİ doğrulama
+    komutu (`shell:true`, sabit pnpm build/test/lint zincirinin YERİNE geçer); `formatDiagnosis` (SAF: telemetri →
     `DOKTOR-TESHIS.md`, agent'a giden TEK veri kanalı — DB/`~/.symphony` araç yüzeyine AÇILMAZ);
     `collectAndCommit` (agent commit ATMAZ → boru hattı DALDA commit'ler, D3'ün merge'ü şart
     kılıyor; teşhis dosyası yamaya SIZMAZ); `runVerification` (build+test+lint — BORU HATTI
     koşar, agent beyanına güvenilmez); `findRepoRoot` (node_modules içinden null → paketlenmiş
     kurulumda kendine-yama YOK); `SandboxOps`/`REAL_SANDBOX_OPS` (git+pnpm yüzeyi, testte sahtelenir)
+  - `bekci/registry.ts` (core/src/bekci/) — SAF, testli (ADR-018 Karar 7): `readBekciRegistry`/
+    `writeBekciRegistry` (`~/.symphony/bekci.json`, `trust.json`/D4 ile AYNI desen) +
+    `findBekciProject`/`withBekciProject` (upsert) + `bekciErrorCode(ad)` → `BEKCI_<AD>`
+    (D4/D5'in kategori ad-alanını PAYLAŞIR — güven merdiveni/rapor sicili bekçiyi de kapsar)
+  - `bekci/scan.ts` — SAF, testli: `findMatches` (`/(error|exception|traceback|fatal)/i`,
+    eşleşen satırın çevresini kesit olarak döner) + `shouldRecordBekciMatch` (5dk debounce SAF kararı)
   - `protected.ts` — SAF, testli (ADR-018 Karar 4): `PROTECTED_PATHS` (updater, patch.ts'in
     KENDİSİ, izin sistemi/jail/engine, secrets/, token.ts, VE bu listenin kendisi) +
     `touchesProtected`/`protectedMatches`. Bu yollara dokunan yama hiçbir güven kaydıyla
@@ -75,7 +90,9 @@ protokol WS/REST üzerinden konuşulur.
     TÜRETİLİR, ayrı tablo YOK — applied=sağlıklı, reverted/failed=unhealthy, proposed/rejected
     sicile GİRMEZ) + `categoryTouchedProtected` (kategori geçmişte korumalı yola dokunduysa
     `patch trust` REDDEDER — Karar 4 blanket-trust ile atlanamaz)
-  - `pipeline.ts` — orkestrasyon: teşhis → sandbox → teşhis dosyası → agent koşusu (NORMAL
+  - `pipeline.ts` — orkestrasyon (`DoctorRunSpec` — Dilim D6'da `execute()` `repoPath`/
+    `errorCode`/`verify`i bir SPEC olarak alır, `run()` [self-patch] ve `runForProject()` [bekçi]
+    AYNI execute'u farklı spec'le çağırır — Karar 7: "kod tekrarı değil, parametre değişimi"): teşhis → sandbox → teşhis dosyası → agent koşusu (NORMAL
     `engine.start`, cwd=worktree → jail hapseder) → doğrulama → dalda commit → yama `proposed`.
     Tek koşu kilidi (`AGENT_DOCTOR_BUSY`). **`run()` beklemez** — WS 30sn zaman aşımına takılmasın
     diye yalnız doğrulama senkron, gerisi arka planda (`doctor.phase` olaylarıyla duyurulur)
@@ -200,6 +217,9 @@ protokol WS/REST üzerinden konuşulur.
     izin istekleri terminalden — doktor ayrıcalıklı mod DEĞİL, agent tanımı). Sonuç: yama
     ÖNERİSİ (`doctor.patch.proposed`) — uygulanmaz, `symphony patch apply` (D3) ile uygulanır.
     `renderDiff`'i `agent.ts`'ten import eder (tek kaynak)
+  - `bekci.ts` (ADR-018 Karar 7, Dilim D6) — `symphony bekci ekle <ad> <repo> <log> [--test]` /
+    `bekci liste`. `ekle`, `repoPath`nin GERÇEK bir git repo KÖKÜ olduğunu doğrular (canlı bulgu:
+    aksi hâlde worktree ata repo'ya sızabilirdi) — daemon YENİDEN BAŞLATILMADAN 10sn içinde görülür
   - `patch.ts` (ADR-018 Karar 3+4+5, Dilim D3+D4) — `symphony patches` · `patch apply <id>` ·
     `patch reject <id>`. **Apply zinciri (WATCHDOG):** ön koşullar (repo TEMİZ olmalı; yama
     `proposed`; dal var) → onay (korumalı yolda "EVET" şart) → `git merge --no-ff` → `pnpm build`
@@ -208,6 +228,8 @@ protokol WS/REST üzerinden konuşulur.
     + `reverted`**. Yeniden derleme ŞART: yoksa daemon bir sonraki açılışta bozuk `dist`i yükler.
     `patch trust <kod>`/`untrust <kod>` (D4): sicili gösterir + onay ister (untrust ONAYSIZ —
     sıkılaştırma güvenlidir); `patches` çıktısına sicil satırı ("N/M sağlıklı" + [GÜVENİLİR])
+  - `doctor.ts` — `--proje <ad>` (D6): `doctor.diagnose` ATLANIR, `doctor.run {proje}` gönderilir;
+    izleme (`watchDoctorRun`) self-patch ile bekçi modu ARASINDA PAYLAŞILIR (tek izleyici, iki çağrı yolu)
   - `doctor.ts` (D4 eki): `doctor.patch.proposed` alınca kategori GÜVENİLİR + test yeşili +
     korumalı yol YOK ise `patchApplyCommand`ı SORMADAN çağırır (aynı süreç içinde — insan zaten
     `symphony doctor`u başlattı); üç koşuldan biri eksikse eskisi gibi öneri olarak biter

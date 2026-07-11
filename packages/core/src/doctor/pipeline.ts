@@ -2,15 +2,18 @@ import { randomUUID } from "node:crypto";
 import type { Logger } from "pino";
 import type { DoctorCandidate } from "@symphony/shared";
 import { AgentError } from "../agent/errors.js";
-import type { DataStore } from "../db/store.js";
+import type { DataStore, TelemetryEntry } from "../db/store.js";
 import type { EventBus } from "../server/bus.js";
+import { bekciErrorCode, findBekciProject, readBekciRegistry } from "../bekci/registry.js";
 import { detectRecurring } from "./detect.js";
 import {
   DIAGNOSIS_FILE,
   formatDiagnosis,
   REAL_SANDBOX_OPS,
+  runProjectVerification,
   type Sandbox,
   type SandboxOps,
+  type VerificationResult,
 } from "./sandbox.js";
 
 /**
@@ -42,14 +45,31 @@ export interface DoctorPipelineDeps {
   selfDev: { repoPath?: string; minRecurrence: number; windowDays: number };
   /** Git/alt-süreç yüzeyi; testte sahte verilir (gerçek worktree/pnpm install koşulamaz). */
   ops?: SandboxOps;
+  /** Bekçi kayıt defterinin yolu (ADR-018 Karar 7, Dilim D6) — `runForProject` bunu okur. */
+  bekciFile?: string;
+}
+
+/**
+ * Boru hattının değişen TEK parçası (Karar 7: "kod tekrarı değil, parametre değişimi"):
+ * hangi repo'da çalışılacağı ve doğrulamanın nasıl yapılacağı. Sandbox açma/agent koşturma/
+ * commit toplama/yama kaydetme AYNIDIR — kendine-yama da bekçi projesi de bunu paylaşır.
+ */
+interface DoctorRunSpec {
+  repoPath: string;
+  errorCode: string;
+  count: number;
+  rows: readonly TelemetryEntry[];
+  verify: (worktreePath: string) => Promise<VerificationResult>;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// "Symphony'nin kendi" DENMEZ (Dilim D6): bu görev bekçi projeleri için de kullanılır — hata
+// Symphony'nin telemetrisinde kayıtlıdır ama kaynak KODU başka bir proje olabilir.
 const DOCTOR_TASK =
-  `Çalışma dizinindeki \`${DIAGNOSIS_FILE}\` dosyasını oku: Symphony'nin kendi hata ` +
-  `telemetrisinden üretilmiş, tekrarlayan bir hatanın kayıtlarını içerir. Kök nedeni bul ve ` +
-  `ASGARİ yamayı yaz. Kök nedeni bulamazsan hiçbir dosyayı değiştirme ve nedenini açıkla.`;
+  `Çalışma dizinindeki \`${DIAGNOSIS_FILE}\` dosyasını oku: hata telemetrisinden üretilmiş, ` +
+  `tekrarlayan bir hatanın kayıtlarını içerir. Kök nedeni bul ve ASGARİ yamayı yaz. Kök nedeni ` +
+  `bulamazsan hiçbir dosyayı değiştirme ve nedenini açıkla.`;
 
 export class DoctorPipeline {
   /** Aynı anda tek doktor koşusu (worktree/dal çakışmasını ve maliyet patlamasını önler). */
@@ -95,9 +115,78 @@ export class DoctorPipeline {
 
     this.busy = true;
     // Arka plan: çağıranı (WS isteğini) bloklamaz — cevabı hemen döner, ilerleme olaylarla akar.
-    void this.execute(repoPath, errorCode, rows.length, rows).finally(() => {
-      this.busy = false;
-    });
+    void this
+      .execute({
+        repoPath,
+        errorCode,
+        count: rows.length,
+        rows,
+        verify: (worktreePath) => this.ops.runVerification(worktreePath),
+      })
+      .finally(() => {
+        this.busy = false;
+      });
+  }
+
+  /**
+   * Bekçi projesi için AYNI boru hattı (ADR-018 Karar 7, Dilim D6) — repo ve doğrulama DEĞİŞİR,
+   * gerisi (sandbox/agent/commit/yama) `run()` ile birebir aynıdır. `testCommand` yoksa
+   * doğrulama ATLANMAZ ama SAHTE de geçmez: `verify` dürüstçe `ok:false` döner — bir yamanın
+   * hiç test edilmeden "geçti" görünmesi asla olmaz.
+   */
+  async runForProject(ad: string): Promise<void> {
+    if (this.busy) {
+      throw new AgentError("AGENT_DOCTOR_BUSY", "Zaten süren bir doktor koşusu var");
+    }
+    if (this.deps.bekciFile === undefined) {
+      throw new AgentError(
+        "VALIDATION_BEKCI_NOT_CONFIGURED",
+        "Bekçi kayıt defteri yapılandırılmamış (daemon içi hata)",
+      );
+    }
+    const project = findBekciProject(readBekciRegistry(this.deps.bekciFile), ad);
+    if (project === null) {
+      throw new AgentError(
+        "VALIDATION_BEKCI_PROJECT_UNKNOWN",
+        `Kayıtlı bekçi projesi yok: '${ad}' — \`symphony bekci ekle\` ile kaydet`,
+      );
+    }
+    // Savunma katmanı (canlı prova bulgusu): `bekci ekle` kayıt anında ZATEN bunu doğrular, ama
+    // elle düzenlenmiş ya da düzeltmeden ÖNCE kaydedilmiş bir girdi de burada yakalanır — repo
+    // kökü DEĞİLSE `git worktree add` sessizce bir ATA dizinin repo'suna sızabilirdi.
+    if (!(await this.ops.isRepoRoot(project.repoPath))) {
+      throw new AgentError(
+        "VALIDATION_BEKCI_NOT_A_REPO",
+        `'${project.repoPath}' bir git repo KÖKÜ değil — \`symphony bekci ekle\` ile düzelt`,
+      );
+    }
+    const errorCode = bekciErrorCode(ad);
+    const sinceMs = Date.now() - this.deps.selfDev.windowDays * DAY_MS;
+    const rows = this.deps.store.telemetryRowsForCode(errorCode, sinceMs);
+    if (rows.length === 0) {
+      throw new AgentError(
+        "VALIDATION_BEKCI_NO_EVIDENCE",
+        `'${ad}' için son ${this.deps.selfDev.windowDays} günde bekçi kaydı yok — henüz bir hata yakalanmadı`,
+      );
+    }
+
+    const verify: (worktreePath: string) => Promise<VerificationResult> =
+      project.testCommand !== undefined
+        ? (worktreePath) => runProjectVerification(worktreePath, project.testCommand as string)
+        : () =>
+            Promise.resolve({
+              ok: false,
+              summary:
+                "test komutu tanımsız — bu proje için doğrulama YAPILMADI " +
+                "(`symphony bekci ekle <ad> <repo> <log> --test <komut>` ile ekle)",
+            });
+
+    this.busy = true;
+    void this
+      .execute({ repoPath: project.repoPath, errorCode, count: rows.length, rows, verify })
+      .finally(() => {
+        this.busy = false;
+      });
   }
 
   private phase(
@@ -112,12 +201,8 @@ export class DoctorPipeline {
     });
   }
 
-  private async execute(
-    repoPath: string,
-    errorCode: string,
-    count: number,
-    rows: ReturnType<DataStore["telemetryRowsForCode"]>,
-  ): Promise<void> {
+  private async execute(spec: DoctorRunSpec): Promise<void> {
+    const { repoPath, errorCode, count, rows, verify } = spec;
     let sandbox: Sandbox | null = null;
     try {
       this.phase("sandbox", `sandbox hazırlanıyor (git worktree + pnpm install) — birkaç dakika sürebilir`);
@@ -151,8 +236,8 @@ export class DoctorPipeline {
         return;
       }
 
-      this.phase("verify", `yama doğrulanıyor (pnpm build + test + lint) — birkaç dakika`, runId);
-      const verification = await this.ops.runVerification(sandbox.worktreePath);
+      this.phase("verify", "yama doğrulanıyor — birkaç dakika sürebilir", runId);
+      const verification = await verify(sandbox.worktreePath);
 
       const patchId = randomUUID();
       const branch = sandbox.branch;

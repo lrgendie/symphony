@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { execSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { simpleGit } from "simple-git";
@@ -8,6 +8,7 @@ import {
   collectAndCommit,
   createSandbox,
   DIAGNOSIS_FILE,
+  isRepoRoot,
   removeSandbox,
   writeDiagnosis,
   type Sandbox,
@@ -120,4 +121,28 @@ describe("doktor sandbox — GERÇEK git", () => {
     expect(existsSync(second.worktreePath)).toBe(true);
     expect(second.branch).toBe("doktor/kod-d");
   }, 30_000);
+});
+
+describe("isRepoRoot — GERÇEK git (ADR-018 Karar 7, Dilim D6 — canlı prova bulgusu)", () => {
+  it("gerçek bir repo KÖKÜ için true", async () => {
+    const repo = freshRepo();
+    expect(await isRepoRoot(repo)).toBe(true);
+  });
+
+  it("git repo İÇİNDEKİ ama KÖKÜ OLMAYAN bir alt klasör için false (ata repo'ya sızma önlenir)", async () => {
+    const repo = freshRepo();
+    const alt = join(repo, "alt-klasor");
+    mkdirSync(alt);
+    expect(await isRepoRoot(alt)).toBe(false);
+  });
+
+  it("hiç git repo OLMAYAN bir dizin için false", async () => {
+    const disKlasor = mkdtempSync(join(tmpdir(), "symphony-not-a-repo-"));
+    dirs.push(disKlasor);
+    expect(await isRepoRoot(disKlasor)).toBe(false);
+  });
+
+  it("var OLMAYAN bir yol için çökmeden false döner", async () => {
+    expect(await isRepoRoot(join(tmpdir(), "kesinlikle-yok-xyz-123"))).toBe(false);
+  });
 });

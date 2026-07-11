@@ -3,7 +3,7 @@ import { dirname, join, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { execa } from "execa";
-import { simpleGit } from "simple-git";
+import { CheckRepoActions, simpleGit } from "simple-git";
 import type { TelemetryEntry } from "../db/store.js";
 
 /**
@@ -140,6 +140,21 @@ export async function createSandbox(
   return { worktreePath, branch };
 }
 
+/**
+ * `path` GERÇEKTEN bir git repo KÖKÜ mü? (ADR-018 Karar 7, Dilim D6 — canlı prova bulgusu:
+ * `path` repo kökü değilse `git worktree add` sessizce bir ATA dizinin `.git`ini bulup ORAYA
+ * açar; bekçi projesi kaydı `bekci ekle` anında bunu reddeder ama kayıt CLI'nin kendi
+ * doğrulamasına bağlı kalmasın diye boru hattı da (`runForProject`) BAĞIMSIZ olarak sorar —
+ * elle düzenlenmiş ya da düzeltmeden ÖNCE kaydedilmiş bir `bekci.json` girdisi de yakalanır.
+ */
+export async function isRepoRoot(path: string): Promise<boolean> {
+  try {
+    return await simpleGit(path).checkIsRepo(CheckRepoActions.IS_REPO_ROOT);
+  } catch {
+    return false;
+  }
+}
+
 /** Teşhis dosyasını worktree köküne yazar (agent onu `read_file` ile okuyacak). */
 export function writeDiagnosis(worktreePath: string, content: string): void {
   writeFileSync(join(worktreePath, DIAGNOSIS_FILE), content, "utf8");
@@ -170,6 +185,40 @@ export async function runVerification(worktreePath: string): Promise<Verificatio
     }
   }
   return { ok: true, summary: "pnpm build + test + lint: hepsi geçti" };
+}
+
+/**
+ * Bekçi projesi doğrulaması (ADR-018 Karar 7, Dilim D6): kullanıcının KENDİ `testCommand`'ı
+ * (ör. `npm test`, `pytest -x`) — Symphony'nin sabit `pnpm build/test/lint` zincirinin YERİNE
+ * geçer, çünkü bekçi projeleri Symphony deposu DEĞİLDİR. `shell: true` bilinçli: komut tek bir
+ * dize (boru/ve-ve olabilir), execa'nın güvenli dizi-argüman modu bunu ayrıştıramaz.
+ */
+export async function runProjectVerification(
+  worktreePath: string,
+  testCommand: string,
+): Promise<VerificationResult> {
+  try {
+    const result = await execa(testCommand, {
+      cwd: worktreePath,
+      shell: true,
+      timeout: VERIFY_TIMEOUT_MS,
+      windowsHide: true,
+      all: true,
+      reject: false,
+    });
+    const ok = result.exitCode === 0;
+    return {
+      ok,
+      summary: ok
+        ? `\`${testCommand}\` geçti`
+        : `\`${testCommand}\` DÜŞTÜ (çıkış kodu ${String(result.exitCode)}):\n${tail(result.all ?? "", 2_000)}`,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      summary: `\`${testCommand}\` çalıştırılamadı: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
 }
 
 export interface CollectedPatch {
@@ -240,6 +289,8 @@ function tail(text: string, max: number): string {
  */
 export interface SandboxOps {
   findRepoRoot(): string | null;
+  /** Bekçi projesi (Dilim D6) `repoPath`'inin GERÇEK bir repo KÖKÜ olduğunu doğrular. */
+  isRepoRoot(path: string): Promise<boolean>;
   createSandbox(repoPath: string, code: string): Promise<Sandbox>;
   writeDiagnosis(worktreePath: string, content: string): void;
   collectAndCommit(worktreePath: string, code: string): Promise<CollectedPatch | null>;
@@ -249,6 +300,7 @@ export interface SandboxOps {
 
 export const REAL_SANDBOX_OPS: SandboxOps = {
   findRepoRoot: () => findRepoRoot(),
+  isRepoRoot,
   createSandbox: (repoPath, code) => createSandbox(repoPath, code),
   writeDiagnosis,
   collectAndCommit,

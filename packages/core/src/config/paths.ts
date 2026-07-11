@@ -34,6 +34,8 @@ export interface SymphonyPaths {
   versionsFile: string;
   /** ADR-018 Karar 5 (Dilim D4): güvenilen yama kategorileri ({trusted: string[]}). */
   trustFile: string;
+  /** ADR-018 Karar 7 (Dilim D6): bekçi kayıt defteri ({projeler: BekciProject[]}). */
+  bekciFile: string;
 }
 
 export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPaths {
@@ -55,6 +57,7 @@ export function getSymphonyPaths(home: string = getSymphonyHome()): SymphonyPath
     reportsDir: join(home, "reports"),
     versionsFile: join(home, "versions.json"),
     trustFile: join(home, "trust.json"),
+    bekciFile: join(home, "bekci.json"),
   };
 }
 

@@ -172,6 +172,9 @@ symphony patch apply <id>         Yamayı canlıya al (build+test+restart; bozuk
 symphony patch reject <id>        Yama önerisini reddet, dalını sil
 symphony patch trust <kategori>   Kategoriye güven (sonraki temiz yamalar sormadan uygulanır)
 symphony patch untrust <kategori> Kategoriden güveni geri çek
+symphony bekci ekle <ad> <repo> <log> [--test <komut>]   Kendi projeni izlemeye al
+symphony bekci liste              Kayıtlı bekçi projelerini listele
+symphony doctor --proje <ad>      Bekçi projesi için AYNI teşhis/yama boru hattını çalıştır
 ```
 
 ## 7. Kurulum, senkronizasyon ve güncelleme akışı
@@ -235,3 +238,11 @@ arka planda sessizce yürümez:
 5. **`symphony report`** artık bir "Kendini Geliştirme" bölümü de içerir: güncel tekrarlayan
    hatalar, önerilen/uygulanan/geri alınan yama sayıları, kategori sicili. Bu rapor haftada
    bir kendiliğinden de üretilir (`~/.symphony/reports/`).
+6. **Bekçi modu (v1):** kendini geliştirme SENİN projelerin için de çalışır.
+   `symphony bekci ekle <ad> <repo-yolu> <log-dosyası> [--test <komut>]` ile bir proje
+   kaydedersin — daemon o log dosyasını 10 saniyede bir izler, `error`/`exception`/
+   `traceback`/`fatal` deseni yakalarsa bir uyarı düşer. `symphony doctor --proje <ad>`
+   AYNI teşhis→sandbox→yama boru hattını çalıştırır, yalnız senin projenin `repoPath`'inden
+   ve senin verdiğin `--test` komutuyla (vermezsen yama testsiz/dürüstçe işaretlenir —
+   asla sessizce "geçti" sayılmaz). **Şart:** `repo-yolu` gerçek bir git deposunun KÖKÜ
+   olmalı — değilse kayıt reddedilir (bir üst dizinin repo olması yeterli değildir).

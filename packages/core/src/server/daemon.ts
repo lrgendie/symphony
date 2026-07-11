@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, readSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import Fastify from "fastify";
@@ -41,6 +41,8 @@ import {
 } from "../router/stats.js";
 import { buildReport } from "../report/build.js";
 import { decideWeeklyReport, formatReportMarkdown } from "../report/markdown.js";
+import { bekciErrorCode, readBekciRegistry } from "../bekci/registry.js";
+import { findMatches, shouldRecordBekciMatch } from "../bekci/scan.js";
 import { buildContextMap } from "../context-map/build.js";
 import { DoctorPipeline } from "../doctor/pipeline.js";
 import { AgentEngine } from "../agent/engine.js";
@@ -85,6 +87,13 @@ export interface DaemonOptions {
    * saatlik zamanlayıcı, olay dizisi bekleyen testleri bozar. Varsayılan: true.
    */
   scheduleReports?: boolean;
+  /**
+   * Bekçi log izleme (ADR-018 Karar 7, Faz 8 Dilim D6): kayıtlı proje log dosyalarını poll'lar.
+   * Testlerde kapatılır (gerçek dosya izleme + zamanlayıcı). Varsayılan: true.
+   */
+  watchBekci?: boolean;
+  /** Test: poll aralığı (ms). Varsayılan: 10.000 — testte kısaltılır (bekçi.test.ts'in canlı ucu). */
+  bekciPollMs?: number;
 }
 
 export interface RunningDaemon {
@@ -240,6 +249,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     log,
     startRun: (input) => engine.start(input),
     selfDev: config.selfDev,
+    bekciFile: paths.bekciFile,
   });
 
   /**
@@ -299,6 +309,79 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       runDailyDetection();
     }, REPORT_CHECK_MS);
     reportTimer.unref();
+  }
+
+  /**
+   * Bekçi log izleme (ADR-018 Karar 7, Faz 8 Dilim D6): kayıtlı proje log dosyalarını poll'lar.
+   * Ofset + debounce zaman damgası BELLEKTE tutulur (daemon yeniden başlarsa sıfırlanır — kabul
+   * edilir, en kötü ihtimalle bir sonraki restart'ta aynı hata bir kez daha yakalanır).
+   * Registry HER poll'da YENİDEN okunur — daemon yeniden başlatmadan `bekci ekle` görünür olur.
+   */
+  interface BekciPollState {
+    offset: number;
+    lastRecordedAt: Record<string, number>;
+  }
+  const bekciState = new Map<string, BekciPollState>();
+
+  function pollBekci(): void {
+    const registry = readBekciRegistry(paths.bekciFile);
+    const seen = new Set<string>();
+    for (const project of registry.projeler) {
+      seen.add(project.ad);
+      if (!existsSync(project.logFile)) continue;
+      const stat = statSync(project.logFile);
+      let state = bekciState.get(project.ad);
+      if (state === undefined) {
+        // İLK GÖRÜŞ: var olan içeriği ATLA — her restart'ta geçmiş hataları yeniden yakalamayız.
+        state = { offset: stat.size, lastRecordedAt: {} };
+        bekciState.set(project.ad, state);
+        continue;
+      }
+      if (stat.size < state.offset) state.offset = 0; // log döndürülmüş (rotate) — baştan izle
+      if (stat.size === state.offset) continue; // yeni içerik yok
+
+      const length = stat.size - state.offset;
+      const buffer = Buffer.alloc(length);
+      const fd = openSync(project.logFile, "r");
+      try {
+        readSync(fd, buffer, 0, length, state.offset);
+      } finally {
+        closeSync(fd);
+      }
+      state.offset = stat.size;
+
+      const newLines = buffer.toString("utf8").split(/\r?\n/).filter((line) => line.length > 0);
+      const excerpts = findMatches(newLines);
+      if (excerpts.length === 0) continue;
+
+      const code = bekciErrorCode(project.ad);
+      const now = Date.now();
+      if (!shouldRecordBekciMatch(state.lastRecordedAt[code] ?? null, now)) continue;
+      state.lastRecordedAt[code] = now;
+
+      store.recordTelemetry({
+        scope: "bekci",
+        code,
+        message: excerpts[excerpts.length - 1] ?? "",
+        context: { proje: project.ad, logFile: project.logFile },
+      });
+      bus.broadcast("log.entry", {
+        level: "warn",
+        source: `bekci:${project.ad}`,
+        message: `'${project.ad}' log'unda hata deseni yakalandı — \`symphony doctor --proje ${project.ad}\` çalıştır`,
+      });
+    }
+    // Kayıttan silinen projelerin ofsetini biriktirmeyiz (bellek sızıntısı olmaz, sayı zaten küçük).
+    for (const ad of bekciState.keys()) {
+      if (!seen.has(ad)) bekciState.delete(ad);
+    }
+  }
+
+  let bekciTimer: NodeJS.Timeout | null = null;
+  if (options.watchBekci ?? true) {
+    pollBekci();
+    bekciTimer = setInterval(pollBekci, options.bekciPollMs ?? 10_000);
+    bekciTimer.unref();
   }
 
   async function buildSnapshot(): Promise<Snapshot> {
@@ -784,7 +867,19 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             try {
               // Yalnız DOĞRULAMA'yı bekler (repo/kod/meşguliyet); boru hattının kendisi arka
               // planda ilerler — worktree + pnpm install tek başına WS zaman aşımını (30sn) aşar.
-              await doctor.run(payload.errorCode);
+              // `proje` (Dilim D6): bekçi projesi modu — `errorCode` YOK SAYILIR, kod daemon'ca
+              // türetilir (istemci yanlış ad-alanı üretemez).
+              if (payload.proje !== undefined) {
+                await doctor.runForProject(payload.proje);
+              } else {
+                if (payload.errorCode === undefined) {
+                  throw makeError(
+                    "VALIDATION_DOCTOR_ERRORCODE_REQUIRED",
+                    "proje verilmiyorsa errorCode zorunludur",
+                  );
+                }
+                await doctor.run(payload.errorCode);
+              }
               bus.sendTo(ws, "doctor.run.ok", {}, message.id);
             } catch (error) {
               sendError(toErrorPayload(error), message.id);
@@ -922,6 +1017,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   const close = async (): Promise<void> => {
     if (hardwareTimer !== null) clearInterval(hardwareTimer);
     if (reportTimer !== null) clearInterval(reportTimer);
+    if (bekciTimer !== null) clearInterval(bekciTimer);
     engine.cancelAll();
     for (const abort of activeChats.values()) abort.abort();
     // Açık istemci soketleri koparılmazsa app.close() sonsuza dek bekleyebilir.

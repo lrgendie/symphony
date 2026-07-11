@@ -151,3 +151,37 @@ describe("doctorCommand → güven merdiveni entegrasyonu (D4)", () => {
     expect(patchApplyMock).toHaveBeenCalled();
   });
 });
+
+describe("doctorCommand → --proje (bekçi modu, ADR-018 Karar 7, Dilim D6)", () => {
+  it("--proje verilince doctor.diagnose ATLANIR, doctor.run { proje } gönderilir", async () => {
+    const promise = doctorCommand({ proje: "proje-a" });
+    await waitForHandler("doctor.patch.proposed");
+
+    expect(requestMock).not.toHaveBeenCalledWith("doctor.diagnose", expect.anything());
+    expect(requestMock).toHaveBeenCalledWith("doctor.run", { proje: "proje-a" });
+
+    emit("doctor.patch.proposed", { ...PROPOSED, errorCode: "BEKCI_PROJE_A" });
+    await expect(promise).rejects.toThrow("__EXIT__");
+  });
+
+  it("doctor.run reddederse (kayıtsız proje) hata basıp temiz çıkar", async () => {
+    requestMock.mockImplementation(async (type: string) => {
+      if (type === "doctor.run") throw new Error("VALIDATION_BEKCI_PROJECT_UNKNOWN: kayıtlı değil");
+      return {};
+    });
+
+    const promise = doctorCommand({ proje: "hic-kayitli-olmayan" });
+    await expect(promise).rejects.toThrow("__EXIT__");
+  });
+
+  it("--proje ve --kod birlikte verilirse --proje ÖNCELİKLİDİR (bekçi modu kod seçimini görmezden gelir)", async () => {
+    const promise = doctorCommand({ proje: "proje-a", kod: "BASKA_KOD" });
+    await waitForHandler("doctor.patch.proposed");
+
+    expect(requestMock).toHaveBeenCalledWith("doctor.run", { proje: "proje-a" });
+    expect(requestMock).not.toHaveBeenCalledWith("doctor.run", { errorCode: "BASKA_KOD" });
+
+    emit("doctor.patch.proposed", { ...PROPOSED, errorCode: "BEKCI_PROJE_A" });
+    await expect(promise).rejects.toThrow("__EXIT__");
+  });
+});

@@ -15,6 +15,7 @@ import { addCommand } from "./commands/add.js";
 import { syncCommand, syncInitCommand } from "./commands/sync.js";
 import { rollbackCommand, updateCommand } from "./commands/update.js";
 import { doctorCommand } from "./commands/doctor.js";
+import { bekciEkleCommand, bekciListeCommand } from "./commands/bekci.js";
 import {
   patchApplyCommand,
   patchRejectCommand,
@@ -131,7 +132,25 @@ program
     "Kendini geliştirme (ADR-018): tekrarlayan hatayı sandbox'ta teşhis edip YAMA ÖNERİSİ üretir",
   )
   .option("--kod <hata-kodu>", "belirli bir hata kodu (varsayılan: en sık tekrarlayan)")
-  .action((opts: { kod?: string }) => doctorCommand(opts).catch(fail));
+  .option("--proje <ad>", "bekçi projesi modu (Dilim D6): kayıtlı projenin repoPath'inde çalışır")
+  .action((opts: { kod?: string; proje?: string }) => doctorCommand(opts).catch(fail));
+
+const bekci = program
+  .command("bekci")
+  .description("Kendi projelerinin log dosyalarını izle (ADR-018 Karar 7, Faz 8 Dilim D6)");
+
+bekci
+  .command("ekle <ad> <repoPath> <logFile>")
+  .description("Proje kaydet/güncelle — daemon 10sn içinde izlemeye başlar (restart gerekmez)")
+  .option("--test <komut>", "doğrulama komutu (yoksa yama testsiz/dürüstçe testOk:false kaydedilir)")
+  .action((ad: string, repoPath: string, logFile: string, opts: { test?: string }) =>
+    bekciEkleCommand(ad, repoPath, logFile, opts).catch(fail),
+  );
+
+bekci
+  .command("liste", { isDefault: true })
+  .description("Kayıtlı projeleri listele")
+  .action(() => bekciListeCommand());
 
 program
   .command("patches")

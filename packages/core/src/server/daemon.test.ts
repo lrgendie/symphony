@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -9,6 +9,7 @@ import { createMessage, PROTOCOL_VERSION, type Envelope } from "@symphony/shared
 import { DataStore } from "../db/store.js";
 import { ensureSymphonyHome } from "../config/paths.js";
 import { reportFilePath } from "../report/markdown.js";
+import { writeBekciRegistry } from "../bekci/registry.js";
 import { startDaemon, type RunningDaemon } from "./daemon.js";
 
 const testHome = join(tmpdir(), `symphony-daemon-test-${Date.now()}`);
@@ -60,6 +61,7 @@ beforeAll(async () => {
     ollamaBaseUrl: `http://127.0.0.1:${ollamaPort}`,
     sampleHardware: false, // gerçek nvidia-smi + periyodik yayın testleri bozar
     scheduleReports: false, // gerçek dosya yazımı + 24s zamanlayıcı (Dilim D5) testleri bozar
+    watchBekci: false, // gerçek dosya izleme + zamanlayıcı (Dilim D6) testleri bozar
   });
 });
 
@@ -160,6 +162,7 @@ describe("symphonyd", () => {
       home: dedicatedHome,
       sampleHardware: false,
       scheduleReports: false,
+      watchBekci: false,
     });
     try {
       const unauthorized = await fetch(`http://127.0.0.1:${dedicated.port}/api/shutdown`, {
@@ -311,6 +314,31 @@ describe("symphonyd", () => {
     const bad = await request(ws, createMessage("doctor.run", { errorCode: "HIC_OLMAYAN_KOD" }));
     expect(bad.type).toBe("error");
     expect((bad.payload as { code: string }).code).toBe("VALIDATION_DOCTOR_CODE_UNKNOWN");
+
+    // errorCode HİÇ verilmezse (proje de yoksa) net bir istek hatası (uydurma varsayım yok).
+    const neither = await request(ws, createMessage("doctor.run", {}));
+    expect(neither.type).toBe("error");
+    expect((neither.payload as { code: string }).code).toBe("VALIDATION_DOCTOR_ERRORCODE_REQUIRED");
+    ws.close();
+  });
+
+  it("doctor.run { proje } (ADR-018 Karar 7, Dilim D6): bekçi projesi modu — kayıtsız projede VALIDATION_BEKCI_PROJECT_UNKNOWN, `errorCode` YOK SAYILIR", async () => {
+    const { reply, ws } = await roundTrip(
+      createMessage("hello", {
+        token: daemon.token,
+        client: "cli",
+        protocolVersion: PROTOCOL_VERSION,
+      }),
+    );
+    expect(reply.type).toBe("hello.ok");
+
+    // Kayıtlı olmayan bir proje adı — `errorCode` verilse bile (yok sayılır) `proje` yolu geçerlidir.
+    const bad = await request(
+      ws,
+      createMessage("doctor.run", { errorCode: "ONEMSIZ", proje: "hic-kayitli-olmayan-proje" }),
+    );
+    expect(bad.type).toBe("error");
+    expect((bad.payload as { code: string }).code).toBe("VALIDATION_BEKCI_PROJECT_UNKNOWN");
     ws.close();
   });
 
@@ -758,6 +786,7 @@ describe("symphonyd", () => {
       home: dedicatedHome,
       sampleHardware: false,
       scheduleReports: true,
+      watchBekci: false,
     });
     try {
       const file = reportFilePath(dedicatedPaths.reportsDir, Date.now());
@@ -770,6 +799,88 @@ describe("symphonyd", () => {
       rmSync(dedicatedHome, { recursive: true, force: true });
     }
   });
+
+  it("bekçi log izleme (ADR-018 Karar 7, Dilim D6): GERÇEK log dosyasına eklenen hata satırı yakalanır — telemetriye yazılır + log.entry yayınlanır (debounce ile)", async () => {
+    const dedicatedHome = mkdtempSync(join(tmpdir(), "symphony-bekci-test-"));
+    const dedicatedPaths = ensureSymphonyHome(dedicatedHome);
+    const logFile = join(dedicatedHome, "proje.log");
+    // Daemon başlamadan ÖNCE VAR OLAN içerik — ilk görüşte ATLANMALI (geçmiş hatalar yeniden
+    // yakalanmasın diye tasarlandı), bu yüzden burada bir hata deseni OLMASINA rağmen hiç
+    // telemetriye girmemeli.
+    writeFileSync(logFile, "Error: bu ESKİ bir hata, GÖRMEZDEN gelinmeli\n", "utf8");
+
+    writeBekciRegistry(dedicatedPaths.bekciFile, {
+      projeler: [{ ad: "test-proje", repoPath: dedicatedHome, logFile }],
+    });
+
+    const dedicated = await startDaemon({
+      port: 0,
+      home: dedicatedHome,
+      sampleHardware: false,
+      scheduleReports: false,
+      watchBekci: true,
+      bekciPollMs: 100,
+    });
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${dedicated.port}/ws`);
+      const events: Envelope[] = [];
+      await new Promise<void>((resolve, reject) => {
+        ws.on("open", () => {
+          ws.send(
+            JSON.stringify(
+              createMessage("hello", {
+                token: dedicated.token,
+                client: "cli",
+                protocolVersion: PROTOCOL_VERSION,
+              }),
+            ),
+          );
+        });
+        ws.on("message", (raw) => {
+          const msg = JSON.parse(String(raw)) as Envelope;
+          events.push(msg);
+          if (msg.type === "hello.ok") resolve();
+        });
+        ws.on("error", reject);
+      });
+
+      // Daemon başladıktan SONRA yeni bir hata satırı ekle — bu YAKALANMALI.
+      appendFileSync(logFile, "Error: bağlantı koptu\n", "utf8");
+      // Poll tick'i (100ms) + pay bekle.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const logEntry = events.find((e) => e.type === "log.entry");
+      expect(logEntry).toBeDefined();
+      expect((logEntry?.payload as { source: string; message: string }).source).toBe(
+        "bekci:test-proje",
+      );
+
+      const db = new DataStore(dedicatedPaths.databaseFile);
+      try {
+        const rows = db.telemetryRowsForCode("BEKCI_TEST_PROJE", Date.now() - 60_000);
+        expect(rows).toHaveLength(1); // ESKİ satır atlandı, yalnız YENİ satır yazıldı
+        expect(rows[0]?.message).toContain("bağlantı koptu");
+        expect(rows[0]?.message).not.toContain("GÖRMEZDEN");
+      } finally {
+        db.close();
+      }
+
+      // İkinci bir hata satırı HEMEN ardından eklenirse debounce (5dk) yüzünden YAZILMAZ.
+      appendFileSync(logFile, "Exception: hemen ardından\n", "utf8");
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const db2 = new DataStore(dedicatedPaths.databaseFile);
+      try {
+        expect(db2.telemetryRowsForCode("BEKCI_TEST_PROJE", Date.now() - 60_000)).toHaveLength(1);
+      } finally {
+        db2.close();
+      }
+
+      ws.close();
+    } finally {
+      await dedicated.close();
+      rmSync(dedicatedHome, { recursive: true, force: true });
+    }
+  }, 15_000);
 
   it("bağlam haritası (ADR-016 Karar 6, Dilim Z4): auth'suz 401 · gerçek koşu verisinden run+proje düğümü + run→proje kenarı", async () => {
     const unauthorized = await fetch(`http://127.0.0.1:${daemon.port}/api/context-map`);

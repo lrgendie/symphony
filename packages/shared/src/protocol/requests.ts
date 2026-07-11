@@ -127,8 +127,15 @@ export const DoctorDiagnosePayloadSchema = z.object({}).strip();
  * yaz → `doktor` agent'ını koştur → BORU HATTI testleri koşar → yama önerisi kaydedilir.
  * Cevap koşu başlar başlamaz döner (`doctor.run.ok {runId}`); koşunun kendisi NORMAL agent
  * olaylarıyla izlenir, yama hazır olunca `doctor.patch.proposed` yayınlanır.
+ *
+ * **`proje` (ADR-018 Karar 7, Dilim D6):** verilirse kendine-yama DEĞİL, bekçi projesi modudur —
+ * sandbox `bekci.json`daki o projenin `repoPath`'inden açılır, doğrulama `testCommand`'ıyla
+ * yapılır (yoksa dürüstçe atlanır). `errorCode` bu modda YOK SAYILIR — kod her zaman
+ * `BEKCI_<AD>`dir, daemon kendisi türetir (istemci yanlış ad-alanı üretemez).
  */
-export const DoctorRunPayloadSchema = z.object({ errorCode: z.string().min(1) }).strip();
+export const DoctorRunPayloadSchema = z
+  .object({ errorCode: z.string().min(1).optional(), proje: z.string().min(1).optional() })
+  .strip();
 
 /** Yama önerileri (ADR-018 Karar 3, Dilim D3) — `diff` taşınmaz (büyük olabilir). */
 export const PatchesListPayloadSchema = z.object({}).strip();
