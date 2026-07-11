@@ -149,6 +149,51 @@ export const PatchResolvePayloadSchema = z
   .object({ patchId: z.string().uuid(), state: PatchStateSchema })
   .strip();
 
+/**
+ * Bağlam Haritası kürasyonu (ADR-019 Karar 1/2, Faz "H" Dilim H1). Türetilen düğümler
+ * (session/run/proje/model/agent/hafta) BURADAN oluşturulmaz — yalnız insan emeği (sabitleme,
+ * grup, bağ) kalıcılaşır. Düğüm/kenar kimlikleri `.uuid()` DEĞİL, serbest metindir: türetilmiş
+ * kararlı id'ler (`project:<cwd>`, `model:<provider>/<model>`, `agent:<agentId>`, `week:<label>`)
+ * UUID formatında değildir — bunlara dokunma girişimi ŞEMA seviyesinde değil, daemon'da
+ * `VALIDATION_MAP_NODE_PROTECTED` ile reddedilmelidir.
+ */
+export const MapPinRefSchema = z
+  .object({ kind: z.enum(["session", "run"]), id: z.string().uuid() })
+  .strip();
+
+/** `ref` verilmezse `title` ZORUNLUDUR (ADR-019 Karar 2); `ref` verilirse başlık daemon'da türetilir. */
+export const MapPinPayloadSchema = z
+  .object({
+    title: z.string().min(1).optional(),
+    ref: MapPinRefSchema.optional(),
+  })
+  .strip()
+  .superRefine((val, ctx) => {
+    if (val.ref === undefined && val.title === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "ref verilmiyorsa title zorunludur",
+        path: ["title"],
+      });
+    }
+  });
+
+export const MapNodeRenamePayloadSchema = z
+  .object({ nodeId: z.string().min(1), title: z.string().min(1) })
+  .strip();
+
+export const MapNodeDeletePayloadSchema = z.object({ nodeId: z.string().min(1) }).strip();
+
+export const MapGroupCreatePayloadSchema = z
+  .object({ title: z.string().min(1), members: z.array(z.string().min(1)).default([]) })
+  .strip();
+
+export const MapMemberPayloadSchema = z
+  .object({ groupId: z.string().min(1), nodeId: z.string().min(1) })
+  .strip();
+
+export const MapLinkPayloadSchema = z.object({ from: z.string().min(1), to: z.string().min(1) }).strip();
+
 export const REQUEST_PAYLOAD_SCHEMAS = {
   hello: HelloPayloadSchema,
   "state.sync": StateSyncPayloadSchema,
@@ -169,6 +214,14 @@ export const REQUEST_PAYLOAD_SCHEMAS = {
   "doctor.run": DoctorRunPayloadSchema,
   "patches.list": PatchesListPayloadSchema,
   "patch.resolve": PatchResolvePayloadSchema,
+  "map.pin": MapPinPayloadSchema,
+  "map.node.rename": MapNodeRenamePayloadSchema,
+  "map.node.delete": MapNodeDeletePayloadSchema,
+  "map.group.create": MapGroupCreatePayloadSchema,
+  "map.member.add": MapMemberPayloadSchema,
+  "map.member.remove": MapMemberPayloadSchema,
+  "map.link.add": MapLinkPayloadSchema,
+  "map.link.remove": MapLinkPayloadSchema,
 } as const;
 
 export type RequestType = keyof typeof REQUEST_PAYLOAD_SCHEMAS;

@@ -173,6 +173,34 @@ const MIGRATIONS: readonly string[] = [
   CREATE INDEX idx_patches_state ON patches (state);
   CREATE INDEX idx_patches_error_code ON patches (error_code);
   `,
+  // v7 — Bağlam Haritası kürasyonu (ADR-019 Karar 1, Faz "H" Dilim H1): TÜRETİLEBİLEN hiçbir şey
+  // saklanmaz (session/run/proje/model/agent/hafta düğümleri sorgu zamanında kurulur, ADR-016
+  // Karar 1'in AYNI ruhu) — yalnız insan emeği (sabitleme/grup/bağ) kalıcılaşır. `map_edges`in
+  // uçları HERHANGİ bir kararlı düğüm id'si olabilir (kürasyon id'leri + türetilmiş id'ler:
+  // `project:<cwd>`, `model:<provider>/<model>`, `agent:<agentId>`, `week:<label>`, session/run
+  // UUID'leri) — bu yüzden from_id/to_id'de map_nodes'a FK YOK (hedef başka bir tabloda/hiçbir
+  // tabloda olabilir); kaskad silme UYGULAMA KATMANINDA yapılır (`deleteMapNode`).
+  `
+  CREATE TABLE map_nodes (
+    id         TEXT PRIMARY KEY,
+    kind       TEXT NOT NULL CHECK (kind IN ('context', 'group')),
+    title      TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    ref_kind   TEXT CHECK (ref_kind IN ('session', 'run')),
+    ref_id     TEXT
+  );
+  CREATE INDEX idx_map_nodes_kind ON map_nodes (kind);
+
+  CREATE TABLE map_edges (
+    id         TEXT PRIMARY KEY,
+    from_id    TEXT NOT NULL,
+    to_id      TEXT NOT NULL,
+    kind       TEXT NOT NULL CHECK (kind IN ('link', 'member')),
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX idx_map_edges_from ON map_edges (from_id);
+  CREATE INDEX idx_map_edges_to ON map_edges (to_id);
+  `,
 ];
 
 export type RequestStatus = "ok" | "error" | "cancelled";
@@ -294,6 +322,63 @@ function toPatchEntry(row: PatchRow): PatchEntry {
     runId: row.run_id,
     state: row.state as PatchState,
     resolvedAt: row.resolved_at,
+  };
+}
+
+/** `map_nodes` satırı (ADR-019 Karar 1, Dilim H1) — SQLite sütun adlarıyla. */
+interface MapNodeRow {
+  id: string;
+  kind: string;
+  title: string;
+  created_at: number;
+  ref_kind: string | null;
+  ref_id: string | null;
+}
+
+export interface MapNodeRecord {
+  id: string;
+  kind: "context" | "group";
+  title: string;
+  createdAt: number;
+  refKind: "session" | "run" | null;
+  refId: string | null;
+}
+
+function toMapNodeRecord(row: MapNodeRow): MapNodeRecord {
+  return {
+    id: row.id,
+    kind: row.kind as MapNodeRecord["kind"],
+    title: row.title,
+    createdAt: row.created_at,
+    refKind: row.ref_kind as MapNodeRecord["refKind"],
+    refId: row.ref_id,
+  };
+}
+
+/** `map_edges` satırı (ADR-019 Karar 1, Dilim H1) — SQLite sütun adlarıyla. */
+interface MapEdgeRow {
+  id: string;
+  from_id: string;
+  to_id: string;
+  kind: string;
+  created_at: number;
+}
+
+export interface MapEdgeRecord {
+  id: string;
+  fromId: string;
+  toId: string;
+  kind: "link" | "member";
+  createdAt: number;
+}
+
+function toMapEdgeRecord(row: MapEdgeRow): MapEdgeRecord {
+  return {
+    id: row.id,
+    fromId: row.from_id,
+    toId: row.to_id,
+    kind: row.kind as MapEdgeRecord["kind"],
+    createdAt: row.created_at,
   };
 }
 
@@ -697,6 +782,14 @@ export class DataStore {
     return this.db.prepare(`SELECT 1 FROM agent_runs WHERE id = ?`).get(id) !== undefined;
   }
 
+  /** Tek bir koşu (ADR-019, Dilim H1: `map.pin`in ref'siz başlık türetmesi + kürasyon doğrulaması). */
+  agentRunById(id: string): AgentRunRow | null {
+    const row = this.db.prepare(`SELECT * FROM agent_runs WHERE id = ?`).get(id) as
+      | AgentRunRow
+      | undefined;
+    return row ?? null;
+  }
+
   /** Son koşular (yeniden eskiye) — CLI listesi ve testler için. */
   recentAgentRuns(limit = 50): AgentRunRow[] {
     return this.db
@@ -962,6 +1055,76 @@ export class DataStore {
       .prepare(`SELECT DISTINCT error_code FROM patches WHERE state IN ('proposed', 'applied')`)
       .all() as Array<{ error_code: string }>;
     return rows.map((row) => row.error_code);
+  }
+
+  // ---- Bağlam Haritası kürasyonu (ADR-019 Karar 1, Faz "H" Dilim H1) ----
+
+  insertMapNode(record: MapNodeRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO map_nodes (id, kind, title, created_at, ref_kind, ref_id)
+         VALUES (@id, @kind, @title, @createdAt, @refKind, @refId)`,
+      )
+      .run({
+        id: record.id,
+        kind: record.kind,
+        title: record.title,
+        createdAt: record.createdAt,
+        refKind: record.refKind,
+        refId: record.refId,
+      });
+  }
+
+  /** Tek bir kürasyon düğümü — yoksa null (`nodeId` türetilmiş bir id ise de null döner). */
+  mapNodeById(id: string): MapNodeRecord | null {
+    const row = this.db.prepare(`SELECT * FROM map_nodes WHERE id = ?`).get(id) as
+      | MapNodeRow
+      | undefined;
+    return row === undefined ? null : toMapNodeRecord(row);
+  }
+
+  listMapNodes(): MapNodeRecord[] {
+    return (this.db.prepare(`SELECT * FROM map_nodes ORDER BY created_at`).all() as MapNodeRow[]).map(
+      toMapNodeRecord,
+    );
+  }
+
+  renameMapNode(id: string, title: string): void {
+    this.db.prepare(`UPDATE map_nodes SET title = ? WHERE id = ?`).run(title, id);
+  }
+
+  /**
+   * Kürasyon düğümünü VE ona değen tüm kenarları (kenar hedefi map_nodes'a FK'lı olmadığı için
+   * uygulama katmanında) siler — çağıran taraf (`daemon.ts`) bunu ÇAĞIRMADAN ÖNCE `nodeId`'nin
+   * gerçekten bir kürasyon düğümü olduğunu doğrulamış olmalı (`context-map/curation.ts`).
+   */
+  deleteMapNode(id: string): void {
+    this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM map_edges WHERE from_id = ? OR to_id = ?`).run(id, id);
+      this.db.prepare(`DELETE FROM map_nodes WHERE id = ?`).run(id);
+    })();
+  }
+
+  insertMapEdge(record: MapEdgeRecord): void {
+    this.db
+      .prepare(
+        `INSERT INTO map_edges (id, from_id, to_id, kind, created_at)
+         VALUES (@id, @fromId, @toId, @kind, @createdAt)`,
+      )
+      .run(record);
+  }
+
+  listMapEdges(): MapEdgeRecord[] {
+    return (this.db.prepare(`SELECT * FROM map_edges ORDER BY created_at`).all() as MapEdgeRow[]).map(
+      toMapEdgeRecord,
+    );
+  }
+
+  /** `member`/`link` koparma HER ZAMAN güvenlidir (D4'ün `untrust` deseni) — eşleşme yoksa no-op. */
+  deleteMapEdgeBetween(fromId: string, toId: string, kind: MapEdgeRecord["kind"]): void {
+    this.db
+      .prepare(`DELETE FROM map_edges WHERE from_id = ? AND to_id = ? AND kind = ?`)
+      .run(fromId, toId, kind);
   }
 
   close(): void {

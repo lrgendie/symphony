@@ -44,6 +44,14 @@ import { decideWeeklyReport, formatReportMarkdown } from "../report/markdown.js"
 import { bekciErrorCode, readBekciRegistry } from "../bekci/registry.js";
 import { findMatches, shouldRecordBekciMatch } from "../bekci/scan.js";
 import { buildContextMap } from "../context-map/build.js";
+import {
+  checkCurationTarget,
+  checkGraphReference,
+  checkGroupTarget,
+  checkPinRef,
+  type MapNodeLookupFn,
+  type MapRefExistsFn,
+} from "../context-map/curation.js";
 import { DoctorPipeline } from "../doctor/pipeline.js";
 import { AgentEngine } from "../agent/engine.js";
 import { ensureDefaultAgent, listAgentDefinitions } from "../agent/definition.js";
@@ -332,53 +340,71 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
   }
   const bekciState = new Map<string, BekciPollState>();
 
+  /**
+   * Hata yutma sınırları (2026-07-11 mimari tarama bulgusu B1): bu fonksiyon `setInterval`
+   * içinde çağrılır — yakalanmayan bir istisna `uncaughtException`'a, o da DAEMON'UN
+   * ÇÖKMESİNE yol açar. `readBekciRegistry` artık bozuk JSON'da fırlamıyor (B3) ama başka
+   * G/Ç hataları (izin, disk) hâlâ mümkün; kayıt defteri okuma AYRI, her PROJE'nin kendi
+   * log G/Ç'si AYRI try/catch'e alınır — bir projenin (silinen/kilitli log dosyası gibi)
+   * hatası ne daemon'ı ne diğer projelerin izlenmesini etkiler.
+   */
   function pollBekci(): void {
-    const registry = readBekciRegistry(paths.bekciFile);
+    let registry: ReturnType<typeof readBekciRegistry>;
+    try {
+      registry = readBekciRegistry(paths.bekciFile);
+    } catch (error) {
+      log.warn({ err: error }, "bekçi kayıt defteri okunamadı (bu tur atlandı)");
+      return;
+    }
     const seen = new Set<string>();
     for (const project of registry.projeler) {
       seen.add(project.ad);
-      if (!existsSync(project.logFile)) continue;
-      const stat = statSync(project.logFile);
-      let state = bekciState.get(project.ad);
-      if (state === undefined) {
-        // İLK GÖRÜŞ: var olan içeriği ATLA — her restart'ta geçmiş hataları yeniden yakalamayız.
-        state = { offset: stat.size, lastRecordedAt: {} };
-        bekciState.set(project.ad, state);
-        continue;
-      }
-      if (stat.size < state.offset) state.offset = 0; // log döndürülmüş (rotate) — baştan izle
-      if (stat.size === state.offset) continue; // yeni içerik yok
-
-      const length = stat.size - state.offset;
-      const buffer = Buffer.alloc(length);
-      const fd = openSync(project.logFile, "r");
       try {
-        readSync(fd, buffer, 0, length, state.offset);
-      } finally {
-        closeSync(fd);
+        if (!existsSync(project.logFile)) continue;
+        const stat = statSync(project.logFile);
+        let state = bekciState.get(project.ad);
+        if (state === undefined) {
+          // İLK GÖRÜŞ: var olan içeriği ATLA — her restart'ta geçmiş hataları yeniden yakalamayız.
+          state = { offset: stat.size, lastRecordedAt: {} };
+          bekciState.set(project.ad, state);
+          continue;
+        }
+        if (stat.size < state.offset) state.offset = 0; // log döndürülmüş (rotate) — baştan izle
+        if (stat.size === state.offset) continue; // yeni içerik yok
+
+        const length = stat.size - state.offset;
+        const buffer = Buffer.alloc(length);
+        const fd = openSync(project.logFile, "r");
+        try {
+          readSync(fd, buffer, 0, length, state.offset);
+        } finally {
+          closeSync(fd);
+        }
+        state.offset = stat.size;
+
+        const newLines = buffer.toString("utf8").split(/\r?\n/).filter((line) => line.length > 0);
+        const excerpts = findMatches(newLines);
+        if (excerpts.length === 0) continue;
+
+        const code = bekciErrorCode(project.ad);
+        const now = Date.now();
+        if (!shouldRecordBekciMatch(state.lastRecordedAt[code] ?? null, now)) continue;
+        state.lastRecordedAt[code] = now;
+
+        store.recordTelemetry({
+          scope: "bekci",
+          code,
+          message: excerpts[excerpts.length - 1] ?? "",
+          context: { proje: project.ad, logFile: project.logFile },
+        });
+        bus.broadcast("log.entry", {
+          level: "warn",
+          source: `bekci:${project.ad}`,
+          message: `'${project.ad}' log'unda hata deseni yakalandı — \`symphony doctor --proje ${project.ad}\` çalıştır`,
+        });
+      } catch (error) {
+        log.warn({ err: error, proje: project.ad }, "bekçi log izleme hatası (bu proje bu tur atlandı)");
       }
-      state.offset = stat.size;
-
-      const newLines = buffer.toString("utf8").split(/\r?\n/).filter((line) => line.length > 0);
-      const excerpts = findMatches(newLines);
-      if (excerpts.length === 0) continue;
-
-      const code = bekciErrorCode(project.ad);
-      const now = Date.now();
-      if (!shouldRecordBekciMatch(state.lastRecordedAt[code] ?? null, now)) continue;
-      state.lastRecordedAt[code] = now;
-
-      store.recordTelemetry({
-        scope: "bekci",
-        code,
-        message: excerpts[excerpts.length - 1] ?? "",
-        context: { proje: project.ad, logFile: project.logFile },
-      });
-      bus.broadcast("log.entry", {
-        level: "warn",
-        source: `bekci:${project.ad}`,
-        message: `'${project.ad}' log'unda hata deseni yakalandı — \`symphony doctor --proje ${project.ad}\` çalıştır`,
-      });
     }
     // Kayıttan silinen projelerin ofsetini biriktirmeyiz (bellek sızıntısı olmaz, sayı zaten küçük).
     for (const ad of bekciState.keys()) {
@@ -702,6 +728,16 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     void close();
   });
 
+  // ---- Bağlam Haritası kürasyonu (ADR-019 Karar 1/2, Faz "H" Dilim H1) ----
+  // `context-map/curation.ts`in dar enjeksiyon yüzeyleri — SAF doğrulama fonksiyonları bu
+  // closure'ları alır, testte sahtelenirler (bkz. curation.test.ts).
+  const mapNodeLookup: MapNodeLookupFn = (id) => {
+    const node = store.mapNodeById(id);
+    return node === null ? null : { kind: node.kind };
+  };
+  const mapRefExists: MapRefExistsFn = (kind, id) =>
+    kind === "session" ? store.sessionDetail(id) !== null : store.agentRunExists(id);
+
   // ---- WebSocket ----
 
   const wss = new WebSocketServer({ noServer: true });
@@ -864,6 +900,161 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
             }
             store.resolvePatch(payload.patchId, payload.state);
             bus.sendTo(ws, "patch.resolve.ok", {}, message.id);
+            return;
+          }
+          case "map.pin": {
+            // "Bunu haritaya ekleyelim" anı (ADR-019 Karar 1/2): ref verilirse başlığı ref'ten
+            // türet (session başlığı / koşu görevi); ref'siz çağrıda şema title'ı zaten zorunlu kılmıştı.
+            const payload = message.payload as RequestPayload<"map.pin">;
+            const refCheck = checkPinRef(payload.ref, mapRefExists);
+            if (!refCheck.ok) {
+              sendError(
+                { code: refCheck.code, message: `Bilinmeyen referans: ${payload.ref?.kind} ${payload.ref?.id}` },
+                message.id,
+              );
+              return;
+            }
+            const ref = payload.ref;
+            const title =
+              payload.title ??
+              (ref?.kind === "session"
+                ? (store.sessionDetail(ref.id)?.session.title ?? "")
+                : ref !== undefined
+                  ? (store.agentRunById(ref.id)?.task ?? "")
+                  : "");
+            const nodeId = randomUUID();
+            store.insertMapNode({
+              id: nodeId,
+              kind: "context",
+              title,
+              createdAt: Date.now(),
+              refKind: ref?.kind ?? null,
+              refId: ref?.id ?? null,
+            });
+            bus.sendTo(ws, "map.pin.ok", { nodeId }, message.id);
+            return;
+          }
+          case "map.node.rename": {
+            const payload = message.payload as RequestPayload<"map.node.rename">;
+            const check = checkCurationTarget(payload.nodeId, mapNodeLookup, mapRefExists);
+            if (!check.ok) {
+              sendError(
+                { code: check.code, message: `Kürasyon düğümü değil: ${payload.nodeId}` },
+                message.id,
+              );
+              return;
+            }
+            store.renameMapNode(payload.nodeId, payload.title);
+            bus.sendTo(ws, "map.node.rename.ok", {}, message.id);
+            return;
+          }
+          case "map.node.delete": {
+            const payload = message.payload as RequestPayload<"map.node.delete">;
+            const check = checkCurationTarget(payload.nodeId, mapNodeLookup, mapRefExists);
+            if (!check.ok) {
+              sendError(
+                { code: check.code, message: `Kürasyon düğümü değil: ${payload.nodeId}` },
+                message.id,
+              );
+              return;
+            }
+            // Kenar kaskadı store.deleteMapNode İÇİNDE (transaction) — türetilmiş düğümler
+            // buraya hiç ulaşamaz (checkCurationTarget PROTECTED ile yukarıda eledi).
+            store.deleteMapNode(payload.nodeId);
+            bus.sendTo(ws, "map.node.delete.ok", {}, message.id);
+            return;
+          }
+          case "map.group.create": {
+            const payload = message.payload as RequestPayload<"map.group.create">;
+            for (const memberId of payload.members) {
+              const check = checkGraphReference(memberId, mapNodeLookup, mapRefExists);
+              if (!check.ok) {
+                sendError({ code: check.code, message: `Bilinmeyen düğüm: ${memberId}` }, message.id);
+                return;
+              }
+            }
+            const nodeId = randomUUID();
+            const now = Date.now();
+            store.insertMapNode({
+              id: nodeId,
+              kind: "group",
+              title: payload.title,
+              createdAt: now,
+              refKind: null,
+              refId: null,
+            });
+            for (const memberId of payload.members) {
+              store.insertMapEdge({ id: randomUUID(), fromId: memberId, toId: nodeId, kind: "member", createdAt: now });
+            }
+            bus.sendTo(ws, "map.group.create.ok", { nodeId }, message.id);
+            return;
+          }
+          case "map.member.add": {
+            const payload = message.payload as RequestPayload<"map.member.add">;
+            const groupCheck = checkGroupTarget(payload.groupId, mapNodeLookup);
+            if (!groupCheck.ok) {
+              sendError({ code: groupCheck.code, message: `Grup değil: ${payload.groupId}` }, message.id);
+              return;
+            }
+            const nodeCheck = checkGraphReference(payload.nodeId, mapNodeLookup, mapRefExists);
+            if (!nodeCheck.ok) {
+              sendError({ code: nodeCheck.code, message: `Bilinmeyen düğüm: ${payload.nodeId}` }, message.id);
+              return;
+            }
+            // Tekrar eklemek çoğaltmaz (D4'ün withTrust deseniyle AYNI idempotentlik).
+            const alreadyMember = store
+              .listMapEdges()
+              .some((e) => e.kind === "member" && e.fromId === payload.nodeId && e.toId === payload.groupId);
+            if (!alreadyMember) {
+              store.insertMapEdge({
+                id: randomUUID(),
+                fromId: payload.nodeId,
+                toId: payload.groupId,
+                kind: "member",
+                createdAt: Date.now(),
+              });
+            }
+            bus.sendTo(ws, "map.member.add.ok", {}, message.id);
+            return;
+          }
+          case "map.member.remove": {
+            // Koparma HER ZAMAN güvenlidir (D4'ün untrust deseni) — eşleşme yoksa no-op.
+            const payload = message.payload as RequestPayload<"map.member.remove">;
+            store.deleteMapEdgeBetween(payload.nodeId, payload.groupId, "member");
+            bus.sendTo(ws, "map.member.remove.ok", {}, message.id);
+            return;
+          }
+          case "map.link.add": {
+            const payload = message.payload as RequestPayload<"map.link.add">;
+            const fromCheck = checkGraphReference(payload.from, mapNodeLookup, mapRefExists);
+            if (!fromCheck.ok) {
+              sendError({ code: fromCheck.code, message: `Bilinmeyen düğüm: ${payload.from}` }, message.id);
+              return;
+            }
+            const toCheck = checkGraphReference(payload.to, mapNodeLookup, mapRefExists);
+            if (!toCheck.ok) {
+              sendError({ code: toCheck.code, message: `Bilinmeyen düğüm: ${payload.to}` }, message.id);
+              return;
+            }
+            const alreadyLinked = store
+              .listMapEdges()
+              .some((e) => e.kind === "link" && e.fromId === payload.from && e.toId === payload.to);
+            if (!alreadyLinked) {
+              store.insertMapEdge({
+                id: randomUUID(),
+                fromId: payload.from,
+                toId: payload.to,
+                kind: "link",
+                createdAt: Date.now(),
+              });
+            }
+            bus.sendTo(ws, "map.link.add.ok", {}, message.id);
+            return;
+          }
+          case "map.link.remove": {
+            const payload = message.payload as RequestPayload<"map.link.remove">;
+            store.deleteMapEdgeBetween(payload.from, payload.to, "link");
+            bus.sendTo(ws, "map.link.remove.ok", {}, message.id);
             return;
           }
           case "doctor.diagnose": {

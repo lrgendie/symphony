@@ -64,6 +64,11 @@ describe("readBekciRegistry/writeBekciRegistry — SAF roundtrip", () => {
     writeFileSync(file, JSON.stringify({ projeler: "bozuk" }), "utf8");
     expect(readBekciRegistry(file)).toEqual({ projeler: [] });
   });
+
+  it("SENTAKS düzeyinde bozuk JSON (B3, 2026-07-11 mimari tarama): çökmeden boş listeye düşer", () => {
+    writeFileSync(file, "{ bu gecerli json degil", "utf8");
+    expect(readBekciRegistry(file)).toEqual({ projeler: [] });
+  });
 });
 
 describe("findBekciProject", () => {

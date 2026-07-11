@@ -150,7 +150,18 @@ protokol WS/REST üzerinden konuşulur.
   500) öğeden düğüm (session/run/proje[cwd, ADR-015 basename kuralı]) + kenar (run→proje,
   aynı-takvim-günü ARDIŞIK zincir "same_day") üretir. Model bağı kenar DEĞİL, düğüm meta'sında
   (görsel kanal). `store.ts`'e yeni okuma metodu GEREKMEDİ — `listSessions`/`recentAgentRuns`
-  yeniden kullanılır
+  yeniden kullanılır. **v2'de (H2) `isoWeekLabel`+katlanma+kürasyon bindirmesi ekleniyor.**
+- `context-map/curation.ts` — SAF, testli (ADR-019 Karar 1/2, Faz "H" Dilim H1): Bağlam Haritası
+  kürasyonunun doğrulama çekirdeği — `isDerivedNodeId`/`isKnownGraphReference` (proje/model/
+  agent/hafta önekleri + gerçek session/run) + `checkCurationTarget`/`checkGraphReference`/
+  `checkGroupTarget`/`checkPinRef` (üç hata kodu: UNKNOWN/PROTECTED/REF_UNKNOWN).
+  `lookup`/`exists` `daemon.ts`'ten enjekte edilir (`store.mapNodeById`/`sessionDetail`/
+  `agentRunExists`in dar kesitleri). `store.ts`'e göç v7 (`map_nodes`/`map_edges`) + CRUD
+  metodları eklendi (`insertMapNode`/`deleteMapNode`[kenar kaskadı]/`insertMapEdge`/
+  `deleteMapEdgeBetween` vb.); `daemon.ts`'e 8 handler (`map.pin`/`map.node.rename`/
+  `map.node.delete`/`map.group.create`/`map.member.add\|remove`/`map.link.add\|remove`).
+  **DİKKAT (2026-07-11 kaydı):** bu 8 handler'ın WS-üzerinden uçtan-uca entegrasyon testi
+  HENÜZ YOK (yalnız curation.ts SAF testli) — DURUM.md'deki H1 bölümüne bak.
 - `router/hardware.ts` — nvidia-smi: `detectVramGb` (router) + `sampleGpus`/`parseGpuCsv` (saf,
   testli) → GPU vitalleri (util/VRAM/ısı). Daemon 2sn poll → `hardware.updated` yayını
   (`DaemonOptions.sampleHardware`, testte kapalı)

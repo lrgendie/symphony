@@ -271,6 +271,10 @@ export const PatchesListOkPayloadSchema = z
   .object({ patches: z.array(PatchSummarySchema) })
   .strip();
 
+/** Bağlam Haritası kürasyonu (ADR-019 Karar 1/2, Faz "H" Dilim H1) — cevaplar. */
+export const MapPinOkPayloadSchema = z.object({ nodeId: z.string().min(1) }).strip();
+export const MapGroupCreateOkPayloadSchema = z.object({ nodeId: z.string().min(1) }).strip();
+
 export const EVENT_PAYLOAD_SCHEMAS = {
   "hello.ok": HelloOkPayloadSchema,
   "state.sync.ok": StateSyncOkPayloadSchema,
@@ -289,6 +293,14 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   "feedback.submit.ok": AckPayloadSchema,
   "patches.list.ok": PatchesListOkPayloadSchema,
   "patch.resolve.ok": AckPayloadSchema,
+  "map.pin.ok": MapPinOkPayloadSchema,
+  "map.node.rename.ok": AckPayloadSchema,
+  "map.node.delete.ok": AckPayloadSchema,
+  "map.group.create.ok": MapGroupCreateOkPayloadSchema,
+  "map.member.add.ok": AckPayloadSchema,
+  "map.member.remove.ok": AckPayloadSchema,
+  "map.link.add.ok": AckPayloadSchema,
+  "map.link.remove.ok": AckPayloadSchema,
   "doctor.diagnose.ok": DoctorDiagnoseOkPayloadSchema,
   "doctor.run.ok": AckPayloadSchema,
   "doctor.phase": DoctorPhasePayloadSchema,

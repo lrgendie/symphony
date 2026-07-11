@@ -19,7 +19,15 @@ export interface BekciRegistry {
 
 export function readBekciRegistry(file: string): BekciRegistry {
   if (!existsSync(file)) return { projeler: [] };
-  const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+  // Sentaks düzeyinde bozuk JSON (2026-07-11 mimari tarama bulgusu B3): bu fonksiyon daemon'un
+  // poll döngüsünde (10sn'de bir) çağrılır — eskiden burada fırlayan bir hata daemon'ı
+  // düşürebilirdi (B1). trust.ts'teki AYNI "boşa düş" sözleşmesi burada da uygulanır.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return { projeler: [] };
+  }
   const raw =
     typeof parsed === "object" && parsed !== null && Array.isArray((parsed as { projeler?: unknown }).projeler)
       ? (parsed as { projeler: unknown[] }).projeler

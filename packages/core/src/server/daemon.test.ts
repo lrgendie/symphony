@@ -882,6 +882,34 @@ describe("symphonyd", () => {
     }
   }, 15_000);
 
+  it("bekci.json SENTAKS düzeyinde bozuksa (B1, 2026-07-11 mimari tarama bulgusu): daemon başlarken de sonraki poll turlarında da ÇÖKMEZ", async () => {
+    const dedicatedHome = mkdtempSync(join(tmpdir(), "symphony-bekci-bozuk-test-"));
+    const dedicatedPaths = ensureSymphonyHome(dedicatedHome);
+    // GERÇEKTEN sentaks-bozuk JSON — `writeBekciRegistry` bunu asla üretmez, elle yazılır.
+    // `startDaemon` içinde `pollBekci()` İLK ÇAĞRIYI senkron yapar (setInterval'DAN ÖNCE) —
+    // eski kodda bu satır JSON.parse'da fırlayıp startDaemon'ın kendisini reddederdi.
+    writeFileSync(dedicatedPaths.bekciFile, "{ bu gecerli json degil", "utf8");
+
+    const dedicated = await startDaemon({
+      port: 0,
+      home: dedicatedHome,
+      sampleHardware: false,
+      scheduleReports: false,
+      watchBekci: true,
+      bekciPollMs: 50,
+    });
+    try {
+      // İki-üç poll turu daha geçsin — periyodik çağrı da (setInterval yolu) çökmesin.
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const res = await fetch(`http://127.0.0.1:${dedicated.port}/api/health`);
+      expect(res.ok).toBe(true);
+      expect((await res.json()).ok).toBe(true);
+    } finally {
+      await dedicated.close();
+      rmSync(dedicatedHome, { recursive: true, force: true });
+    }
+  });
+
   it("agentSuggestions (ADR-018 Karar 8, Dilim D7): pinsiz agent'ın GERÇEK koşu verisinden açık kazananı varsa öneri üretir; PİNLİ agent (doktor) HİÇ önerilmez", async () => {
     const dedicatedHome = mkdtempSync(join(tmpdir(), "symphony-agent-oneri-test-"));
     const dedicatedPaths = ensureSymphonyHome(dedicatedHome);

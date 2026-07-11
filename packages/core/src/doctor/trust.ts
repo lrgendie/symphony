@@ -18,7 +18,16 @@ export interface TrustFile {
 
 export function readTrust(file: string): TrustFile {
   if (!existsSync(file)) return { trusted: [] };
-  const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+  // Sentaks düzeyinde bozuk JSON (2026-07-11 mimari tarama bulgusu B3): eskiden JSON.parse
+  // burada fırlatıyordu — belge/test yalnız yanlış-ŞEKİLLİ (geçerli JSON, yanlış tip) durumu
+  // sınıyordu, gerçekten bozuk dosyada çökme GERÇEKLEŞİYORDU. Diğer okuyucularla (permissions.json
+  // hariç — o KASITLI bir güvenlik sınırı) AYNI "boşa düş" sözleşmesi burada da uygulanır.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return { trusted: [] };
+  }
   const trusted =
     typeof parsed === "object" &&
     parsed !== null &&

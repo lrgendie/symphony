@@ -56,6 +56,13 @@ describe("readTrust/writeTrust — SAF roundtrip", () => {
     writeFileSync(file, JSON.stringify({ trusted: [1, 2, "KOD_C"] }), "utf8");
     expect(readTrust(file)).toEqual({ trusted: ["KOD_C"] });
   });
+
+  it("SENTAKS düzeyinde bozuk JSON (B3, 2026-07-11 mimari tarama): çökmeden boş listeye düşer", () => {
+    // Yukarıdaki test yalnız YANLIŞ-ŞEKİLLİ ama GEÇERLİ JSON'u sınıyordu — JSON.parse'ın
+    // GERÇEKTEN bozuk (sentaks hatalı) girdide fırlattığı durumu KAÇIRIYORDU.
+    writeFileSync(file, "{ bu gecerli json degil", "utf8");
+    expect(readTrust(file)).toEqual({ trusted: [] });
+  });
 });
 
 describe("withTrust/withoutTrust/isTrusted — SAF", () => {

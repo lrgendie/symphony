@@ -106,13 +106,89 @@ saatin kenarlarında dash akış nabzı, yeni düğüm spring doğuşu, katlanma
 `prefers-reduced-motion` desteği (geri dönüş koşulu). Saf matematik (varsa) ayrı modülde testli;
 görsel doğrulama kullanıcıyla. `pnpm build && pnpm test && pnpm lint`; DURUM güncelle.
 
-**Sıradaki:** H1'den başla (Sonnet yeterli). ✅ Fable'ın mimari tarama raporu TAMAMLANDI →
-**`rapor/mimari-tarama-2026-07-11.md`** — 2 ORTA bulgu (B1 bekçi poll'u daemon'ı düşürebilir;
-B2 patch apply'da merge çakışması yarım-merge bırakır) + B3 belge-test-kod uyuşmazlığı
-(readTrust/readBekciRegistry gerçekten bozuk JSON'da FIRLATIR, test yalnız yanlış-şekli
-sınıyor) + düşük bulgular ve N1 (Türkçe tanımlayıcı) kararı. Önerilen sıra raporda §7:
-B1+B3 birlikte (Sonnet) → B2 (Sonnet) → N1 kararı kullanıcıyla. H dilimlerinden bağımsız,
-önce yapılabilir.
+## Tarama bulguları B1+B3 BİTTİ ve testli (2026-07-11, Fable)
+
+`rapor/mimari-tarama-2026-07-11.md` §7 sırasıyla ilk adım kapandı.
+
+- **`core/src/doctor/trust.ts` `readTrust`:** `JSON.parse` artık try/catch'te — sentaks
+  düzeyinde bozuk dosyada (eskiden fırlıyordu) `{trusted: []}`'a düşer.
+- **`core/src/bekci/registry.ts` `readBekciRegistry`:** AYNI düzeltme — bu fonksiyon daemon'un
+  10sn'lik poll döngüsünde çağrıldığı için asıl kritik olan buydu (B1'in kök nedeni).
+- **`core/src/server/daemon.ts` `pollBekci`:** iki katmanlı hata yutma — (a) `readBekciRegistry`
+  çağrısı ayrı try/catch'te (B3 düzeltmesine RAĞMEN başka bir G/Ç hatası ihtimaline karşı
+  savunma katmanı, `log.warn` + o turu atlar); (b) HER PROJENİN kendi log G/Ç'si (existsSync→
+  statSync→openSync/readSync→findMatches→recordTelemetry) kendi try/catch'inde — bir projenin
+  hatası (silinen/kilitlenen log dosyası) ne daemon'ı ne diğer projelerin izlenmesini etkiler.
+  `pollBekci` hem `startDaemon`'ın senkron ilk çağrısında hem `setInterval` yolunda AYNI
+  fonksiyon olduğu için tek düzeltme ikisini de kapsıyor.
+- **Test:** 617→**620** (+3, dosya sayısı sabit — mevcut test dosyalarına eklendi):
+  `registry.test.ts` +1 (sentaks-bozuk JSON → çökmeden boş liste), `trust.test.ts` +1 (aynı),
+  `daemon.test.ts` +1 (GERÇEK `startDaemon` — bekci.json elle sentaks-bozuk yazılır, daemon
+  hem açılışta hem 2-3 poll turu sonra hâlâ ayakta, `/api/health` ok döner). `pnpm build &&
+  pnpm test && pnpm lint` temiz.
+- **BİLİNÇLİ TEST BOŞLUĞU:** per-proje try/catch'in "bir projenin log I/O'su patlarken diğer
+  proje etkilenmez" kısmı ayrı bir OS-seviyesi race testiyle KANITLANMADI — bunu deterministik
+  simüle etmek (dizin-olarak-log-dosyası, exclusive kilit vb. denendi) platform-bağımlı ve
+  kırılgan çıktı; `SandboxOps` gibi bir test seams'i eklemek bu boyuttaki bir düzeltme için
+  fazla mühendislik olurdu. Değişikliğin doğruluğu kod incelemesiyle (her proje kendi
+  try/catch'inde, for döngüsü doğal olarak sıradakine geçer) teyit edildi.
+
+**B2 (patch apply merge çakışması) ve N1 (Türkçe tanımlayıcı kararı) HENÜZ YAPILMADI** — rapor
+§7'nin sıradaki adımları, H dilimlerinden bağımsız istenildiğinde yapılabilir.
+
+## Dilim H1 — kürasyon temeli KISMEN BİTTİ (2026-07-11, Fable) — daemon entegrasyon testi EKSİK
+
+Kullanıcı talimatı ("DURUM.md'yi oku, önce tarama raporu B1+B3, sonra Dilim H1") sırasıyla
+uygulandı; H1'in altı adımından İLK BEŞİ kodlandı ve testli, **6. adım (build+test+lint +
+DURUM güncelle) şu haliyle çalıştırıldı ama daemon.ts'in 8 yeni handler'ı için WS-üzerinden
+uçtan-uca bir entegrasyon testi (talimattaki "pin→rename→link→group→detach→delete roundtrip +
+koruma reddi + restart sonrası kalıcılık") HENÜZ YAZILMADI** — kullanıcı context/limit
+kısıtı bildirdiği için ("limit doldu") burada durup commit edildi. Devralan oturum ÖNCE bu
+testi yazmalı, SONRA H2'ye geçmeli.
+
+- **`docs/PROTOKOL.md`:** 8 istek satırı eklendi (`map.pin`/`map.node.rename`/`map.node.delete`/
+  `map.group.create`/`map.member.add`/`map.member.remove`/`map.link.add`/`map.link.remove`) —
+  `doctor.run` satırının HEMEN ÖNÜNE, ADR-019 Karar 2'deki payload şekilleriyle birebir.
+- **`shared/src/protocol/requests.ts`:** zod şemaları — `MapPinPayloadSchema` `.superRefine`
+  ile "ref yoksa title zorunlu" kısıtını taşır; `nodeId`/`groupId`/`from`/`to`/`members[]`
+  BİLİNÇLE `z.string().min(1)` (`.uuid()` DEĞİL) — türetilmiş id'ler (`project:`/`model:`/
+  `agent:`/`week:`) UUID formatında değil, şema onları reddetmemeli (daemon PROTECTED ile
+  reddetmeli). **`events.ts`:** `.ok` cevap şemaları (`map.pin.ok`/`map.group.create.ok`
+  `{nodeId}`, gerisi `AckPayloadSchema` `{}`).
+- **`core/src/db/store.ts`:** göç **v7** (`map_nodes`/`map_edges`, `patches`=v6'nın hemen
+  ardından) + `insertMapNode/mapNodeById/listMapNodes/renameMapNode/deleteMapNode(+kenar
+  kaskadı, transaction)/insertMapEdge/listMapEdges/deleteMapEdgeBetween` + YENİ
+  `agentRunById(id)` (map.pin'in ref'siz başlık türetmesi + kürasyon doğrulaması için,
+  `agentRunExists`in yanına eklendi).
+- **YENİ SAF `core/src/context-map/curation.ts`** (testli, `curation.test.ts` 20 test):
+  `isDerivedNodeId`/`isKnownGraphReference` + dört doğrulama fonksiyonu —
+  `checkCurationTarget` (rename/delete hedefi: kürasyon→ok, türetilmiş/gerçek session-run→
+  PROTECTED, hiçbiri değil→UNKNOWN), `checkGraphReference` (link/member ucu: kürasyon YA DA
+  türetilmiş/gerçek→ok), `checkGroupTarget` (groupId TAM OLARAK bir `group` düğümü olmalı),
+  `checkPinRef` (ref verildiyse gerçek olmalı). `lookup`/`exists` daemon'dan enjekte edilir.
+- **`core/src/server/daemon.ts`:** 8 handler eklendi (`patch.resolve`in hemen ardına,
+  `doctor.diagnose`den önce) — hepsi curation.ts'e delege, `store.listMapEdges()` üzerinde
+  idempotent ekleme (D4'ün `withTrust` deseni: tekrar eklemek çoğaltmaz), `member.remove`/
+  `link.remove` HER ZAMAN güvenli (eşleşme yoksa no-op, D4'ün `untrust` deseni). `mapNodeLookup`/
+  `mapRefExists` closure'ları `// ---- WebSocket ----`den hemen önce tanımlı.
+- **`shared/src/protocol/schemas.test.ts`:** +4 test (`map.pin`in `.superRefine` davranışı:
+  ne ref ne title→red, yalnız title→ok, yalnız ref→ok, ref.kind yalnız session\|run).
+- **Test:** 620→**644** (+24: `curation.test.ts` YENİ 20 SAF + `schemas.test.ts` +4).
+  `pnpm build && pnpm test && pnpm lint` bu haliyle TEMİZ (70 dosya/644 test) — **ama bu sayı
+  daemon.ts'in yeni 8 case'ini WS ÜZERİNDEN hiç EGZERSİZ ETMİYOR**, yalnız şema+curation
+  saflığını kanıtlıyor. `daemon.ts`teki case bloklarının derlendiği build ile doğrulandı,
+  çalıştığı DOĞRULANMADI.
+- **BİLİNÇLİ EKSİK (devralan oturum İLK iş bunu yapmalı):** `daemon.test.ts`e talimattaki
+  entegrasyon testi — dedicated home + seed (bir session + bir tamamlanmış agent_run) →
+  WS hello → `map.pin{ref:session}` (başlık session'dan türer mi?) → `map.pin{ref:run}` →
+  `map.node.rename` → `map.link.add` → `map.group.create` → `map.member.add` →
+  `map.member.remove` (kopar) → koruma reddi (`map.node.delete{nodeId:"agent:coder"}` →
+  PROTECTED; bilinmeyen id → UNKNOWN; `map.pin{ref: rastgele-uuid}` → REF_UNKNOWN) →
+  `map.node.delete` (kenar kaskadını da kanıtla) → **daemon kapat, YENİ bir `DataStore` aç,
+  `listMapNodes`/`listMapEdges`ile kalıcılığı doğrula** (mevcut testlerdeki `db2 = new
+  DataStore(...)` deseniyle AYNI, gerçek restart gerekmez).
+
+**Sıradaki:** yukarıdaki eksik testi tamamla (H1'i GERÇEKTEN kapat) → sonra H2'ye geç.
 
 ## Dilim D7 — agent tanım-güncelleme önerisi BİTTİ (2026-07-11, Sonnet) — Faz 6'nın son açık maddesi kapandı
 

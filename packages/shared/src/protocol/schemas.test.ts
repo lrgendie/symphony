@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ChatStartPayloadSchema } from "./requests.js";
+import { ChatStartPayloadSchema, MapPinPayloadSchema } from "./requests.js";
 import { AgentToolRequestedPayloadSchema } from "./events.js";
 import { ErrorPayloadSchema } from "./common.js";
 
@@ -54,6 +54,29 @@ describe("agent.tool.requested", () => {
       diff: "--- a/a.txt\n+++ b/a.txt\n",
     });
     expect(parsed.riskClass).toBe("mutating");
+  });
+});
+
+describe("map.pin (ADR-019 Karar 2) — ref'siz çağrıda title ZORUNLU", () => {
+  it("ne ref ne title verilirse reddedilir", () => {
+    expect(MapPinPayloadSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("yalnız title verilirse geçerlidir (serbest konu düğümü)", () => {
+    const parsed = MapPinPayloadSchema.parse({ title: "Bağlam Haritası tasarımı" });
+    expect(parsed.title).toBe("Bağlam Haritası tasarımı");
+    expect(parsed.ref).toBeUndefined();
+  });
+
+  it("ref verilirse title OPSİYONELDİR (başlık daemon'da türetilir)", () => {
+    const parsed = MapPinPayloadSchema.parse({ ref: { kind: "session", id: uuid() } });
+    expect(parsed.title).toBeUndefined();
+  });
+
+  it("ref.kind yalnız session|run kabul eder", () => {
+    expect(
+      MapPinPayloadSchema.safeParse({ ref: { kind: "chat", id: uuid() } }).success,
+    ).toBe(false);
   });
 });
 
