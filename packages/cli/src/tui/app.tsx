@@ -123,6 +123,9 @@ export function AgentFlow(props: {
   models: ModelInfo[];
   lastSession: HistorySessionSummary | null;
   onExit: () => void;
+  /** Agent tanımının pinlediği model (varsa) — model seçicide yalnız BAŞLANGIÇ imleci olur. */
+  pinnedProvider?: string;
+  pinnedModel?: string;
 }): JSX.Element {
   const resumeModel =
     props.lastSession !== null
@@ -191,6 +194,8 @@ export function AgentFlow(props: {
           initialSessionId={stage.sessionId}
           seedExchange={stage.seed}
           fixedModel={stage.fixedModel}
+          pinnedProvider={props.pinnedProvider}
+          pinnedModel={props.pinnedModel}
         />
       </Box>
     );
@@ -233,6 +238,8 @@ export function App(props: {
           lastSession={props.lastSession}
           // Konuşma bitince Esc → persona seçimine dön (TUI kapanmaz).
           onExit={() => setPersona(null)}
+          pinnedProvider={persona.agent.provider}
+          pinnedModel={persona.agent.model}
         />
       )}
     </Box>

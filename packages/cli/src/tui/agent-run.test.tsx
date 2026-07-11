@@ -99,6 +99,67 @@ describe("AgentRun — çalışma dizini ve model adımları", () => {
     expect(fake.requests[0]?.payload).toMatchObject({ provider: "anthropic", model: "claude-sonnet-5" });
   });
 
+  it("`pinnedProvider`/`pinnedModel` verilirse model seçicide o modelin İMLECİ BAŞLANGIÇTA seçili gelir (kullanıcı isteği: varsayılan gözüksün)", async () => {
+    const fake = fakeClient();
+    const { stdin } = render(
+      <AgentRun
+        client={fake.client}
+        agentId="coder"
+        cwd="/ws"
+        models={models}
+        onExit={() => {}}
+        pinnedProvider="ollama"
+        pinnedModel="qwen3:8b"
+      />,
+    );
+    await tick();
+    stdin.write("\r"); // cwd varsayılan
+    await tick();
+    // OK BASMADAN doğrudan Enter — imleç ZATEN pinlenen modelde olmalı (router'da DEĞİL).
+    stdin.write("\r");
+    await tick();
+    stdin.write("görev");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    expect(fake.requests[0]?.payload).toMatchObject({ provider: "ollama", model: "qwen3:8b" });
+  });
+
+  it("`pinnedModel` verilse bile DİĞER modeller listede kalır — kullanıcı ↓ ile başka birini seçebilir", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun
+        client={fake.client}
+        agentId="coder"
+        cwd="/ws"
+        models={models}
+        onExit={() => {}}
+        pinnedProvider="ollama"
+        pinnedModel="qwen3:8b"
+      />,
+    );
+    await tick();
+    stdin.write("\r"); // cwd varsayılan
+    await tick();
+    const frame = lastFrame() ?? "";
+    // Liste TAM: router + iki model, hepsi görünür (yalnız imleç konumu değişti).
+    expect(frame).toContain("Router seçsin");
+    expect(frame).toContain("anthropic/claude-sonnet-5");
+    expect(frame).toContain("ollama/qwen3:8b");
+    expect(frame).toContain("(varsayılan)");
+
+    // İmleç qwen3:8b'de (index 2) başlar; ↑ ile bir önceki seçeneğe (claude-sonnet-5) geçilebilir.
+    stdin.write("[A"); // yukarı ok
+    await tick();
+    stdin.write("\r");
+    await tick();
+    stdin.write("görev");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    expect(fake.requests[0]?.payload).toMatchObject({ provider: "anthropic", model: "claude-sonnet-5" });
+  });
+
   it("Router seçilirse request'te provider/model alanı OLMAZ", async () => {
     const fake = fakeClient();
     const { stdin } = render(<AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />);
@@ -407,6 +468,63 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
     const frame = lastFrame() ?? "";
     expect(frame).toContain("koşu başarısız: AGENT_MAX_STEPS");
     expect(frame).toContain("adım sınırı aşıldı");
+  });
+
+  it("BAŞARISIZLIK sonrası Enter → model seçiciye GERİ döner (kullanıcı isteği: aynı modelle sessizce tekrar denenmez)", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
+    );
+    await skipCwdAndModel(stdin); // router seçildi
+    stdin.write("imkansız görev");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    fake.emit("agent.run.failed", {
+      runId: RUN_ID,
+      error: { code: "AGENT_MAX_STEPS", message: "adım sınırı aşıldı" },
+    });
+    await tick();
+    expect(lastFrame()).toContain("model seç + yeni görev"); // ipucu satırı farklılaştı
+
+    stdin.write("\r"); // Enter → BAŞARISIZLIK sonrası → model seçici gelmeli
+    await tick();
+    expect(lastFrame()).toContain("Hangi model?"); // "Görev nedir?" DEĞİL
+
+    // Yeniden model seçip görev girilebilir — akış TAMAMEN çalışır durumda.
+    stdin.write("\r"); // router
+    await tick();
+    stdin.write("ikinci deneme");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    const secondStart = fake.requests.filter((r) => r.type === "agent.start")[1];
+    expect(secondStart?.payload).toMatchObject({ task: "ikinci deneme" });
+  });
+
+  it("BAŞARILI koşu sonrası Enter model seçiciye DÖNMEZ (yalnız başarısızlıkta değişti)", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
+    );
+    await skipCwdAndModel(stdin);
+    stdin.write("görev");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    fake.emit("agent.run.completed", {
+      runId: RUN_ID,
+      result: "tamam",
+      usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+    });
+    await tick();
+
+    stdin.write("\r"); // Enter → yeni görev (model seçici DEĞİL)
+    await tick();
+    expect(lastFrame()).toContain("Görev nedir?");
+    expect(lastFrame()).not.toContain("Hangi model?");
   });
 
   it("agent.start reddedilirse (örn. AGENT_UNKNOWN) hata satırı gösterir", async () => {

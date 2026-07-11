@@ -48,6 +48,13 @@ export function AgentRun(props: {
   seedExchange?: string[];
   /** Resume: model önceki oturumunkiyle sabitlenir → model seçici atlanır. */
   fixedModel?: ModelInfo;
+  /**
+   * Agent tanımının pinlediği model (varsa, ör. D7 `agent-oneri`nin yazdığı pin) — model
+   * seçicide yalnız BAŞLANGIÇ imleci bunu gösterir; liste TAM kalır, kullanıcı istediği an
+   * başka bir model seçebilir (`fixedModel`den FARKLI: o seçiciyi TAMAMEN atlar, bu atlamaz).
+   */
+  pinnedProvider?: string;
+  pinnedModel?: string;
 }): JSX.Element {
   const [cwd, setCwd] = useState<string | null>(null);
   const [cwdDraft, setCwdDraft] = useState(props.cwd);
@@ -203,8 +210,12 @@ export function AgentRun(props: {
    * Aynı agent/dizin/model ile yeni görev: koşu durumunu sıfırla, görev girişine dön.
    * sessionId de undefined'a düşer (rapor2 §3.1) — "yeni görev" GERÇEKTEN yeni oturum
    * üretir; aksi hâlde ekran boşken model resume edilen eski geçmişi görmeye devam ederdi.
+   *
+   * `clearModel` (kullanıcı isteği): koşu BAŞARISIZ olunca "yeni görev" model seçiciyi de
+   * yeniden göstermeli — aynı (belki kötü seçilmiş) modelle sessizce tekrar denemek yerine,
+   * kullanıcı bilinçli bir seçim yapabilsin.
    */
-  const resetForNewTask = (): void => {
+  const resetForNewTask = (options?: { clearModel?: boolean }): void => {
     runIdRef.current = null;
     setRunId(null);
     setTask(null);
@@ -220,6 +231,7 @@ export function AgentRun(props: {
     setExchange([]);
     setSessionId(undefined);
     setFeedbackSent(null);
+    if (options?.clearModel === true) setModelChoice(null);
   };
 
   /** awaiting_user'daki koşuya sonraki kullanıcı turunu gönderir (agent.say, aynı runId). */
@@ -261,8 +273,10 @@ export function AgentRun(props: {
       return;
     }
     // Koşu bitti: Enter → yeni görev, Esc → ana menü. Süreç KAPANMAZ (tek-seferlik değil).
+    // BAŞARISIZLIKTA (kullanıcı isteği): "yeni görev" model seçiciyi de yeniden gösterir —
+    // aynı modelle sessizce tekrar denemek yerine bilinçli bir seçim istenir.
     if (outcome !== null) {
-      if (key.return) resetForNewTask();
+      if (key.return) resetForNewTask({ clearModel: outcome.kind === "failed" });
       else if (key.escape) props.onExit();
       // Geri bildirim (ADR-016 Karar 4): g/k tek seferlik, akışı ASLA bloklamaz — hata
       // sessizce yutulur (öneri süsü gibi, koşunun sonucu zaten kesinleşmiş).
@@ -301,7 +315,11 @@ export function AgentRun(props: {
   }
 
   if (modelChoice === null) {
-    return <AgentModelPicker models={props.models} onPick={setModelChoice} />;
+    const preferred =
+      props.pinnedProvider !== undefined && props.pinnedModel !== undefined
+        ? { provider: props.pinnedProvider, model: props.pinnedModel }
+        : undefined;
+    return <AgentModelPicker models={props.models} onPick={setModelChoice} preferred={preferred} />;
   }
 
   if (task === null) {
@@ -370,20 +388,36 @@ export function AgentRun(props: {
                 : `✓ geri bildirim kaydedildi (${feedbackSent === "good" ? "iyi" : "kötü"})`}
             </Text>
           )}
-          <Text dimColor>↵ Enter: yeni görev · Esc: ana menü</Text>
+          <Text dimColor>
+            ↵ Enter: {outcome.kind === "failed" ? "model seç + yeni görev" : "yeni görev"} · Esc: ana menü
+          </Text>
         </>
       )}
     </Box>
   );
 }
 
-/** Model seçici + "router seçsin" seçeneği (model-picker.tsx ile aynı ↑/↓+Enter deseni). */
+/**
+ * Model seçici + "router seçsin" seçeneği (model-picker.tsx ile aynı ↑/↓+Enter deseni).
+ *
+ * `preferred` (agent tanımının pinlediği model, D7 `agent-oneri`nin ürettiği pin dahil):
+ * yalnız İMLECİN başlangıç konumunu belirler — liste TAM kalır, kullanıcı istediği an
+ * ↑/↓ ile başka bir modele geçebilir (kullanıcı isteği: "varsayılan gözüksün, diğerleri
+ * listeli olsun, değiştirmek istersem başında seçeyim").
+ */
 function AgentModelPicker(props: {
   models: ModelInfo[];
   onPick: (choice: ModelChoice) => void;
+  preferred?: { provider: string; model: string };
 }): JSX.Element {
   const options: ModelChoice[] = ["router", ...props.models];
-  const [index, setIndex] = useState(0);
+  const preferredIndex =
+    props.preferred !== undefined
+      ? options.findIndex(
+          (o) => o !== "router" && o.provider === props.preferred?.provider && o.id === props.preferred?.model,
+        )
+      : -1;
+  const [index, setIndex] = useState(preferredIndex >= 0 ? preferredIndex : 0);
 
   useInput((_input, key) => {
     if (key.upArrow) setIndex((i) => (i > 0 ? i - 1 : options.length - 1));
@@ -399,6 +433,7 @@ function AgentModelPicker(props: {
       <Text bold>Hangi model? (↑/↓ + Enter):</Text>
       {options.map((choice, i) => {
         const selected = i === index;
+        const isPreferred = i === preferredIndex;
         const label =
           choice === "router" ? (
             <>
@@ -407,6 +442,7 @@ function AgentModelPicker(props: {
           ) : (
             <>
               {choice.provider}/{choice.id} <Text dimColor>[{choice.local ? "yerel" : "bulut"}]</Text>
+              {isPreferred && <Text dimColor> (varsayılan)</Text>}
             </>
           );
         return (

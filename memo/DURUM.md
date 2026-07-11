@@ -67,6 +67,34 @@ bilgiyle sabitlendi — o türden bir kararı otomatikleştirmek riskli, bilinç
 **Faz 6 (ADR-016) artık TAMAMEN kapandı** — ROADMAP'teki tek açık madde ("kendini geliştirme
 döngüsü") D5 (zamanlanmış üretim) + D7 (agent tanım-güncelleme önerisi) ile tam karşılandı.
 
+### D7 eki — TUI: pin "varsayılan ama değiştirilebilir" + başarısızlıkta model seçiciye dönüş (2026-07-11)
+
+Kullanıcı D7'nin `coder` önerisini gerçekten uygulattı (`agent-oneri uygula coder` → `~/.symphony/
+agents/coder.md`ye `provider: ollama` + `model: qwen3:8b` yazıldı) VE TUI'nin bunu nasıl
+göstereceğine dair ek bir istek getirdi: pin, model seçiciyi ATLAMASIN (mevcut `fixedModel`/resume
+davranışı gibi) — yalnız o modeli BAŞLANGIÇTA seçili göstersin, diğer modeller LİSTELİ kalsın,
+kullanıcı isterse oturum başında değiştirebilsin. Ayrıca: koşu BAŞARISIZ olursa "yeni görev" model
+seçiciyi de yeniden göstersin (aynı — belki kötü seçilmiş — modelle sessizce tekrar denenmesin).
+
+- **`tui/agent-run.tsx`:** `AgentModelPicker`e `preferred?: {provider,model}` — yalnız BAŞLANGIÇ
+  `index`ini o modele koyar (`options.findIndex`), liste TAM kalır, satırda "(varsayılan)" etiketi.
+  `AgentRun`e `pinnedProvider?`/`pinnedModel?` prop'ları — `fixedModel`den KASITLA farklı (o
+  seçiciyi TAMAMEN atlar; bu atlamaz). `resetForNewTask({clearModel?})`: `outcome.kind==="failed"`
+  iken Enter `clearModel:true` ile çağrılır → `modelChoice` `null`a döner → seçici yeniden görünür;
+  BAŞARILI koşuda davranış DEĞİŞMEDİ (aynı model, doğrudan görev girişi). İpucu satırı da
+  farklılaştı ("model seç + yeni görev" vs "yeni görev").
+- **`tui/app.tsx`:** `AgentFlow`e `pinnedProvider?`/`pinnedModel?` eklendi, `App` bunu
+  `persona.agent.provider`/`.model`den (zaten `AgentSummary`nin parçası, protokol değişikliği
+  GEREKMEDİ) doldurup `AgentFlow`→`AgentRun`e taşır.
+- **Test:** +4 (`agent-run.test.tsx`) — pin verilince ok basmadan Enter pinlenen modeli seçer;
+  diğer modeller LİSTELİ kalır + ↑ ile başka birine geçilebilir; BAŞARISIZLIK sonrası Enter
+  seçiciye döner ve akış BAŞTAN SONA tekrar çalışır; BAŞARILI koşuda seçiciye DÖNMEDİĞİ (yalnız
+  başarısızlıkta değişti) ayrıca doğrulandı. 599→**603** test, `pnpm build/test/lint` temiz.
+- **CANLI SINIR:** gerçek Ink TUI'si raw-mode TTY gerektirir, bu ortamda (Bash üzerinden pipe)
+  çalıştırılamaz — doğrulama `ink-testing-library` ile GERÇEK bileşen üzerinden yapıldı (mock
+  değil, gerçek `AgentModelPicker`/`AgentRun` render+tuş simülasyonu); kullanıcının kendi
+  terminalinde gözle son bir kontrolü faydalı olur.
+
 ## Faz 8 — Dilim D6 (bekçi modu v1) BİTTİ (2026-07-11, Sonnet) — Faz 8 D1-D6 TAMAMEN KAPANDI
 
 ## Faz 8 — Dilim D6 (bekçi modu v1) BİTTİ (2026-07-11, Sonnet) — Faz 8 D1-D6 TAMAMEN KAPANDI

@@ -281,7 +281,12 @@ protokol WS/REST üzerinden konuşulur.
     Dilim 2.2: koşular `conversational: true` başlar; awaiting_user'da "devam yaz" girişi
     (`agent.say`, aynı runId), biten turlar `exchange` dökümünde kalır. Dilim 2.3c: opsiyonel
     `initialSessionId` (agent.start'a → oturuma devam) / `seedExchange` (ekran tohumu) / `fixedModel`
-    (model seçici atlanır) — AgentFlow resume'da geçer
+    (model seçici atlanır) — AgentFlow resume'da geçer. D7 sonrası (2026-07-11, kullanıcı isteği):
+    `pinnedProvider`/`pinnedModel` (agent tanımının pini, `App`→persona.agent'tan gelir) — `fixedModel`
+    GİBİ seçiciyi ATLAMAZ, yalnız `AgentModelPicker`nin BAŞLANGIÇ imlecini o modele koyar (liste TAM
+    kalır, "(varsayılan)" etiketiyle işaretlenir). `resetForNewTask({clearModel})`: koşu BAŞARISIZ
+    olunca "yeni görev" model seçiciyi de yeniden gösterir (aynı modelle sessizce tekrar denenmez);
+    BAŞARILI koşuda davranış DEĞİŞMEDİ (aynı model, doğrudan görev girişi)
 
 ### packages/ui/src — masaüstü dashboard (React+Vite, Faz 4) — hem tarayıcı hem Tauri
 - `config.ts` — `getBootstrap()`: token+port'u `window.__SYMPHONY__` (Tauri enjekte eder) ya
