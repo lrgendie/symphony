@@ -12,11 +12,13 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "docs:pdf": "md-to-pdf docs/REHBER.md"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",
     "eslint": "^10.6.0",
+    "md-to-pdf": "^5.2.5",
     "prettier": "^3.9.4",
     "turbo": "^2.10.2",
     "typescript": "^6.0.3",

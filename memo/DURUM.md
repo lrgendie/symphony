@@ -3,7 +3,35 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Sonnet — Dilim F6 yazıldı, CANLI TETİKLENMEDİ; test sayısı sabit 418)
+**Son güncelleme:** 2026-07-11 (Sonnet — Dilim F7 BİTTİ, F1-F7 TAMAMI kapandı; test sayısı sabit 418)
+
+## Faz 7 — Dilim F7 (REHBER.md + docs:pdf) BİTTİ (2026-07-11, Sonnet) — Faz 7 F1-F7 TAMAMEN kapandı
+
+ADR-017 Karar 5 uygulandı. Kod dokunulmadı; yalnız belge + kök script + devDependency.
+- **`md-to-pdf`** köke devDependency: `pnpm add -Dw md-to-pdf` → puppeteer'ın kurulum script'i
+  pnpm supply-chain politikasınca BLOKLANDI (`ERR_PNPM_IGNORED_BUILDS`) — kullanıcıya soruldu,
+  onayladı → `pnpm approve-builds puppeteer` (Chromium indirdi). Kök `package.json`'a
+  `"docs:pdf": "md-to-pdf docs/REHBER.md"`.
+- **YENİ `docs/REHBER.md`** (Türkçe, kod adları İngilizce) — ADR-017 Karar 5'in içindekiler
+  planı BİREBİR: sistem nedir → mimari şema (paket grafiği + daemon merkezli model, ASCII
+  diyagram) → kod haritası (BAGLAM.md'nin okuyucu-dostu özeti, tablo) → agent/araç/izin sistemi
+  (SPEC-AGENT özeti — risk sınıfları tablosu + 5 değişmez) → protokol özeti (PROTOKOL.md'den —
+  WS/REST ayrımı, zarf biçimi, durum makinesi) → komut başvurusu (TÜM `symphony` alt komutları,
+  `index.ts`'ten güncel) → kurulum+sync+update akışı (F3/F4/F5'in gerçek komutlarıyla).
+- **`pnpm docs:pdf` ÇALIŞTI** — `docs/REHBER.pdf` üretildi (240KB), kullanıcıya gönderilip
+  görsel kontrol istendi (F7'nin kendi kabul maddesi: "test gerekmez, görsel kontrol
+  kullanıcıya"). `.gitignore`'a `docs/REHBER.pdf` eklendi (üretilen dosya, dist/ gibi commit
+  edilmez — kaynak `docs/REHBER.md` commit edilir).
+- Test gerekmedi (belge). `pnpm lint` temiz; kod değişmediği için `build`/`test` atlandı.
+
+**FAZ 7 (Paketleme ve Taşınabilirlik) — F1-F7 TAMAMI BİTTİ.** Kalan tek şey KULLANICI
+tetiklemeli/interaktif adımlar: F2'nin npm login+org denemesi, F6'nın gerçek tag push'u +
+`NPM_TOKEN` secret'ı, F3'ün Program Files (.msi/yönetici) yolunun doğrulanması — hepsi
+DURUM.md'nin ilgili dilim notlarında açık talimatla bekliyor.
+
+**Sıradaki:** Faz 7'nin canlı/interaktif kalanları kullanıcıyla, ya da Faz 8 (Kendini
+Geliştiren Symphony) için Fable ile yeni bir tasarım oturumu (hiçbir kararı yok, ADR-017
+deseninde sıfırdan başlanmalı) — bir sonraki oturumda kullanıcıyla kararlaştırılacak.
 
 ## Faz 7 — Dilim F6 (GitHub Actions release matrix) YAZILDI, canlı tetiklenmedi (2026-07-11, Sonnet)
 
@@ -327,7 +355,7 @@ Kök+3 paket sürümü zaten 0.1.0 (lockstep başlangıcı hazır).
    git push --tags` → Actions yeşil → Releases'ta 4 installer + npm'de yeni sürüm. ARM/macOS
    runner kırılırsa ADR geri dönüşü: matrix'ten çıkar, Windows x64 kalır, DURUM'a not düş.
 
-### 📋 Dilim F7 — REHBER.md + docs:pdf (BAĞIMSIZ — istenirse öne alınabilir) — SIRADAKİ
+### ✅ Dilim F7 — REHBER.md + docs:pdf (BAĞIMSIZ — istenirse öne alınabilir) — BİTTİ (yukarıda ayrıntı; orijinal talimat aşağıda arşivlendi)
 
 1. `md-to-pdf` köke devDependency (ÖNCE `docs/GEREKSINIMLER.md` envanterine işle — puppeteer
    tabanlı, yalnız dev-time). Kök package.json'a `"docs:pdf": "md-to-pdf docs/REHBER.md"`.

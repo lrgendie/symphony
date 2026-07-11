@@ -4,3 +4,4 @@ allowBuilds:
   esbuild: true
   "@napi-rs/keyring": true
   better-sqlite3: true
+  puppeteer: true

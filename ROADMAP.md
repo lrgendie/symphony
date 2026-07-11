@@ -281,18 +281,26 @@ symphony/
 - **Çıktı:** "Şu PDF'leri özetleyecek bir şey lazım" dediğinde donanımına, geçmişine ve bütçene göre doğru modeli öneren; seni tanıdıkça isabeti artan sistem.
 - **Kabul testi:** Router v2 önerileri gerçek kullanım skorlarına dayanıyor ve gerekçesini gösteriyor; kullanıcı hafızasına yazılan bir tercih yeni oturumda agent bağlamında görülüyor; haftalık rapor üretiliyor; tüm öğrenme verisi lokalde kalıyor (dışarı istek testle doğrulanmış şekilde yok).
 
-### Faz 7 — Paketleme ve Taşınabilirlik (18–19. hafta)
-- [ ] Tauri installer'ları: Windows x64/ARM64 (.msi), macOS Intel/Apple Silicon (.dmg)
-- [ ] CLI dağıtımı: npm paketi + tek dosya binary seçeneği
-- [ ] `symphony sync`: `~/.symphony/` klasörünü özel git deposuyla eşitleme (yeni makinede 2 dakikada kurulum)
-- [ ] Otomatik güncelleme (sürümlü + tek komutla geri alınabilir; güncelleyici çekirdek ayrı ve dokunulmaz)
-- [ ] **Mimari + kullanım PDF rehberi:** sistemin ne yaptığı, mimari şema, kod haritası
-  (hangi paket/dosya ne işe yarar), araçlar/agent'lar/skill'ler ve kodda nerede tanımlı
-  oldukları, protokol özeti, komut başvurusu. Kaynak markdown (`docs/REHBER.md`) olarak
-  yazılır — sistem geliştikçe güncellenir — ve PDF'e derlenir. Tüm sistem tamamlanınca
-  teslim edilir; iskeleti Faz 4 sonunda çıkarılır ki belge kodla birlikte büyüsün
+### Faz 7 — Paketleme ve Taşınabilirlik (18–19. hafta) — ADR-017 (F1-F7 yazıldı/testli); kullanıcı-tetiklemeli adımlar kaldı
+- [~] Tauri installer'ları: Windows x64/ARM64 (.msi), macOS Intel/Apple Silicon (.dmg) — Dilim
+  F3: Windows x64 (NSIS) GERÇEKTEN kurulup `symphony`'nin otomatik bulup başlattığı canlı
+  doğrulandı 2026-07-11; ARM64/macOS CI matrix'i (Dilim F6) yazıldı ama gerçek tag push'lanıp
+  koşulmadı (Mac/ARM erişimi yok) — Windows Program Files (.msi, yönetici) yolu da doğrulanmadı
+- [~] CLI dağıtımı: npm paketi + tek dosya binary seçeneği — Dilim F1: üç paket (shared/core/cli)
+  yayın metadata'sıyla hazır, tek-dosya binary ADR-017 Karar 1'de REDDEDİLDİ (native modüller
+  kırar); gerçek `npm publish` KULLANICININ npm login'ini bekliyor (Dilim F2, kısmen)
+- [x] `symphony sync`: Dilim F4 — beyaz liste (config/providers/agents/memory/mcp-servers),
+  gerçek git ile (ağ yok, yerel bare repo) uçtan uca test edildi; `daemon.token`/`data` asla
+- [x] Otomatik güncelleme (sürümlü + tek komutla geri alınabilir; güncelleyici çekirdek ayrı ve
+  dokunulmaz) — Dilim F5: `symphony update`/`rollback` + `POST /api/shutdown`, testli; gerçek
+  registry'ye karşı kabul F2'nin npm yayınına bağımlı, henüz yapılmadı
+- [x] **Mimari + kullanım PDF rehberi** — Dilim F7 (2026-07-11): `docs/REHBER.md` yazıldı,
+  `pnpm docs:pdf` ile PDF üretimi çalışıyor, kullanıcıya görsel kontrol için gönderildi
 - **Çıktı:** Kur → giriş yap → senkronla → devam et.
-- **Kabul testi:** Windows installer temiz bir makinede kurulup çalışıyor; `symphony` komutu PATH'te; `symphony sync` ikinci makinede ayarları ve agent tanımlarını geri getiriyor (anahtarlar hariç — onlar yeniden girilir); güncelleme tek komutla geri alınabiliyor.
+- **Kabul testi:** Windows installer temiz bir makinede kurulup çalışıyor ✅ (F3, NSIS);
+  `symphony` komutu PATH'te ✅; `symphony sync` ikinci makinede ayarları ve agent tanımlarını
+  geri getiriyor ✅ (F4, testle kanıtlı); güncelleme tek komutla geri alınabiliyor ✅ (F5,
+  execa/versions.json testle kanıtlı — gerçek npm registry'ye karşı KULLANICI ile doğrulanacak).
 
 ### Faz 8 — Kendini Geliştiren Symphony (20. hafta ve sonrası, sürekli) ⭐ nihai hedef
 > Symphony'nin kod agent'ı vardır; kendini geliştirmek = agent'ın hedef olarak **kendi reposunu** alması.

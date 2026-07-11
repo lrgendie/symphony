@@ -76,7 +76,7 @@
 | Kütüphane | Amaç |
 |---|---|
 | `vitest` | Test paketi — kendini güncellemenin bağışıklık sistemi |
-| `md-to-pdf` | `docs/REHBER.md` → PDF derleme (ADR-017 Karar 5, Dilim F7; puppeteer tabanlı, yalnız dev-time) ⬜ F7'de kurulacak |
+| `md-to-pdf` | `docs/REHBER.md` → PDF derleme (ADR-017 Karar 5, Dilim F7; puppeteer tabanlı, yalnız dev-time) ✅ kuruldu 2026-07-11 (`pnpm approve-builds puppeteer` ile Chromium indirme onaylandı — kullanıcı onayıyla) |
 | `eslint` + `prettier` | Kod kalitesi ve format |
 | `tsx` | TS dosyalarını derlemeden çalıştırma (geliştirme) |
 | `turbo` | Monorepo görev orkestrasyonu (build/test önbelleği) |
