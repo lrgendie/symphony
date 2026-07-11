@@ -3,7 +3,161 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Sonnet — Dilim F7 BİTTİ, F1-F7 TAMAMI kapandı; test sayısı sabit 418)
+**Son güncelleme:** 2026-07-11 (Fable — Faz 8 tasarımı TAMAM: ADR-018 yazıldı, dilimler D1-D6 Sonnet'e hazır)
+
+## Faz 8 — Kendini Geliştiren Symphony: TASARIM TAMAM (2026-07-11, Fable — ADR-018) → dilimler D1..D6
+
+**ADR-018 yazıldı** (`docs/kararlar/KARARLAR.md` — BAĞLAYICI kaynak; çelişkide ADR kazanır).
+Ana fikir: **Faz 8 yeni motor inşa etmez — var olan agent motorunu kendi reposuna çevirir.**
+Doktor bir agent tanımıdır, sandbox bir git worktree'dir, izin kapısı aynı kapıdır, canlıya
+alma F5'in restart zinciridir. Kararların özü:
+- **Teşhis deterministik** (eşik: 7 günde ≥3 tekrar), LLM'e sorulmaz; telemetri agent'a sandbox
+  İÇİNE yazılan `DOKTOR-TESHIS.md` ile gider (yeni araç YOK, `~/.symphony` erişimi AÇILMAZ).
+- **Sandbox = git worktree + dal**; doktor NORMAL agent koşusu (jail worktree'ye hapseder,
+  izinler kullanıcıya düşer — v1'de İZLENEN koşu); testleri BORU HATTI koşar (agent beyanına
+  güvenilmez).
+- **Yama = kalıcı kayıt** (göç v6 `patches`); uygulama `symphony patch apply` CLI zincirinde
+  (merge→build+test→shutdown→restart→health→başarısızsa REVERT = watchdog); daemon kendini
+  asla kendisi yamalamaz.
+- **PROTECTED_PATHS**: updater/izin sistemi/secrets/token + listenin kendisi — hiçbir güven
+  kaydı bunları otomatikleştiremez.
+- **Güven merdiveni v1**: sicil `patches`'ten türetilir; `patch trust <kod>` yalnız İNSAN
+  tetiklemeli `symphony doctor` koşusunun SONUNU otomatikleştirir; gözetimsiz otomasyon v2.
+  Periyodik olan yalnız TESPİT (günde bir, `log.entry` önerisi — koşu kendiliğinden başlamaz).
+- **Rapor**: Z3 raporuna yama bölümü + daemon'ın haftalık zamanlanmış rapor yazımı (Faz 6'nın
+  açık maddesi kapanır).
+- **Bekçi v1**: `bekci.json` + log dosyası izleme (poll) → telemetri(scope bekci) + öneri;
+  `symphony doctor --proje <ad>` AYNI boru hattını kullanıcının projesine çevirir.
+
+**Zemin gerçeği (tasarım oturumu ölçümü):** daemon bu kurulumda repo checkout'undan çalışıyor
+(`tsx src/main.ts`) — merge+restart = canlıya alma GERÇEK. npm-global kurulumda `selfDev.repoPath`
+yoksa doktor net hatayla durur (bilinçli sınır).
+
+### 📋 Dilim D1 — teşhis çekirdeği (SAF detect + göç v6 + store CRUD; protokolsüz) — SIRADAKİ
+
+**Önce oku (yalnız bunlar):** ADR-018 Karar 1+3 · `store.ts`'te `telemetry` tablosu/
+`topErrorCodesSince` civarı + `feedback` göçü (v5, desen) · `router/stats.ts` başı (SAF modül deseni).
+1. Göç v6 (`store.ts` MIGRATIONS): `patches(id TEXT PK, created_at INTEGER NOT NULL,
+   error_code TEXT NOT NULL, category TEXT NOT NULL, branch TEXT NOT NULL, files TEXT NOT NULL
+   [JSON dizi], diff TEXT NOT NULL, test_ok INTEGER NOT NULL, test_summary TEXT NOT NULL,
+   run_id TEXT, state TEXT NOT NULL CHECK('proposed','applied','rejected','reverted','failed'),
+   resolved_at INTEGER)` + `idx_patches_state`, `idx_patches_error_code`.
+2. Store CRUD: `createPatch`/`patchById`/`listPatches(state?)`/`resolvePatch(id, state)`
+   (resolved_at=now) + `openOrAppliedErrorCodes()` (teşhis eleme listesi — proposed/applied
+   durumundaki error_code'lar) + `telemetryRowsForCode(code, sinceMs)` (teşhis dosyası girdisi).
+3. YENİ `core/src/doctor/detect.ts` (SAF, testli): `DetectInput = {code, count}[]` (mevcut
+   `topErrorCodesSince` çıktısı) + eleme listesi → `detectRecurring(rows, excluded, minRecurrence=3)`
+   → `{code, count}[]` (sayıya göre azalan). Kategori v1 = error_code AYNEN.
+4. Test: göç v6 + CRUD roundtrip + state geçişi · detect (eşik altı elenir, excluded elenir,
+   sıralama) — `stats.test.ts`/`store.test.ts` desenleri.
+5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle.
+
+### 📋 Dilim D2 — sandbox + doktor koşusu (PROTOKOL + boru hattı + `symphony doctor`)
+
+**Önce oku:** ADR-018 Karar 1+2 · `agent/definition.ts` `ensureDefaultAgent` · `daemon.ts`
+`agent.start` handler'ı + `buildRouterStats` civarı · `config/config.ts`.
+1. **PROTOKOL önce (Kural 1):** PROTOKOL.md §3'e `doctor.diagnose {}` (cevap: aday listesi
+   `{candidates: [{code, count}]}`) ve `doctor.run {errorCode}` (cevap: `doctor.run.ok
+   {runId, patchId?}` — koşu olayları NORMAL agent olaylarıdır) + §1.1 değil (REST yok).
+   `shared/requests.ts`+`events.ts` şemaları (ADDITIVE).
+2. `config.ts`: `selfDev { repoPath?: string, minRecurrence: 3 vars., windowDays: 7 vars. }`
+   — `repoPath` verilmemişse daemon kendi konumundan `pnpm-workspace.yaml` arayarak bulmayı
+   dener (cli'deki `findRepoRoot` deseni core'a uyarlanır); bulunamazsa `doctor.run` net hata:
+   `VALIDATION_SELFDEV_REPO_REQUIRED`.
+3. `simple-git`'i `core`'a ekle (GEREKSINIMLER satırını güncelle). YENİ `core/src/doctor/
+   sandbox.ts`: `createSandbox(repoPath, code)` → `git worktree add <os.tmpdir()>/symphony-doktor-
+   <slug> -b doktor/<slug>` + worktree'de `execa pnpm install` → `{worktreePath, branch}`;
+   `removeSandbox` (worktree remove + branch -D). `writeDiagnosis(worktreePath, code,
+   telemetryRows)` → `DOKTOR-TESHIS.md` (kod, sıklık, son N kayıt: mesaj+stack+context).
+4. `ensureDefaultAgent`'a YENİ `doktor` tanımı: coder araç seti (run_agent YOK), model/provider
+   BOŞ; sistem prompt'u: teşhis dosyasını oku → kök nedeni bul → ASGARİ yamayı yaz → testleri
+   koştur → özetle. `damitici` gibi bağımsız dosya.
+5. `daemon.ts`: `doctor.diagnose` (detect'i çağırır) + `doctor.run` boru hattı: sandbox aç →
+   teşhis yaz → `agent.start` (agentId "doktor", cwd=worktree) → koşu BİTİNCE (completed)
+   worktree'de `execa` ile `pnpm build && pnpm test && pnpm lint` (çıktı özetlenir) →
+   `git diff main...dal --name-only` + tam diff → `createPatch(state:'proposed', test_ok)`.
+   Koşu failed/cancelled → sandbox temizle, patch YAZILMAZ. NOT: uzun iş — handler koşuyu
+   başlatıp `doctor.run.ok {runId}` döner, patch kaydı koşu-sonu callback'inde (engine'in
+   completed olayına abone olan pipeline fonksiyonu).
+6. CLI YENİ `commands/doctor.ts`: `symphony doctor` (diagnose→aday listesi göster→`--kod X`
+   verilmişse ya da tek adaysa doctor.run başlat, koşuyu `agent.ts`'in canlı-izleme deseniyle
+   izle). Test: sandbox SAF kısımları (slug, teşhis dosyası içeriği) + daemon diagnose 401/ok +
+   pipeline'ın patch YAZDIĞI (sahte kısa koşu — engine test desenleri) + `doktor` tanımı üretimi.
+7. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle. **Kabul provası (canlı, kullanıcıyla):**
+   kasıtlı telemetri hatası enjekte et (test-DB değil gerçek DB'ye 3 sahte kayıt) → `symphony
+   doctor` → aday görünüyor → koşu → patch önerisi `test_ok` ile kaydedildi.
+
+### 📋 Dilim D3 — denetimli canlıya alma + watchdog (`patches`/`patch apply|reject` + PROTECTED_PATHS)
+
+**Önce oku:** ADR-018 Karar 3+4 · `cli/commands/update.ts` (restart zinciri deseni) · D2'nin
+sandbox.ts'i.
+1. PROTOKOL §3: `patches.list {}` (cevap: özet listesi) + `patch.resolve {patchId, state:
+   'applied'|'rejected'|'reverted'|'failed'}` (+`.ok {}`); shared şemaları.
+2. YENİ `core/src/doctor/protected.ts` (SAF, testli): `PROTECTED_PATHS` = [`packages/cli/src/
+   commands/update.ts`, `packages/core/src/agent/permissions.ts`, `packages/core/src/agent/
+   engine.ts`, `packages/core/src/secrets/`, `packages/core/src/server/token.ts`,
+   `packages/core/src/doctor/protected.ts`] + `touchesProtected(files)` (önek eşleşmesi,
+   ayraç normalize).
+3. CLI YENİ `commands/patch.ts`: `symphony patches` (listele: id kısaltması, kod, test_ok,
+   state, dosya sayısı) · `symphony patch apply <id>` — akış: patch'i çek → `touchesProtected`
+   ise UYARI bas + açık onay iste (stdin y/N; `--evet` bayrağı bunu geçEMEZ) → repo'da
+   `git merge --no-ff doktor/<slug>` → `pnpm build && pnpm test` (BAŞARISIZSA: `git reset --hard
+   ORIG_HEAD` + `patch.resolve failed` + exit 1 — restart'a HİÇ ulaşmaz) → `/api/shutdown` +
+   `ensureDaemonRunning` + health yoklaması (10sn) → SAĞLIKSIZSA `git revert -m 1 HEAD` (ya da
+   reset) + restart + `patch.resolve reverted` + exit 1; SAĞLIKLIYSA `patch.resolve applied` +
+   sandbox temizle · `symphony patch reject <id>` — `patch.resolve rejected` + sandbox+dal sil.
+4. Test: protected.ts SAF (eşleşme/normalize/kendini koruma) · patches.list/patch.resolve
+   daemon roundtrip · apply zinciri MOCK'lu (git/execa/fetch çağrı SIRASI doğrulanır — gerçek
+   merge/restart testte YOK; update.test.ts deseni).
+5. `pnpm build && pnpm test && pnpm lint` + DURUM güncelle. **Kabul (canlı, kullanıcıyla):**
+   D2'deki gerçek öneriyle `patch apply` — kasıtlı bozuk bir yamada revert zincirinin çalıştığı
+   AYRICA denenir (ROADMAP kabul maddesi).
+
+### 📋 Dilim D4 — güven merdiveni (sicil + `patch trust` + doktor→apply akışı)
+
+1. `paths.ts`: `trustFile` (`~/.symphony/trust.json`). YENİ SAF modül `core/src/doctor/trust.ts`:
+   `readTrust`/`writeTrust` (`{trusted: string[]}`) + `categoryRecord(patches)` (kategori →
+   {applied, reverted, toplam}) — sicil `patches` tablosundan TÜRETİLİR, ayrı tablo YOK.
+2. CLI: `symphony patch trust <kod>` (PROTECTED kategori reddedilir — D3'ün listesiyle;
+   sicili göster + onay iste) / `symphony patch untrust <kod>` / `symphony patches`e sicil
+   sütunu ("12/12 sağlıklı").
+3. `commands/doctor.ts` akış eki: boru hattı bitince patch test-yeşili + kategori trusted +
+   korumalı-yol-temiz ise `patch apply` zincirine SORMADAN devam (aynı süreç içinde — insan
+   `symphony doctor`u zaten başlattı); değilse "öneri kaydedildi: `symphony patch apply <id>`".
+4. Test: trust.ts SAF roundtrip + sicil türetimi + protected reddi; doctor→auto-apply akışı
+   MOCK'lu. `pnpm build && pnpm test && pnpm lint` + DURUM.
+
+### 📋 Dilim D5 — kendini geliştirme raporu + haftalık zamanlama
+
+1. `report/build.ts` `ReportInput`e `patches` özeti (+shared `ReportResponseSchema`'ya ADDITIVE
+   alan — PROTOKOL.md rapor satırına not): saptanan tekrar eden kodlar, önerilen/uygulanan/geri
+   alınan yama sayıları, kategori sicili. `formatReportMarkdown`'a "Kendini Geliştirme" bölümü.
+2. `daemon.ts`: açılışta + 24 saatte bir — bu ISO haftasının rapor dosyası (`reportsDir`,
+   `isoWeekLabel` cli'den core'a taşınır ya da core'da eş kopyası SAF üretilir; taşıma tercih
+   edilir, cli import eder) yoksa raporu üret + yaz (`DaemonOptions.scheduleReports`, testte kapalı).
+3. Ayrıca günlük TESPİT zamanlayıcısı (ADR-018 Karar 5): `detectRecurring` → aday varsa
+   `log.entry` warn ("tekrarlayan hata: X — `symphony doctor` çalıştır"). Aynı options bayrağıyla.
+4. Test: build.ts yeni alan senaryoları + zamanlanmış yazımın SAF karar fonksiyonu ("bu hafta
+   dosyası var mı → yaz/yazma"). `pnpm build && pnpm test && pnpm lint` + DURUM + REHBER.md'ye
+   kısa bölüm.
+
+### 📋 Dilim D6 — bekçi modu v1 (`bekci.json` + log izleme + `doctor --proje`)
+
+1. `paths.ts`: `bekciFile`. YENİ SAF `core/src/bekci/registry.ts` (oku/yaz: `{projeler:
+   [{ad, repoPath, logFile, testCommand?}]}`) + `core/src/bekci/scan.ts` (SAF: yeni satırlarda
+   `/(error|exception|traceback|fatal)/i` eşleşmesi → kesit çıkarımı).
+2. `daemon.ts`: kayıtlı log dosyalarını poll (10sn; `DaemonOptions.watchBekci`, testte kapalı) —
+   dosya ofseti bellekte; eşleşmede `recordTelemetry({scope:'bekci', code:'BEKCI_<AD>'})` +
+   `log.entry` warn. Aynı koda 5 dk içinde İKİNCİ kez yazmaz (debounce — spam önlenir).
+3. CLI: `symphony bekci ekle <ad> <repoPath> <logFile> [--test <komut>]` / `symphony bekci liste`
+   / `commands/doctor.ts`'e `--proje <ad>`: sandbox `repoPath`'ten açılır, teşhis dosyası son
+   log kesitinden üretilir, test adımı `testCommand` (yoksa test adımı ATLANIR ve patch
+   `test_ok=false` + özet "test komutu tanımsız" ile kaydedilir — asla otomatik akmaz).
+4. Test: registry/scan SAF + debounce mantığı SAF + doctor --proje boru hattının parametre
+   değişimi MOCK'lu. `pnpm build && pnpm test && pnpm lint` + DURUM + REHBER güncelle.
+
+**Dilim sırası D1→D2→D3→D4→D5→D6; her dilim sonrası üçlü temiz + DURUM güncelle + commit/push.
+D2/D3'ün kabul provaları kullanıcıyla canlı (gerçek telemetri enjeksiyonu + gerçek apply/revert).**
 
 ## Faz 7 — Dilim F7 (REHBER.md + docs:pdf) BİTTİ (2026-07-11, Sonnet) — Faz 7 F1-F7 TAMAMEN kapandı
 

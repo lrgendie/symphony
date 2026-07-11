@@ -521,3 +521,109 @@ mekanik commit'tir (başka dilimi etkilemez); npm yayını herhangi bir nedenle 
 ARM64/macOS runner'ları derlemede kırılırsa matrix'ten çıkarılır, Windows x64 kalır (F6
 kabulü yalnız x64 üstünden verilir); sync rebase akışı pratikte sürtünme yaratırsa
 "yalnız pull ya da yalnız push" alt komutlarına ayrıştırılır (beyaz liste değişmez).
+
+## ADR-018 — Faz 8 Kendini Geliştiren Symphony: Doktor agent, sandbox yama döngüsü, denetimli canlıya alma, güven merdiveni, bekçi (2026-07-11, Fable)
+**Bağlam:** ROADMAP Faz 8 (⭐ nihai hedef) — sistemin kendi hatalarını telemetriden saptayıp,
+sandbox'ta yama üretip, testten geçirip, insan onayıyla kendine uygulaması. Dört sigortanın
+dördü artık yerinde: test paketi (418 test), hata telemetrisi (`telemetry` tablosu v1'den beri),
+rollback (ADR-017 F5: `versions.json` + `POST /api/shutdown` + denetimli yeniden başlatma),
+onay kapısı (SPEC-AGENT §5). Kilit zemin gerçeği (2026-07-11 ölçümü): daemon bu kurulumda
+KAYNAK REPO'dan çalışır (`tsx src/main.ts`) — "repoya merge + restart = canlıya alma" zinciri
+gerçektir. Mimarinin ana fikri: **Faz 8 yeni bir motor İNŞA ETMEZ — var olan agent motorunu
+kendi reposuna çevirir.** Doktor bir agent tanımıdır, sandbox bir git worktree'dir, izin kapısı
+aynı kapıdır, canlıya alma F5'in restart zinciridir. Yeni icat edilen tek şey boru hattının
+kendisi ve yama kayıt defteridir.
+
+**Karar 1 — Teşhis deterministiktir; veri AGENT'A gider, agent veriye gitmez.**
+`core/src/doctor/detect.ts` (SAF, testli): son `windowDays` (vars. 7) günün telemetrisinde
+`minRecurrence` (vars. 3) kez tekrarlayan hata kodları = aday listesi; açık/uygulanmış yaması
+olan kodlar elenir. LLM'e "hangi hata önemli" SORULMAZ (ADR-016'nın deterministik-rapor emsali).
+Doktor koşusu başlamadan boru hattı, ilgili telemetri kayıtlarını (kod, mesaj, stack, bağlam,
+sıklık) sandbox İÇİNE bir teşhis dosyası (`DOKTOR-TESHIS.md`) olarak yazar — agent onu
+`read_file` ile okur. Böylece agent araç yüzeyine `~/.symphony`/DB erişimi AÇILMAZ (SPEC §8
+değişmezi korunur), yeni araç da gerekmez. *Reddedilen:* `read_telemetry` aracı — bundle
+dosyası aynı işi sıfır yeni yüzeyle görür.
+
+**Karar 2 — Sandbox = git worktree + dal; doktor NORMAL bir agent koşusudur; testleri BORU
+HATTI koşar.** `git worktree add <tmp>/doktor-<kod> -b doktor/<kod-slug>` (simple-git — core'a
+da kurulur, envantere işlenir) + worktree'de `pnpm install`. Doktor agent'ı (`ensureDefaultAgent`'a
+YENİ `doktor` tanımı: coder araç seti, model/provider BOŞ = router; sistem prompt'u "teşhis
+dosyasını oku → kök neden → asgari yama → testleri koştur") `agent.start` ile, `cwd = worktree`
+olarak çalışır — jail onu worktree'ye HAPSEDER (ana repo/`~/.symphony` erişilemez; mevcut
+mekanizmanın bedava kazanımı), izin istekleri normal `agent.tool.requested` olarak kullanıcıya
+düşer (v1'de doktor koşusu İZLENEN bir koşudur — çift kapı: araç izinleri + yama onayı).
+Koşu bitince boru hattı `pnpm build && pnpm test && pnpm lint` üçlüsünü worktree'de KENDİSİ
+çalıştırır — agent'ın "testler geçti" beyanına GÜVENİLMEZ; `test_ok` boru hattının ölçümüdür.
+*Reddedilen:* daemon süreci içinde/izinsiz özel bir "self-patch modu" — izin kapısını atlayan
+kod yolu olamaz (SPEC §8.1).
+
+**Karar 3 — Yama = KALICI öneri kaydı (göç v6 `patches`); onay/uygulama CLI-DENETİMLİ; daemon
+kendini ASLA kendisi yamalamaz.** Göç v6: `patches(id, created_at, error_code, category,
+branch, files JSON, diff, test_ok, test_summary, run_id, state CHECK('proposed','applied',
+'rejected','reverted','failed'), resolved_at)`. Öneriler izin isteklerinden FARKLI olarak
+daemon restart'ına dayanıklıdır. WS (ADDITIVE): `doctor.diagnose {}` (aday listesi),
+`doctor.run {errorCode}` (boru hattını başlatır; koşu olayları normal agent olaylarıdır),
+`patches.list {}`, `patch.resolve {patchId, state}`. Uygulama `symphony patch apply <id>`
+KOMUTUNDADIR (F5 emsali — restart'ı daemon'ın içinden yönetmek kendi bacağını kesmektir):
+merge (`--no-ff`, dal → main) → `pnpm build && pnpm test` (main'de; sandbox yeşili merge
+sonrası dünyayı KANITLAMAZ) → `POST /api/shutdown` → daemon başlat → sağlık yoklaması →
+BAŞARISIZSA merge commit'i revert + restart + `state='reverted'` (ROADMAP'in watchdog'u =
+bu denetimli zincir; ayrı arka plan süreci DEĞİL). Testler geçmeden merge edilmiş yama
+restart'a hiç ULAŞAMAZ (kabul maddesi). `symphony patch reject <id>` dalı ve worktree'yi siler.
+
+**Karar 4 — Değişmezler koddadır: `PROTECTED_PATHS`.** Güncelleyici çekirdek
+(`cli/src/commands/update.ts`), izin sistemi (`core/src/agent/permissions.ts`,
+`core/src/agent/engine.ts`), anahtar yönetimi (`core/src/secrets/`), token
+(`core/src/server/token.ts`) ve bu listenin kendisi: bu yollara dokunan yama (git diff
+--name-only kesişimi) HİÇBİR güven kaydıyla otomatik uygulanamaz — `patch apply` yine çalışır
+ama daima açık insan onayı ister ve `patch trust` bu kategorilerde reddedilir.
+
+**Karar 5 — Güven merdiveni v1 = SİCİL + insan-tetiklemeli koşunun SONUNU otomatikleştirme;
+gözetimsiz arka plan otomasyonu YOK.** Sicil ayrı tablo değildir — `patches` tablosundan
+türetilir (kategori = hata kodu; "uygulandı ve sağlıklı kaldı" sayısı). `symphony patch trust
+<kod>` → `~/.symphony/trust.json` (agent yazamaz — permissions.json ile aynı statü).
+Güvenilen kategoride `symphony doctor` boru hattı test-yeşili + korumalı-yol-temiz ise
+apply zincirine SORMADAN akar — ama zinciri yine İNSAN başlatmıştır (`symphony doctor`
+komutu). Cron/daemon-tetiklemeli tam otomasyon bilinçle v2 (maliyet + gözetimsiz LLM koşusu
+riski). Periyodik olan yalnız TESPİTTİR: daemon günde bir `detectRecurring` koşturur, aday
+varsa `log.entry`(warn) ile "symphony doctor çalıştır" önerisi yayınlar — agent koşusu asla
+kendiliğinden başlamaz.
+
+**Karar 6 — Kendini geliştirme raporu = Z3 raporunun genişletilmesi + haftalık zamanlama.**
+`report/build.ts`'e yama bölümü (saptanan tekrar eden hatalar, önerilen/uygulanan/geri alınan
+yamalar, kategori sicili); daemon haftada bir (açılışta + 24 saatte bir kontrol: bu ISO
+haftasının dosyası yoksa) raporu `~/.symphony/reports/`e KENDİSİ yazar — Faz 6'nın açık kalan
+"ZAMANLANMIŞ üretim" maddesi burada kapanır. LLM yine YOK.
+
+**Karar 7 — Bekçi modu v1 = kayıtlı log dosyalarını izle, telemetriye yaz, doktoru --proje ile
+yeniden kullan.** `~/.symphony/bekci.json` (kullanıcı/CLI yazar): `{projeler: [{ad, repoPath,
+logFile, testCommand?}]}`. Daemon log dosyalarını poll'la izler (yeni satırlarda hata deseni:
+vars. `error|exception|traceback|fatal` — büyük/küçük harf duyarsız); eşleşmede telemetriye
+yazar (scope `bekci`, kod `BEKCI_<AD>`) + `log.entry`(warn) yayınlar. "Düzeltme öner" =
+`symphony doctor --proje <ad>`: AYNI boru hattı, worktree o projenin repoPath'inden açılır,
+teşhis dosyası log kesitinden üretilir, testler `testCommand` ile koşar. Kendi kendini
+iyileştiren mekanizmanın senin kodun için de çalışması = kod tekrarı değil, parametre değişimi.
+*Reddedilen:* süreç yönetimi/supervisor olmak (PM2 alanı) — yalnız İZLERİZ.
+
+**Bilinçli sınırlar:** kendine-yama yalnız REPO-checkout kurulumunda çalışır (npm-global
+kurulumda `selfDev.repoPath` yoksa doktor net hatayla durur — dürüst sınır, ADR-017 F2
+dünyasıyla çakışmaz); worktree'de `pnpm install` maliyeti kabul edilir (izolasyonun bedeli);
+doktor koşusu v1'de İZLENEN koşudur (arka planda sessiz değil).
+
+**Dikey dilimler (Kural 7):**
+D1 teşhis çekirdeği (SAF detect + göç v6 + store CRUD; protokolsüz) →
+D2 sandbox + doktor koşusu (PROTOKOL + worktree boru hattı + `doktor` tanımı + `symphony doctor`) →
+D3 denetimli canlıya alma + watchdog (`symphony patches`/`patch apply|reject` + PROTECTED_PATHS) →
+D4 güven merdiveni (sicil + `patch trust` + trust.json + doktor→apply akışı) →
+D5 rapor genişletmesi + haftalık zamanlama →
+D6 bekçi modu v1 (bekci.json + log izleme + `doctor --proje`).
+Adım adım talimat `memo/DURUM.md`'de; uygulama Sonnet'te. Kabul (ROADMAP): kasıtlı enjekte
+edilen hata → D2 boru hattı yama+test raporu üretir; test geçmeyen yama canlıya çıkamaz (D3);
+bozuk sürüm denetimli zincirle geri alınır (D3); korumalı yollar asla otomatikleşmez (D3/D4).
+
+**Geri dönüş koşulları:** worktree+install maliyeti pratikte ağır gelirse sandbox "aynı repo,
+ayrı dal + stash" moduna düşürülür (izolasyon azalır, hız artar — ayrı karar gerektirir);
+doktor önerileri düşük kaliteli çıkarsa tanımın sistem prompt'u/model sabitlemesi tek dosyadan
+ayarlanır (boru hattı değişmez); bekçi poll'u kaynak yerse aralık config'e alınır ya da bekçi
+daemon'dan çıkarılıp `symphony bekci izle` ön-plan komutuna dönüşür; trust.json hiç
+kullanılmazsa D4 yüzeyi kaldırılmaz ama belgelenmemiş bırakılır (yük yok).

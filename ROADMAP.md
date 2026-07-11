@@ -302,7 +302,7 @@ symphony/
   geri getiriyor ✅ (F4, testle kanıtlı); güncelleme tek komutla geri alınabiliyor ✅ (F5,
   execa/versions.json testle kanıtlı — gerçek npm registry'ye karşı KULLANICI ile doğrulanacak).
 
-### Faz 8 — Kendini Geliştiren Symphony (20. hafta ve sonrası, sürekli) ⭐ nihai hedef
+### Faz 8 — Kendini Geliştiren Symphony (20. hafta ve sonrası, sürekli) ⭐ nihai hedef — tasarım ✅ ADR-018 (2026-07-11); dilimler D1-D6 Sonnet'e hazır
 > Symphony'nin kod agent'ı vardır; kendini geliştirmek = agent'ın hedef olarak **kendi reposunu** alması.
 > Güvenliği dört sigorta sağlar: test paketi (Faz 0), hata telemetrisi (Faz 1), rollback (Faz 7), onay kapısı.
 
