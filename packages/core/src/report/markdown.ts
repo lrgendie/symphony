@@ -164,6 +164,20 @@ export function formatReportMarkdown(report: ReportResponse): string {
       lines.push(`| ${cat.category} | ${sicil} |`);
     }
   }
+
+  // Agent Tanım Önerileri (ADR-018 Karar 8, Dilim D7) — yalnız PİNSİZ agent'lar, yalnız model pinleme.
+  lines.push("", "## Agent Tanım Önerileri");
+  if (report.agentSuggestions.length === 0) {
+    lines.push("_şu an açık bir öneri yok_");
+  } else {
+    for (const s of report.agentSuggestions) {
+      lines.push(`- **${s.agentId}** → \`${s.suggestedProvider}/${s.suggestedModel}\` sabitle: ${s.reason}`);
+    }
+    lines.push(
+      "",
+      "_uygulamak için:_ `symphony agent-oneri uygula <agentId>` (onay ister, yalnız model pinini yazar).",
+    );
+  }
   lines.push("");
 
   return lines.join("\n");

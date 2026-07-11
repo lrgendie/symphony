@@ -23,7 +23,7 @@
 | Hafıza/profil işi (öncelik #3, M1-M3) | ADR-013 (KARARLAR.md) + `memo/DURUM.md` M-dilim talimatları |
 | Faz 6 zeka işi (router v2/feedback/rapor/harita, Z1-Z5) | ADR-016 (KARARLAR.md, BAĞLAYICI) + `memo/DURUM.md` Z-dilim talimatları + `router/router.ts` |
 | Faz 7 paketleme işi (yayın/installer/sync/update/rehber, F1-F7) | ADR-017 (KARARLAR.md, BAĞLAYICI) + `memo/DURUM.md` F-dilim talimatları |
-| Faz 8 kendini geliştirme (doktor/yama/canlıya alma/güven/bekçi, D1-D6) | ADR-018 (KARARLAR.md, BAĞLAYICI) + `memo/DURUM.md` D-dilim talimatları + `agent/engine.ts`/`db/store.ts` |
+| Faz 8 kendini geliştirme (doktor/yama/canlıya alma/güven/bekçi/agent-önerisi, D1-D7) | ADR-018 (KARARLAR.md, BAĞLAYICI) + `memo/DURUM.md` D-dilim talimatları + `agent/engine.ts`/`db/store.ts` |
 | Model devri (Fable→Opus vb.) | `memo/DEVIR.md` — rol, disiplin, tuzak haritası |
 
 ## Paket grafiği
@@ -128,7 +128,14 @@ protokol WS/REST üzerinden konuşulur.
   (proposed/applied/reverted/failed/rejected) + kategori sicili (`trust.ts`'in `categoryRecord`'ı
   YENİDEN kullanılır — ikinci gerçek üretilmez) + `recurring` (`doctor.diagnose()` adayları).
   Sicil rapor ARALIĞIYLA sınırlı DEĞİL, kümülatiftir (D4'teki `patch trust` ile aynı yaklaşım).
-  `TASK_KIND_LABEL` export edilir (markdown.ts de kullanır — üçüncü kopya yok)
+  `TASK_KIND_LABEL` export edilir (markdown.ts de kullanır — üçüncü kopya yok). `ReportInput.agents`
+  (ADR-018 Karar 8, Dilim D7): `unpinnedAgentIds` + `agentModelUsageSince` satırları →
+  `agentSuggestions` (`suggestAgentModelUpdates`) — Faz 6'nın son açık maddesini kapatır
+- `report/agent-suggestions.ts` — SAF, testli (ADR-018 Karar 8, Dilim D7): `suggestAgentModelUpdates`
+  yalnız PİNSİZ agent'lar için, agent'ın KENDİ geçmiş (provider,model) kullanımları arasında
+  (`MIN_SAMPLES=3`, router v2 ile AYNI eşik + `scoreOf`) AÇIK bir kazanan varsa (skor farkı ≥0.2)
+  pinleme önerir. Pinli agent'lar için ALTERNATİF ÖNERİLMEZ (kanıt yok — D2'nin dersi: doktor'un
+  modeli veri değil genel bilgiyle sabitlendi, o türden kararı otomatikleştirmek riskli)
 - `report/markdown.ts` — SAF, testli (Dilim D5): `isoWeekLabel`/`reportFilePath`/
   `formatReportMarkdown` **CLI'DEN TAŞINDI** (core, daemon içinden haftalık raporu kendiliğinden
   yazıyor; core→cli bağımlılığı YASAK olduğu için taşıma zorunluydu, kopya değil). YENİ
@@ -156,7 +163,9 @@ protokol WS/REST üzerinden konuşulur.
   — göç YOK, sorgu-zamanı okuma. v5 (ADR-016 Karar 4, Dilim Z2): `feedback` tablosu (açık
   iyi/kötü işaretleme) — `recordFeedback`/`recentFeedback`/`feedbackSince` (yalnız
   `subject_kind='run'`, `agent_runs` JOIN'i ile provider/model/task taşır). Z3: YENİ
-  `feedbackSummarySince` (TÜM subject_kind) + `topErrorCodesSince` (rapor için)
+  `feedbackSummarySince` (TÜM subject_kind) + `topErrorCodesSince` (rapor için). D7 (ADR-018
+  Karar 8): YENİ `agentModelUsageSince` — `agent_runs`ı `runsSince`ten FARKLI eksende
+  (`agent_id`+provider+model) gruplar; göç YOK, mevcut tablo üzerine sorgu
 - `memory/profile.ts` — SAF, testli, `core/index.ts`'ten dışa açık (ADR-013): `loadProfile`/
   `ensureProfileScaffold` (M1, enjeksiyon — kesiyor/scaffold'u null sayıyor) AYRI amaçlı
   `readProfileSnapshot`/`writeProfile` (M2, REST GET/PUT — TAM içerik, `truncated` yalnız uyarı)
@@ -220,6 +229,11 @@ protokol WS/REST üzerinden konuşulur.
   - `bekci.ts` (ADR-018 Karar 7, Dilim D6) — `symphony bekci ekle <ad> <repo> <log> [--test]` /
     `bekci liste`. `ekle`, `repoPath`nin GERÇEK bir git repo KÖKÜ olduğunu doğrular (canlı bulgu:
     aksi hâlde worktree ata repo'ya sızabilirdi) — daemon YENİDEN BAŞLATILMADAN 10sn içinde görülür
+  - `agent-suggestion.ts` (ADR-018 Karar 8, Dilim D7 — Faz 6'nın son açık maddesini kapatır) —
+    `symphony agent-oneri uygula <agentId>`: `symphony report`ın `agentSuggestions`ını YENİDEN
+    çeker (ikinci hesap YOK), eşleşeni bulur, `agent/definition.ts`'in YENİ `applyAgentModelPin`
+    (SAF metin-yaması: yalnız `provider:`/`model:` satırları, gövde dokunulmaz) + `agentDefinitionFilePath`
+    ile diff gösterir, onay ister, yazar. Daemon restart GEREKMEZ (tanımlar her koşuda taze okunur)
   - `patch.ts` (ADR-018 Karar 3+4+5, Dilim D3+D4) — `symphony patches` · `patch apply <id>` ·
     `patch reject <id>`. **Apply zinciri (WATCHDOG):** ön koşullar (repo TEMİZ olmalı; yama
     `proposed`; dal var) → onay (korumalı yolda "EVET" şart) → `git merge --no-ff` → `pnpm build`

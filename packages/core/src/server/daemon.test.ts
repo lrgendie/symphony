@@ -882,6 +882,82 @@ describe("symphonyd", () => {
     }
   }, 15_000);
 
+  it("agentSuggestions (ADR-018 Karar 8, Dilim D7): pinsiz agent'ın GERÇEK koşu verisinden açık kazananı varsa öneri üretir; PİNLİ agent (doktor) HİÇ önerilmez", async () => {
+    const dedicatedHome = mkdtempSync(join(tmpdir(), "symphony-agent-oneri-test-"));
+    const dedicatedPaths = ensureSymphonyHome(dedicatedHome);
+
+    const seedDb = new DataStore(dedicatedPaths.databaseFile);
+    try {
+      const seedRuns = (
+        agentId: string,
+        provider: string,
+        model: string,
+        outcomes: readonly boolean[],
+      ): void => {
+        for (const ok of outcomes) {
+          const id = crypto.randomUUID();
+          seedDb.createAgentRun({
+            id,
+            agentId,
+            task: "agent önerisi test görevi",
+            provider,
+            model,
+            cwd: dedicatedHome,
+            startedAt: Date.now(),
+          });
+          seedDb.finishAgentRun(id, {
+            state: ok ? "completed" : "failed",
+            result: ok ? "tamam" : null,
+            errorCode: ok ? null : "AGENT_TOOL_LOOP",
+            usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+            steps: 1,
+          });
+        }
+      };
+      // "asistan" PİNSİZ (varsayılan tanım) — iki model, biri AÇIKÇA daha başarılı.
+      seedRuns("asistan", "ollama", "qwen3:8b", [true, false, false, false, false]); // %20
+      seedRuns("asistan", "anthropic", "claude-haiku-4-5", [true, true, true, true, true]); // %100
+      // "doktor" PİNLİ (tanımda model sabit) — kötü performans göstermesine RAĞMEN önerilmemeli.
+      seedRuns("doktor", "ollama", "qwen3:8b", [false, false, false, false, false]); // %0
+    } finally {
+      seedDb.close();
+    }
+
+    const dedicated = await startDaemon({
+      port: 0,
+      home: dedicatedHome,
+      sampleHardware: false,
+      scheduleReports: false,
+      watchBekci: false,
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${dedicated.port}/api/report`, {
+        headers: { authorization: `Bearer ${dedicated.token}` },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        agentSuggestions: Array<{
+          agentId: string;
+          suggestedProvider: string;
+          suggestedModel: string;
+        }>;
+      };
+      expect(
+        body.agentSuggestions.some(
+          (s) =>
+            s.agentId === "asistan" &&
+            s.suggestedProvider === "anthropic" &&
+            s.suggestedModel === "claude-haiku-4-5",
+        ),
+      ).toBe(true);
+      // PİNLİ agent (doktor) hiçbir koşulda öneri listesine GİRMEZ (Karar 8).
+      expect(body.agentSuggestions.some((s) => s.agentId === "doktor")).toBe(false);
+    } finally {
+      await dedicated.close();
+      rmSync(dedicatedHome, { recursive: true, force: true });
+    }
+  }, 15_000);
+
   it("bağlam haritası (ADR-016 Karar 6, Dilim Z4): auth'suz 401 · gerçek koşu verisinden run+proje düğümü + run→proje kenarı", async () => {
     const unauthorized = await fetch(`http://127.0.0.1:${daemon.port}/api/context-map`);
     expect(unauthorized.status).toBe(401);

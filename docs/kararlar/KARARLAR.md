@@ -616,7 +616,8 @@ D2 sandbox + doktor koşusu (PROTOKOL + worktree boru hattı + `doktor` tanımı
 D3 denetimli canlıya alma + watchdog (`symphony patches`/`patch apply|reject` + PROTECTED_PATHS) →
 D4 güven merdiveni (sicil + `patch trust` + trust.json + doktor→apply akışı) →
 D5 rapor genişletmesi + haftalık zamanlama →
-D6 bekçi modu v1 (bekci.json + log izleme + `doctor --proje`).
+D6 bekçi modu v1 (bekci.json + log izleme + `doctor --proje`) →
+D7 agent tanım-güncelleme önerisi (Faz 6'nın kapanışı — yalnız model pinleme, yalnız pinsiz agent'lar).
 Adım adım talimat `memo/DURUM.md`'de; uygulama Sonnet'te. Kabul (ROADMAP): kasıtlı enjekte
 edilen hata → D2 boru hattı yama+test raporu üretir; test geçmeyen yama canlıya çıkamaz (D3);
 bozuk sürüm denetimli zincirle geri alınır (D3); korumalı yollar asla otomatikleşmez (D3/D4).
@@ -627,3 +628,21 @@ doktor önerileri düşük kaliteli çıkarsa tanımın sistem prompt'u/model sa
 ayarlanır (boru hattı değişmez); bekçi poll'u kaynak yerse aralık config'e alınır ya da bekçi
 daemon'dan çıkarılıp `symphony bekci izle` ön-plan komutuna dönüşür; trust.json hiç
 kullanılmazsa D4 yüzeyi kaldırılmaz ama belgelenmemiş bırakılır (yük yok).
+
+**Karar 8 (D7, 2026-07-11) — Agent tanım-güncelleme önerisi = Faz 6'nın açık kalan son maddesi,
+D5 raporunun uzantısı.** Kapsam BİLİNÇLE dar tutulur: yalnız **model PİNLEME** önerilir (yeni
+system prompt/araç seti önerisi YOK — o çok daha yüksek riskli bir yüzey, v1 dışı). Yalnız
+**pinlenmemiş** (`model` alanı boş, router'ın seçtiği) agent'lar aday olur: bir agent'ın KENDİ
+geçmiş koşularında (`agent_runs.agent_id`) birden fazla (provider,model) kombinasyonu YETERLİ
+kanıtla (`MIN_SAMPLES=3`, router v2'nin AYNI eşiği) görülmüşse ve biri diğerlerinden AÇIKÇA daha
+başarılıysa (skor farkı ≥0.2), o modele SABİTLEME önerilir. **Zaten pinlenmiş bir agent için
+ALTERNATİF ÖNERİLMEZ** — pinlenmiş agent tanım gereği hep AYNI modelle koşar, kendi geçmişinde
+"öteki model daha iyiydi" diye bir kanıt asla oluşmaz; başka bir modeli önermek TAHMİN olurdu
+(D2'nin kendi dersi: doktor'un modeli veri değil GENEL bilgiyle sabitlendi — o türden bir kararı
+otomatikleştirmek riskli). Onay olmadan hiçbir tanım dosyası değişmez: `symphony report`
+"Agent Tanım Önerileri" bölümünde gösterir, `symphony agent-oneri uygula <agentId>` mevcut
+raporu yeniden çeker, diff'i basar, onay ister, yalnız `provider`/`model` frontmatter alanlarını
+YAMALAR (dosyanın geri kalanı DOKUNULMAZ). Uygulama; agent tanımları `engine.start()`ta HER
+koşuda dosyadan taze okunur (`loadAgentDefinition` cache TUTMAZ) — daemon restart GEREKMEZ.
+*Reddedilen:* zaten pinli agent'lar için "belki şu model daha iyi olurdu" tahmini; system
+prompt/araç seti önerisi (v1 dışı, ayrı karar gerektirir).

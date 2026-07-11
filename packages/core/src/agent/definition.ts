@@ -100,6 +100,41 @@ function stripQuotes(value: string): string {
   return value;
 }
 
+/** Bir agent tanım dosyasının yolu — okuma/yazma tarafının TEK adlandırma sözleşmesi. */
+export function agentDefinitionFilePath(agentsDir: string, agentId: string): string {
+  return join(agentsDir, `${agentId}.md`);
+}
+
+/**
+ * Agent tanımına `provider`/`model` PİNLER (ADR-018 Karar 8, Dilim D7) — SAF: dosyaya dokunmaz,
+ * ham metni alır/döner. Var olan `provider:`/`model:` satırlarını GÜNCELLER; yoksa frontmatter'ın
+ * SONUNA ekler. Frontmatter/gövdenin geri kalanı BİREBİR korunur (yalnız iki satır değişir).
+ */
+export function applyAgentModelPin(raw: string, provider: string, model: string): string {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw);
+  if (match === null) {
+    throw new AgentError("AGENT_DEFINITION_INVALID", "frontmatter (---) bulunamadı");
+  }
+  const [, frontmatter, body] = match;
+  let hasProvider = false;
+  let hasModel = false;
+  const lines = (frontmatter ?? "").split(/\r?\n/).map((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("provider:")) {
+      hasProvider = true;
+      return `provider: ${provider}`;
+    }
+    if (trimmed.startsWith("model:")) {
+      hasModel = true;
+      return `model: ${model}`;
+    }
+    return line;
+  });
+  if (!hasProvider) lines.push(`provider: ${provider}`);
+  if (!hasModel) lines.push(`model: ${model}`);
+  return `---\n${lines.join("\n")}\n---\n${body ?? ""}`;
+}
+
 export function loadAgentDefinition(agentsDir: string, agentId: string): AgentDefinition {
   const file = join(agentsDir, `${agentId}.md`);
   if (!existsSync(file)) {

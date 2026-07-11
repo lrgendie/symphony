@@ -22,6 +22,7 @@ export * from "./bekci/scan.js";
 export * from "./doctor/protected.js";
 export * from "./doctor/sandbox.js";
 export * from "./doctor/trust.js";
+export * from "./report/agent-suggestions.js";
 export * from "./report/build.js";
 export * from "./report/markdown.js";
 export * from "./router/hardware.js";

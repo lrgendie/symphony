@@ -151,6 +151,25 @@ export const ReportSelfDevSchema = z
   .strip();
 export type ReportSelfDev = z.infer<typeof ReportSelfDevSchema>;
 
+/**
+ * Agent tanım-güncelleme önerisi (ADR-018 Karar 8, Faz 8 Dilim D7) — yalnız PİNSİZ agent'lar
+ * için, yalnız model pinleme önerir. `symphony agent-oneri uygula <agentId>` bu satırı kullanır.
+ */
+export const AgentSuggestionSchema = z
+  .object({
+    agentId: z.string().min(1),
+    suggestedProvider: z.string().min(1),
+    suggestedModel: z.string().min(1),
+    suggestedRuns: z.number().int().positive(),
+    suggestedSuccessRate: z.number().min(0).max(1),
+    runnerUpProvider: z.string().min(1),
+    runnerUpModel: z.string().min(1),
+    runnerUpSuccessRate: z.number().min(0).max(1),
+    reason: z.string().min(1),
+  })
+  .strip();
+export type AgentSuggestion = z.infer<typeof AgentSuggestionSchema>;
+
 export const ReportResponseSchema = z
   .object({
     /** epoch ms — sorgu aralığı (dahil). */
@@ -165,6 +184,7 @@ export const ReportResponseSchema = z
     /** Eşik-tabanlı, deterministik öneri cümleleri (Türkçe) — LLM üretmez. */
     findings: z.array(z.string()),
     selfDev: ReportSelfDevSchema,
+    agentSuggestions: z.array(AgentSuggestionSchema),
   })
   .strip();
 export type ReportResponse = z.infer<typeof ReportResponseSchema>;

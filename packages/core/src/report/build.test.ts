@@ -15,6 +15,7 @@ function baseInput(overrides: Partial<ReportInput> = {}): ReportInput {
     topErrors: [],
     feedback: { good: 0, bad: 0 },
     patches: { recurring: [], entries: [] },
+    agents: { unpinnedAgentIds: [], usage: [] },
     ...overrides,
   };
 }

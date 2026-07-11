@@ -3,6 +3,8 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
+  agentDefinitionFilePath,
+  applyAgentModelPin,
   ensureDefaultAgent,
   listAgentDefinitions,
   loadAgentDefinition,
@@ -143,5 +145,53 @@ Sistem prompt'u burada.`,
     expect(ids).toContain("coder");
     expect(ids).toContain("test");
     expect(ids).not.toContain("bozuk");
+  });
+});
+
+describe("agentDefinitionFilePath", () => {
+  it("dosya adı sözleşmesi: <agentsDir>/<agentId>.md", () => {
+    expect(agentDefinitionFilePath(agentsDir, "coder")).toBe(join(agentsDir, "coder.md"));
+  });
+});
+
+describe("applyAgentModelPin (ADR-018 Karar 8, Dilim D7) — SAF, dosyaya dokunmaz", () => {
+  it("provider/model satırı YOKSA frontmatter'ın SONUNA ekler, gövde DOKUNULMADAN kalır", () => {
+    const raw = "---\nname: coder\ndescription: test\n---\nSistem promptu burada.\n";
+    const updated = applyAgentModelPin(raw, "anthropic", "claude-sonnet-5");
+    expect(updated).toContain("provider: anthropic");
+    expect(updated).toContain("model: claude-sonnet-5");
+    expect(updated).toContain("Sistem promptu burada.");
+    expect(parseAgentMarkdown("coder", updated).provider).toBe("anthropic");
+    expect(parseAgentMarkdown("coder", updated).model).toBe("claude-sonnet-5");
+  });
+
+  it("provider/model satırı VARSA YERİNDE günceller — çoğaltmaz", () => {
+    const raw = "---\nname: doktor\nprovider: anthropic\nmodel: claude-haiku-4-5\n---\ngövde\n";
+    const updated = applyAgentModelPin(raw, "anthropic", "claude-sonnet-5");
+    expect((updated.match(/^provider:/gm) ?? []).length).toBe(1);
+    expect((updated.match(/^model:/gm) ?? []).length).toBe(1);
+    expect(updated).toContain("model: claude-sonnet-5");
+    expect(updated).not.toContain("claude-haiku-4-5");
+  });
+
+  it("frontmatterin geri kalanı (diğer alanlar) BİREBİR korunur", () => {
+    const raw = "---\nname: x\ntemperature: 0\ntools: [read_file]\n---\nsistem\n";
+    const updated = applyAgentModelPin(raw, "ollama", "qwen3:8b");
+    expect(updated).toContain("temperature: 0");
+    expect(updated).toContain("tools: [read_file]");
+  });
+
+  it("frontmatter (---) yoksa AGENT_DEFINITION_INVALID fırlatır", () => {
+    expect(() => applyAgentModelPin("markdown değil bu", "ollama", "qwen3:8b")).toThrow(AgentError);
+  });
+
+  it("gerçek `ensureDefaultAgent` çıktısına uygulanabilir (pinsiz asistan tanımı üzerinde uçtan uca)", () => {
+    ensureDefaultAgent(agentsDir);
+    const raw = readFileSync(agentDefinitionFilePath(agentsDir, "asistan"), "utf8");
+    expect(parseAgentMarkdown("asistan", raw).model).toBeUndefined(); // pinsiz olduğu doğrulanır
+    const updated = applyAgentModelPin(raw, "anthropic", "claude-sonnet-5");
+    const pinned = parseAgentMarkdown("asistan", updated);
+    expect(pinned.model).toBe("claude-sonnet-5");
+    expect(pinned.tools).toEqual(["read_file", "glob", "grep"]); // araç seti DEĞİŞMEDİ
   });
 });

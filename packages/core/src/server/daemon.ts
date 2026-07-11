@@ -46,7 +46,7 @@ import { findMatches, shouldRecordBekciMatch } from "../bekci/scan.js";
 import { buildContextMap } from "../context-map/build.js";
 import { DoctorPipeline } from "../doctor/pipeline.js";
 import { AgentEngine } from "../agent/engine.js";
-import { ensureDefaultAgent } from "../agent/definition.js";
+import { ensureDefaultAgent, listAgentDefinitions } from "../agent/definition.js";
 import { registerMcpServer } from "../agent/mcp.js";
 import { parseRoadmap } from "../roadmap/parse.js";
 import {
@@ -263,6 +263,14 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       store.turnStatsSince(from, to),
       classifyFeedbackRows(store.feedbackSince(from, to)),
     );
+    // Agent tanım-güncelleme önerisi (ADR-018 Karar 8, Dilim D7): rapor [from,to]'u DEĞİL,
+    // router v2 ile AYNI rolling-window (STATS_WINDOW_DAYS) kullanılır — agent koşuları seyrek
+    // olabilir, kısa bir rapor penceresi yeterli kanıt biriktiremez. Yalnız PİNSİZ (model boş)
+    // tanımlar aday olur — pinli agent için alternatif önerisi TAHMİN olurdu (Karar 8).
+    const agentStatsSinceMs = Date.now() - STATS_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+    const unpinnedAgentIds = listAgentDefinitions(paths.agentsDir)
+      .filter((d) => d.model === undefined)
+      .map((d) => d.id);
     return buildReport({
       from,
       to,
@@ -272,6 +280,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       topErrors: store.topErrorCodesSince(from, to),
       feedback: store.feedbackSummarySince(from, to),
       patches: { recurring: doctor.diagnose(), entries: store.listPatches() },
+      agents: { unpinnedAgentIds, usage: store.agentModelUsageSince(agentStatsSinceMs) },
     });
   }
 

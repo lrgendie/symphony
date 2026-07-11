@@ -175,6 +175,7 @@ symphony patch untrust <kategori> Kategoriden güveni geri çek
 symphony bekci ekle <ad> <repo> <log> [--test <komut>]   Kendi projeni izlemeye al
 symphony bekci liste              Kayıtlı bekçi projelerini listele
 symphony doctor --proje <ad>      Bekçi projesi için AYNI teşhis/yama boru hattını çalıştır
+symphony agent-oneri uygula <agentId>   Agent tanım önerisini uygula (model pinler, onay ister)
 ```
 
 ## 7. Kurulum, senkronizasyon ve güncelleme akışı
@@ -238,7 +239,12 @@ arka planda sessizce yürümez:
 5. **`symphony report`** artık bir "Kendini Geliştirme" bölümü de içerir: güncel tekrarlayan
    hatalar, önerilen/uygulanan/geri alınan yama sayıları, kategori sicili. Bu rapor haftada
    bir kendiliğinden de üretilir (`~/.symphony/reports/`).
-6. **Bekçi modu (v1):** kendini geliştirme SENİN projelerin için de çalışır.
+6. **Agent tanım-güncelleme önerisi:** bir agent (pinlenmemişse, yani model alanı boşsa) geçmişte
+   birden fazla modelle çalışmışsa ve biri açıkça daha başarılıysa, `symphony report` bunu
+   "Agent Tanım Önerileri" bölümünde gösterir. `symphony agent-oneri uygula <agentId>` diff'i
+   gösterip onay ister, onaylarsan yalnız o agent'ın modelini sabitler — daemon yeniden başlamaz.
+   Zaten pinli bir agent için ASLA alternatif önerilmez (kanıt yok, tahmin olurdu).
+7. **Bekçi modu (v1):** kendini geliştirme SENİN projelerin için de çalışır.
    `symphony bekci ekle <ad> <repo-yolu> <log-dosyası> [--test <komut>]` ile bir proje
    kaydedersin — daemon o log dosyasını 10 saniyede bir izler, `error`/`exception`/
    `traceback`/`fatal` deseni yakalarsa bir uyarı düşer. `symphony doctor --proje <ad>`

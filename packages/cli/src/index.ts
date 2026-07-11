@@ -11,6 +11,7 @@ import { agentsCommand } from "./commands/agents.js";
 import { agentRunCommand } from "./commands/agent.js";
 import { feedbackCommand } from "./commands/feedback.js";
 import { reportCommand } from "./commands/report.js";
+import { agentOneriUygulaCommand } from "./commands/agent-suggestion.js";
 import { addCommand } from "./commands/add.js";
 import { syncCommand, syncInitCommand } from "./commands/sync.js";
 import { rollbackCommand, updateCommand } from "./commands/update.js";
@@ -84,6 +85,15 @@ program
   .option("--from <tarih>", "başlangıç (YYYY-AA-GG, varsayılan: 7 gün önce)")
   .option("--to <tarih>", "bitiş (YYYY-AA-GG, varsayılan: şimdi)")
   .action((opts: { from?: string; to?: string }) => reportCommand(opts).catch(fail));
+
+const agentOneri = program
+  .command("agent-oneri")
+  .description("Agent tanım-güncelleme önerileri (ADR-018 Karar 8, Faz 8 Dilim D7)");
+
+agentOneri
+  .command("uygula <agentId>")
+  .description("Öneriyi uygula: model pinler, onay ister (`symphony report`ta listelenir)")
+  .action((agentId: string) => agentOneriUygulaCommand(agentId).catch(fail));
 
 program
   .command("history [oturum]")

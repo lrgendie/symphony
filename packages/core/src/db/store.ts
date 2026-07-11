@@ -735,6 +735,32 @@ export class DataStore {
   }
 
   /**
+   * Agent tanım-güncelleme önerisi (ADR-018 Karar 8, Dilim D7): agent'ın KENDİ geçmiş
+   * koşularında hangi (provider,model) kombinasyonlarını kaç kez, ne başarıyla kullandığı —
+   * `agentId` başına gruplanır (`runsSince`in provider/model×taskKind gruplamasından FARKLI
+   * eksen). `iptal`ler BİLİNÇLE dışarıda (runsSince ile aynı gerekçe).
+   */
+  agentModelUsageSince(sinceMs: number): AgentModelUsageRow[] {
+    const rows = this.db
+      .prepare(
+        `SELECT agent_id, provider, model,
+                COUNT(*) as runs,
+                SUM(CASE WHEN state = 'completed' THEN 1 ELSE 0 END) as ok
+         FROM agent_runs
+         WHERE started_at >= ? AND state IN ('completed', 'failed')
+         GROUP BY agent_id, provider, model`,
+      )
+      .all(sinceMs) as Array<{ agent_id: string; provider: string; model: string; runs: number; ok: number }>;
+    return rows.map((row) => ({
+      agentId: row.agent_id,
+      provider: row.provider,
+      model: row.model,
+      runs: row.runs,
+      ok: row.ok,
+    }));
+  }
+
+  /**
    * Router v2 (ADR-016 Karar 1): sağlayıcı+model başına ortalama tur süresi. `requests.duration_ms`
    * KULLANILIR — `agent_runs`'ın toplam süresi insan beklemesini (awaiting_permission/awaiting_user)
    * içerir, model hızını ÖLÇMEZ; `requests` yalnız model turlarını kapsar. `untilMs`: bkz. `runsSince`.
@@ -975,6 +1001,15 @@ export interface RouterRunRow {
   model: string;
   ok: boolean;
   costUsd: number;
+}
+
+/** `agentModelUsageSince` satırı (ADR-018 Karar 8, Dilim D7) — `agentId` başına gruplu. */
+export interface AgentModelUsageRow {
+  agentId: string;
+  provider: string;
+  model: string;
+  runs: number;
+  ok: number;
 }
 
 /** `turnStatsSince` satırı — router/stats.ts girdisi. */

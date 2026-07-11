@@ -260,11 +260,14 @@ symphony/
       başlarına bu dosyaya YAZAMAZ** — yalnız okur, sistem promptuna eklenir. Gerekçe: bir
       agent'ın kendi güvenini/bağlamını kendi genişletmesi riskli (yanlış/yanıltıcı bir
       "gerçek" yazarsa sonraki TÜM agent'ları etkiler). *(ADR-013 Karar 2 bunu uyguladı.)*
-- [ ] **Kendini geliştirme döngüsü:** haftalık kullanım özeti üzerinden sistemin kendi yönlendirme kurallarını ve agent tanımlarını güncelleme önerisi (onayınla uygulanır)
-      **🔶 KISMEN — Dilim Z3 (2026-07-10):** deterministik `symphony report` + eşik-tabanlı öneri
-      cümleleri BİTTİ (temel — "haftalık kullanım özeti" kabul maddesi karşılandı). KALAN:
-      ZAMANLANMIŞ üretim ve agent TANIM-GÜNCELLEME önerisi — bilinçle Faz 8'in kendini-geliştirme
-      döngüsüne bağlandı, madde bu yüzden `[ ]` kalıyor (yalnız alt-kümesi bitti).
+- [x] **Kendini geliştirme döngüsü:** haftalık kullanım özeti üzerinden sistemin kendi yönlendirme kurallarını ve agent tanımlarını güncelleme önerisi (onayınla uygulanır)
+      **✅ Dilim Z3 (2026-07-10):** deterministik `symphony report` + eşik-tabanlı öneri cümleleri.
+      **✅ Dilim D5 (2026-07-11, ADR-018 Karar 6):** ZAMANLANMIŞ üretim — rapor haftada bir
+      kendiliğinden yazılır. **✅ Dilim D7 (2026-07-11, ADR-018 Karar 8):** agent TANIM-GÜNCELLEME
+      önerisi — agent'ın KENDİ geçmiş koşularından (birden fazla model denenmişse, biri açıkça
+      daha başarılıysa) model pinleme önerir; `symphony agent-oneri uygula <agentId>` onayla
+      uygular. Canlı doğrulandı: gerçek kullanım geçmişinden İKİ gerçek öneri üretti (biri, bu
+      oturumda ayrıca elle bulunan qwen2.5vl vision-model regresyonunu bağımsız olarak DOĞRULADI).
 - [x] Geri bildirim sinyalleri: cevabı beğenme/düzeltme, agent çıktısını geri alma gibi olaylar skorlara işlenir
       **✅ Dilim Z2 (2026-07-10):** `feedback.submit` + TUI tek tuş + `symphony feedback`, router v2
       skorunu gerçekten etkiliyor (canlı doğrulandı). "Çıktıyı geri alma" sinyali BİLİNÇLE HARİÇ —

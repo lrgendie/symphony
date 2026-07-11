@@ -3,7 +3,71 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Sonnet — Dilim D6 BİTTİ ve testli, 578 test; Faz 8 D1-D6 TAMAMEN kapandı)
+**Son güncelleme:** 2026-07-11 (Sonnet — Dilim D7 BİTTİ ve testli, 599 test; Faz 6'nın son açık maddesi kapandı)
+
+## Dilim D7 — agent tanım-güncelleme önerisi BİTTİ (2026-07-11, Sonnet) — Faz 6'nın son açık maddesi kapandı
+
+ADR-018 Karar 8 eklendi (yeni bir ADR açılmadı — bu, mevcut kendini-geliştirme mimarisinin doğal
+bir uzantısı). Kural 1 sırası: shared (yeni `AgentSuggestionSchema` + `ReportResponseSchema`e
+ADDITIVE alan) → PROTOKOL'e dokunmadı (yeni WS mesajı YOK — öneri `symphony report`ın parçası,
+uygulama yerel dosya yazımı) → core → cli.
+
+**Kapsam BİLİNÇLE dar:** yalnız MODEL PİNLEME önerilir (system prompt/araç seti önerisi v1 DIŞI).
+Yalnız PİNLENMEMİŞ (`model` alanı boş) agent'lar aday olur — zaten pinli bir agent kendi
+geçmişinde HİÇBİR ZAMAN başka bir modelle çalışmadığı için "öteki model daha iyiydi" diye bir
+kanıt oluşamaz; alternatif önermek TAHMİN olurdu (D2'nin dersi: doktor'un modeli veri değil genel
+bilgiyle sabitlendi — o türden bir kararı otomatikleştirmek riskli, bilinçle reddedildi).
+
+- **`store.ts`:** YENİ `agentModelUsageSince(sinceMs)` — `agent_runs`ı `agentId`+provider+model
+  eksenimde gruplar (`runsSince`in provider+model×taskKind gruplamasından FARKLI eksen, göç YOK).
+- **YENİ `core/src/report/agent-suggestions.ts`** (SAF, testli): `suggestAgentModelUpdates` —
+  agent başına EN AZ İKİ kanıtlı (`MIN_SAMPLES=3`, router v2 ile AYNI eşik) (provider,model)
+  kombinasyonu VE aralarında AÇIK bir skor farkı (`SCORE_GAP_THRESHOLD=0.2`, `scoreOf` YENİDEN
+  kullanılır) varsa en iyisini önerir. Tek kombinasyon → öneri YOK (karşılaştırma imkanı yok).
+- **`agent/definition.ts`:** YENİ `agentDefinitionFilePath` + `applyAgentModelPin(raw,
+  provider, model)` — SAF metin-yaması: `provider:`/`model:` satırlarını GÜNCELLER (yoksa
+  frontmatter sonuna EKLER), gövde/diğer alanlar BİREBİR korunur.
+- **shared/rest.ts:** `AgentSuggestionSchema` + `ReportResponseSchema`e `agentSuggestions` alanı
+  (ADDITIVE, zorunlu).
+- **`report/build.ts`:** `ReportInput.agents = {unpinnedAgentIds, usage}` — çağıran taraf
+  (`daemon.ts`) ZATEN pinli agent'ları eler, bu modül ikinci bir filtre uygulamaz.
+- **`daemon.ts`:** `buildWeeklyReport` artık `listAgentDefinitions(paths.agentsDir)`den pinsiz
+  agent id'lerini + `store.agentModelUsageSince`i geçirir. **Pencere BİLİNÇLİ seçim:** rapor
+  [from,to]'u DEĞİL, router v2 ile AYNI rolling-window (`STATS_WINDOW_DAYS=30`) kullanılır —
+  agent koşuları seyrek olabilir, kısa bir rapor penceresi (vars. 7 gün) yeterli kanıt biriktiremez.
+- **`report/markdown.ts`:** YENİ "Agent Tanım Önerileri" bölümü — öneri yoksa "_şu an açık bir
+  öneri yok_", varsa gerekçe cümlesi + `symphony agent-oneri uygula <agentId>` komut ipucu.
+- **YENİ `cli/commands/agent-suggestion.ts`:** `symphony agent-oneri uygula <agentId>` — raporu
+  YENİDEN çeker (ikinci hesap YOK), eşleşen öneriyi bulur, diff'i basar (önceki: pin yok / yeni:
+  provider/model), onay ister, yalnız onaylanırsa dosyayı yazar. **Daemon restart GEREKMEZ**
+  (agent tanımları `engine.start()`ta HER koşuda dosyadan taze okunur, cache YOK).
+- **Test:** 578→**599** (+21: `agent-suggestions.test.ts` YENİ 8 SAF — tek kombinasyon→öneri
+  yok, açık fark→öner, yakın fark (<0.2)→öneri YOK, kanıtsız satırlar karşılaştırmaya girmez,
+  pinli agent'lar `definitions`de YER ALMADIĞI için hiç değerlendirilmez, çoklu agent bağımsız,
+  üç seçenekte yalnız EN İYİ İKİ karşılaştırılır, boş girdi çökmez; `definition.test.ts` +6 —
+  `applyAgentModelPin` satır ekleme/güncelleme/gövde-korunur/geçersiz-frontmatter +
+  `ensureDefaultAgent`in GERÇEK pinsiz "asistan" çıktısı üzerinde uçtan uca; `build.test.ts`/
+  `markdown.test.ts` mevcut testlere `agents`/`agentSuggestions` alanları eklendi + 2 YENİ
+  markdown render testi; `daemon.test.ts` YENİ 1 GERÇEK entegrasyon testi — pinsiz "asistan"a
+  GERÇEK agent_runs seed edilip iki farklı modelle (biri AÇIKÇA daha başarılı) çalıştırıldığında
+  doğru öneri üretildiği, PİNLİ "doktor"un KÖTÜ performansına RAĞMEN hiç önerilmediği kanıtlandı;
+  `cli/agent-suggestion.test.ts` YENİ 4 — öneri yoksa red+dosya dokunulmaz, onaylanınca GERÇEK
+  yazım, reddedilince dosya değişmez, rapor tek sefer çekilir). `pnpm build && pnpm test &&
+  pnpm lint` temiz (67 dosya/599 test).
+- **CANLI DOĞRULAMA:** gerçek daemon D7 koduyla yeniden başlatıldı → `symphony report` GERÇEK
+  kullanım geçmişinden İKİ gerçek öneri üretti: (1) "coder" agent'ı ollama/qwen3:8b'ye sabitle
+  (%100, 3 koşu) — ollama/qwen2.5vl:7b'nin %0'ından (5 koşu) açıkça daha iyi. **Bu, bu oturumda
+  D2.5/D6 sırasında elle bulunan vision-model tool-calling regresyonunu BAĞIMSIZ bir veri
+  yoluyla DOĞRULADI** — sistem kendi geçmişinden aynı sonuca kendi kendine ulaştı. (2) "duzenleyici"
+  agent'ı ollama/qwen3:8b'ye sabitle (%100, 6 koşu) — anthropic/claude-sonnet-5'in %33'ünden
+  (3 koşu) daha iyi. `symphony agent-oneri uygula coder` uçtan uca denendi (rapor çekildi, diff
+  gösterildi, onay soruldu) — kullanıcının GERÇEK ayarını değiştirmemek için REDDEDEREK kapatıldı;
+  dosyanın değişmediği doğrulandı. Öneriler kullanıcıya bırakıldı, otomatik uygulanmadı.
+
+**Faz 6 (ADR-016) artık TAMAMEN kapandı** — ROADMAP'teki tek açık madde ("kendini geliştirme
+döngüsü") D5 (zamanlanmış üretim) + D7 (agent tanım-güncelleme önerisi) ile tam karşılandı.
+
+## Faz 8 — Dilim D6 (bekçi modu v1) BİTTİ (2026-07-11, Sonnet) — Faz 8 D1-D6 TAMAMEN KAPANDI
 
 ## Faz 8 — Dilim D6 (bekçi modu v1) BİTTİ (2026-07-11, Sonnet) — Faz 8 D1-D6 TAMAMEN KAPANDI
 

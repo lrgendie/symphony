@@ -46,6 +46,19 @@ const sampleReport: ReportResponse = {
     rejected: 0,
     categories: [{ category: "AGENT_TOOL_LOOP", applied: 2, unhealthy: 1, total: 3 }],
   },
+  agentSuggestions: [
+    {
+      agentId: "coder",
+      suggestedProvider: "anthropic",
+      suggestedModel: "claude-sonnet-5",
+      suggestedRuns: 8,
+      suggestedSuccessRate: 0.9,
+      runnerUpProvider: "ollama",
+      runnerUpModel: "qwen3:8b",
+      runnerUpSuccessRate: 0.4,
+      reason: "'coder' agent'ı anthropic/claude-sonnet-5 ile son 8 koşuda %90 başarılı.",
+    },
+  ],
 };
 
 describe("isoWeekLabel — ISO 8601 hafta etiketi (ADR-016 Karar 5)", () => {
@@ -131,6 +144,19 @@ describe("formatReportMarkdown (ADR-016 Karar 5) — SAF, deterministik, LLM YOK
     const empty = formatReportMarkdown({ ...sampleReport, selfDev: emptySelfDev });
     expect(empty).toContain("_şu an tekrarlayan (teşhis eşiğini aşan) bir hata yok_");
     expect(empty).toContain("_henüz sonuçlanmış bir yama yok_");
+  });
+
+  it("Agent Tanım Önerileri bölümü: öneri cümlesi + uygulama komutu (Dilim D7)", () => {
+    expect(markdown).toContain("## Agent Tanım Önerileri");
+    expect(markdown).toContain("**coder**");
+    expect(markdown).toContain("anthropic/claude-sonnet-5");
+    expect(markdown).toContain("symphony agent-oneri uygula <agentId>");
+  });
+
+  it("Agent Tanım Önerileri boşsa 'yok' mesajı gösterir, uygulama komutu ÖNERİLMEZ", () => {
+    const empty = formatReportMarkdown({ ...sampleReport, agentSuggestions: [] });
+    expect(empty).toContain("_şu an açık bir öneri yok_");
+    expect(empty).not.toContain("agent-oneri uygula");
   });
 
   it("boş bölümler için 'kayıt yok' / 'bulgu yok' gösterir — tablo başlığı boş dizide çıkmaz", () => {

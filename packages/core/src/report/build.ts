@@ -1,7 +1,8 @@
 import type { DoctorCandidate, ReportResponse, ReportSelfDevCategory } from "@symphony/shared";
-import type { PatchEntry } from "../db/store.js";
+import type { AgentModelUsageRow, PatchEntry } from "../db/store.js";
 import type { UsageQueryResult } from "../db/store.js";
 import { categoryRecord } from "../doctor/trust.js";
+import { suggestAgentModelUpdates, type UnpinnedAgentDefinition } from "./agent-suggestions.js";
 import { hasEnoughEvidence, scoreOf, type RouterStats } from "../router/stats.js";
 import type { TaskKind } from "../router/router.js";
 
@@ -39,6 +40,17 @@ export interface ReportInput {
   patches: {
     recurring: readonly DoctorCandidate[];
     entries: readonly PatchEntry[];
+  };
+  /**
+   * Agent tanım-güncelleme önerisi (ADR-018 Karar 8, Dilim D7). `unpinnedAgentIds`: çağıran
+   * taraf ZATEN pinli olan agent'ları eledi (`listAgentDefinitions`ten `model === undefined`
+   * filtresi) — bu modül ikinci bir filtre uygulamaz, doğrudan kullanır. `usage`:
+   * `store.agentModelUsageSince`'in TAM çıktısı (pinli agent'lar da içinde olabilir, zararsız —
+   * yalnız `unpinnedAgentIds`e karşılık gelenler işlenir).
+   */
+  agents: {
+    unpinnedAgentIds: readonly string[];
+    usage: readonly AgentModelUsageRow[];
   };
 }
 
@@ -82,6 +94,10 @@ export function buildReport(input: ReportInput): ReportResponse {
     feedback: input.feedback,
     findings,
     selfDev: buildSelfDevSummary(input.patches.recurring, input.patches.entries),
+    agentSuggestions: suggestAgentModelUpdates(
+      input.agents.unpinnedAgentIds.map((id): UnpinnedAgentDefinition => ({ id })),
+      input.agents.usage,
+    ),
   };
 }
 
