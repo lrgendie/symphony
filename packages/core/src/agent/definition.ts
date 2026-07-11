@@ -252,10 +252,19 @@ Kurallar:
 // (git worktree) koşturur — jail onu worktree'ye hapseder, ana repoya/`~/.symphony`'ye
 // dokunamaz. `run_agent` YOK (devretme yok); testleri kendisi de koşabilir ama SON SÖZ boru
 // hattınındır: `test_ok` agent'ın beyanı değil, boru hattının ölçümüdür.
+//
+// MODEL SABİTLENMİŞTİR (2026-07-11 canlı prova dersi, ADR-018'in "geri dönüş koşulları"nda
+// öngörülen ayar noktası): model boş bırakılınca router yerel `qwen2.5-coder:7b`'yi seçti ve
+// model araç çağrısını METİN olarak yazdı (`{"name":"read_file",...}`) — 0 adım, teşhis dosyası
+// hiç okunmadı. Yani doktor, teşhis etmeye gönderildiği hatanın (zayıf yerel modelin tool-calling
+// yapamaması) AYNISINA yenildi. Kendine-yama güvenilir tool-calling ister; bu, YALNIZ doktor
+// koşularında geçerli bir sabittir (sohbet/diğer agent'lar etkilenmez, onlar hâlâ router'la gelir).
+// Yetmezse tek satırla `claude-opus-4-8`e çıkılır.
 const DEFAULT_DOKTOR_DEFINITION = `---
 name: doktor
 description: Tekrarlayan bir hatanın kök nedenini bulup sandbox'ta asgari yamayı üretir (Faz 8)
-# model/provider boş → istekte verilmezse router seçer
+provider: anthropic
+model: claude-sonnet-5
 temperature: 0
 tools: [read_file, write_file, edit, glob, grep, run_command]
 maxSteps: 60

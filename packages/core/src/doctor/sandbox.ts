@@ -202,16 +202,30 @@ export async function collectAndCommit(
   return { files, diff };
 }
 
-/** Sandbox'ı kaldırır. `keepBranch` (yama önerildiyse) dalı bırakır — D3 onu merge edecek. */
+/**
+ * Sandbox'ı kaldırır. `keepBranch` (yama önerildiyse) dalı bırakır — D3 onu merge edecek.
+ *
+ * **Windows dersi (2026-07-11 canlı prova):** `git worktree remove --force` pnpm'in symlink'li
+ * `node_modules` ağacında "Invalid argument" ile DÜŞÜYOR — git kaydı silinse de dizin kalıyordu.
+ * Daha kötüsü: fırlatma yüzünden `branch -D` HİÇ çalışmıyor, dal sızıyordu. Bu yüzden her adım
+ * BAĞIMSIZ: worktree kaydı → dizin (kendi elimizle) → prune → dal. Biri düşse de ötekiler koşar.
+ */
 export async function removeSandbox(
   repoPath: string,
   sandbox: Sandbox,
   keepBranch: boolean,
 ): Promise<void> {
   const git = simpleGit(repoPath);
-  await git.raw(["worktree", "remove", "--force", sandbox.worktreePath]);
+  try {
+    await git.raw(["worktree", "remove", "--force", sandbox.worktreePath]);
+  } catch {
+    // Windows/node_modules: git dosyaları silemedi — dizini kendimiz siler, kaydı prune ederiz.
+    rmSync(sandbox.worktreePath, { recursive: true, force: true, maxRetries: 3 });
+    await git.raw(["worktree", "prune"]).catch(() => undefined);
+  }
   if (!keepBranch) {
-    await git.raw(["branch", "-D", sandbox.branch]);
+    // Dal silme, worktree temizliğinden BAĞIMSIZ olmalı (yukarıdaki hata onu atlatıyordu).
+    await git.raw(["branch", "-D", sandbox.branch]).catch(() => undefined);
   }
 }
 

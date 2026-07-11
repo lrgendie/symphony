@@ -120,7 +120,7 @@ Sistem prompt'u burada.`,
     expect(sef.provider).toBeUndefined(); // model boş → router/istek zamanı pinlenir
   });
 
-  it("varsayılan doktor tanımı (Faz 8, ADR-018 Karar 2): coder araç seti, run_agent YOK", () => {
+  it("varsayılan doktor tanımı (Faz 8, ADR-018 Karar 2): coder araç seti, run_agent YOK, model SABİT", () => {
     ensureDefaultAgent(agentsDir);
     const doktor = loadAgentDefinition(agentsDir, "doktor");
     // Yamayı yazabilmesi için tam araç seti gerekir (sandbox'ta çalışır, jail onu hapseder).
@@ -128,7 +128,11 @@ Sistem prompt'u burada.`,
     // Devretme YOK — doktor tek başına çalışır (çocuk koşu = ikinci sandbox sorunu).
     expect(doktor.tools).not.toContain("run_agent");
     expect(doktor.temperature).toBe(0);
-    expect(doktor.provider).toBeUndefined(); // model boş → router seçer
+    // MODEL SABİT (2026-07-11 canlı prova): router'a bırakılınca yerel model araç çağrısını METİN
+    // olarak yazıp görevi hiç yapamadı. Kendine-yama güvenilir tool-calling ister — bu sabit YALNIZ
+    // doktor koşularını bağlar (diğer agent'lar hâlâ boş → router).
+    expect(doktor.provider).toBe("anthropic");
+    expect(doktor.model).toBe("claude-sonnet-5");
     // Teşhis dosyasını okuması sistem prompt'unda AÇIKÇA emredilmiş olmalı (tek veri kanalı).
     expect(doktor.systemPrompt).toContain("DOKTOR-TESHIS.md");
   });
