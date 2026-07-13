@@ -7,9 +7,28 @@
 TAMAMEN KAPANDI (H1→H5).** Yaşayan animasyon katmanı: sürekli drift, akış nabzı, spring doğuş,
 katlanmada/silmede fade, `prefers-reduced-motion` geri dönüşü. 687→**700** test, `pnpm build &&
 pnpm test && pnpm lint` temiz. Headless tarayıcıda GERÇEK DOM ölçümleriyle dört mekanizma da tek
-tek kanıtlandı (aşağıda ayrıntı). **Sıradaki: yeni bir faz/dilim için kullanıcıdan talimat
-bekleniyor** — ROADMAP.md'ye bak ya da kullanıcıya sor. Öncesi: aynı gün Sonnet — H1 TAMAMEN +
+tek kanıtlandı. Commit `315bc4b`, origin/main'e push'landı. Öncesi: aynı gün Sonnet — H1 TAMAMEN +
 H2 + H3 + H4 BİTTİ. Öncesi: Fable — Bağlam Haritası v2 TASARIMI: ADR-019 + dilimler H1..H5.)
+
+## ⚠️ Sıradaki (kullanıcı 2026-07-13'te fark etti): masaüstü paketlemesi H3/H5'ten GERİDE
+
+Faz 7'nin paketleme işi (F3: Windows x64 NSIS installer, canlı doğrulandı 2026-07-11; F6:
+ARM64/macOS release matrix'i YAZILDI ama hiç GERÇEKTEN çalıştırılmadı) Bağlam Haritası v2'nin
+(H1-H5) TAMAMLANMASINDAN ÖNCE yapıldı. `ui/dist` paketleme ANINDA gömüldüğü için **mevcut
+paketlenmiş masaüstü uygulamasında H3 (kürasyon UI) ve H5 (yaşayan animasyon) hiç YOK** — bu
+zaten H3'ün Karar 7d notuydu, şimdi somut bir sonraki-adım olarak işaretleniyor (ayrıca
+`project_desktop_packaging_lags_ui` bellek kaydına da yazıldı).
+
+**Yapılması gereken (kullanıcı ne zaman isterse):**
+1. Sürüm numarasını artır (ilgili `package.json`lar).
+2. Yeni bir git tag at.
+3. F6'daki GitHub Actions release matrix'ini GERÇEKTEN tetikle — bu, ARM64/macOS build'lerinin
+   İLK gerçek denemesi olur (Mac/ARM erişimi yok, CI kendi kendini doğrulayacak).
+4. Yeni Windows installer'ı kur/doğrula (F3'ün ikinci canlı kanıtlanması).
+
+`symphony update` (npm — core/cli günceller) bu boşluğu KAPATMAZ; yalnız installer'ın yeniden
+kurulması masaüstüne H3/H5'i taşır. Tarayıcı-dev modunda (`pnpm dev`+`dev:token`) zaten ANINDA
+görünür — geride kalan yalnız PAKETLENMİŞ masaüstü.
 
 ## Dilim H5 — yaşayan animasyon katmanı BİTTİ — FAZ "H" (ADR-019) TAMAMEN KAPANDI (2026-07-13, Sonnet)
 
