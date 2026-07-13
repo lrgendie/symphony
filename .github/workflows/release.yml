@@ -35,6 +35,11 @@ jobs:
 
   bundle:
     needs: test
+    # Repo'nun varsayılan GITHUB_TOKEN izni "read" (canlı ilk denemede bulundu, 2026-07-13):
+    # tauri-action bu iş için draft release OLUŞTURMAK ister, contents:write gerekir — en az
+    # yetki ilkesiyle yalnız BU işe (repo genelini değil) açıkça verilir.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
