@@ -321,6 +321,54 @@ symphony/
 
 ---
 
+## 4.5 Açık İşler — Yapılacaklar Listesi (2026-07-13 durumu)
+
+> Faz 0-8 + Faz "H" (Bağlam Haritası v2, ADR-019) TAMAMEN kapandı; v0.2.0 draft release'i
+> 3 platformla hazır. Aşağıdaki tablo KALAN her şeyin tek yeri — kaynaklar:
+> `rapor/mimari-tarama-2026-07-11.md` + `rapor/mimari-tarama-2026-07-13.md` + faz notları.
+> Model ataması oturum ekonomisi kuralına göre: tasarım/karar = pahalı model (Fable/Opus),
+> mekanik uygulama = Sonnet, hesap/secret gerektiren adımlar = Kullanıcı.
+
+### A) Yayım ve paketleme (öncelik: ŞİMDİ)
+
+| İş | Ne yapılacak | Kim/Model |
+|---|---|---|
+| v0.2.0 release yayımı | Draft'ı gözden geçir → Windows installer'ı kur, H3 (kürasyon UI) + H5 (animasyon) masaüstünde görünüyor mu doğrula → "Publish" | **Kullanıcı** (Sonnet eşlik) |
+| F2: npm yayını | npm login/org kararı + repo'ya `NPM_TOKEN` secret'ı + `publish-npm` işinin yeşillenmesi. ÖN KOŞUL: Y3 kapandı ✅ (2026-07-13) | **Kullanıcı** (Sonnet eşlik) |
+| macOS Intel bundle | `macos-13` runner kuyruğu boşalınca yeni tag ile tekrar dene (Intel kitlesi küçülüyor — düşük öncelik) | Sonnet |
+| Windows .msi (yönetici) yolu | Program Files kurulumunun canlı doğrulaması (yalnız NSIS/kullanıcı-dizini yolu denendi) | **Kullanıcı** |
+
+### B) Teknik borç — tarama bulguları (öncelik: yayım sonrası ilk oturumlar)
+
+| İş | Ne yapılacak | Kim/Model |
+|---|---|---|
+| **Y1/B2 — merge çakışması** (ORTA, en önemli) | `patch.ts:289` merge'ü try/catch'e al → `git merge --abort` + `reset --hard` + `resolveState("failed")` + çakıştırma senaryolu test | Sonnet (~yarım oturum) |
+| Y4 — boş başlık | `daemon.ts` map.pin türetilmiş başlık boşsa `"(adsız)"` yedeği + test | Sonnet (5 dk) |
+| Y5 — kürasyon idempotency | Mükerrer pin→mevcut düğümü döndür; `group.create`'te `new Set(members)`; self-link/self-üye reddi + testler | Sonnet |
+| Y6 — yetim pin | Pinlenmiş ref'leri `limit` kesitinden MUAF tut (`build.ts`, pinnedIds zaten elde) + test | Sonnet |
+| B4 — TOCTOU | `pipeline.ts` `runForProject`: `busy=true`'yu kontrolün hemen ardına al, hata yolunda açık geri-alma + test | Sonnet |
+| B5 — DB parse guard | `store.ts:291,318` `JSON.parse` satır-başına try/catch (bozuk satır atlanır+loglanır) + test | Sonnet |
+| B6 — URL kodlama | `ui/daemon/client.ts:300` `encodeURIComponent(sessionId)` (tek satır, fetchRoadmap ile tutarlılık) | Sonnet |
+| **N1 — Türkçe tanımlayıcı KARARI** | Karar: İngilizce'ye kademeli dönüş MÜ, CLAUDE.md'de "alan terimleri (bekci/doktor/harita) muaf" gevşetmesi Mİ? Karar verilmeden her oturum birikimi büyütüyor | **Kullanıcı + Fable/Opus** (karar) → Sonnet (uygulama) |
+
+### C) Ertelenmiş v2 özellikleri (istenirse — tasarım kararı olanlar pahalı modele)
+
+| İş | Ne yapılacak | Kim/Model |
+|---|---|---|
+| RAG (arşiv embedding) | ADR-013'ün ertelenen katmanı: geçmiş arşiv embedding + sorguda bağlama çekme — profil yetmezse | Tasarım: Fable/Opus → Sonnet |
+| LoRA ince ayar | Süresiz ertelendi (ADR-013) — profil+RAG yetmezse gündeme gelir | Tasarım: Fable |
+| Paralel çocuk koşular + kapasite kuyruğu | ADR-014 "Ertelenenler": gerçek bekleyen-iş kuyruğu + eşzamanlı çocuklar | Tasarım: Opus → Sonnet |
+| Oturum tarayıcısı v2 | Tam oturum listesi/arama + model-değişince-devam | Sonnet |
+| Kürasyon dışa/içe aktarma | Çok-makine harita paylaşımı (`symphony harita disari-aktar/ice-aktar`, JSON) — ADR-019 Karar 7e ayrı karar istiyor | Karar: Opus → Sonnet |
+| Roadmap↔canlı agent bağı | ADR-015 Karar 4'ün ertelediği "hangi adımda hangi agent" görsel bağlaması | Sonnet |
+| N5 — sync silinen dosya | `symphony sync` silinen beyaz-liste dosyasını uzağa yansıtmıyor — v1'de kabul edildi, REHBER'e not ya da gerçek çözüm | Sonnet |
+| H5 tick seyreltme | Kullanıcıdan yavaşlık raporu GELİRSE: `startLiveLayout` her N tick'te bir `onTick` | Sonnet |
+
+**Kapalı (bu tabloya girmeden çözüldü):** B1+B3 (2026-07-11) · Y2 harita-ekle katlanma + Y3
+hardcode --version (2026-07-13, aynı gün bulunup kapatıldı).
+
+---
+
 ## 5. İlk Somut Adımlar (bu hafta)
 
 1. Monorepo iskeletini kur (Faz 0)

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // symphony CLI — daemon'a bağlanan terminal arayüzü (ROADMAP Faz 2).
+import { createRequire } from "node:module";
 import { Command } from "commander";
 import { PROTOCOL_VERSION } from "@symphony/shared";
 import { modelsCommand } from "./commands/models.js";
@@ -27,12 +28,18 @@ import {
 } from "./commands/patch.js";
 import { ensureDesktopRunning } from "./client/desktop-launch.js";
 
+// Sürüm tek kaynağı package.json — HARDCODE EDİLMEZ (mimari tarama 2026-07-13 Y3: 0.2.0
+// artışı buradaki eski "0.1.0" dizesini ıskalamıştı; core'un DAEMON_VERSION deseniyle aynı).
+// `../package.json` hem src/ hem dist/'ten aynı dosyaya çözünür (ikisi de packages/cli altında).
+const require = createRequire(import.meta.url);
+const CLI_VERSION = (require("../package.json") as { version: string }).version;
+
 const program = new Command();
 
 program
   .name("symphony")
   .description(`Symphony — yerel+bulut LLM orkestrasyonu (protokol v${PROTOCOL_VERSION})`)
-  .version("0.1.0");
+  .version(CLI_VERSION);
 
 program
   .command("models")

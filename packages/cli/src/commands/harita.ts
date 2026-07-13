@@ -44,7 +44,10 @@ export async function haritaEkleCommand(
 ): Promise<void> {
   const client = await connectToDaemon();
   try {
-    const graph = await client.getContextMap(500);
+    // `flat: true` ŞART (Y2, 2026-07-13): katlanmış (geçmiş hafta) session/run'lar aksi hâlde
+    // graf cevabında tek tek yer almaz — komutun ana amacı (ESKİ bir öğeyi sabitlemek) yalnız
+    // güncel hafta için çalışırdı.
+    const graph = await client.getContextMap({ limit: 500, flat: true });
     const target = resolvePinTarget(idPrefix, graph.nodes);
     const result = await client.request("map.pin", {
       ref: { kind: target.kind === "session" ? "session" : "run", id: target.id },
@@ -61,7 +64,8 @@ export async function haritaEkleCommand(
 export async function haritaListeCommand(): Promise<void> {
   const client = await connectToDaemon();
   try {
-    const graph = await client.getContextMap(500);
+    // flat GEREKMEZ: kürasyon düğümleri (context/group) hiçbir zaman katlanmaz (ADR-019 Karar 4).
+    const graph = await client.getContextMap({ limit: 500 });
     const curated = graph.nodes
       .filter((n) => n.kind === "context" || n.kind === "group")
       .sort((a, b) => b.at - a.at);

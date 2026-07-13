@@ -367,10 +367,18 @@ export class DaemonClient {
 
   // ---- REST bağlam haritası (PROTOKOL §1.1, ADR-016 Karar 6 + ADR-019 — Dilim H4) ----
 
-  /** Kürasyon dahil TAM bağlam haritası grafı — `symphony harita`nın veri kaynağı. */
-  async getContextMap(limit?: number): Promise<ContextMapResponse> {
-    const query = limit !== undefined ? `?limit=${limit}` : "";
-    const raw = await this.getHistory(`/api/context-map${query}`);
+  /**
+   * Kürasyon dahil bağlam haritası grafı — `symphony harita`nın veri kaynağı.
+   * `flat: true` haftalık katlanmayı KAPATIR (H2'nin `?flat=1` anahtarı) — id çözümlemesi
+   * yapan çağıranlar (harita ekle) bunu GEÇMELİ: katlanmış (geçmiş hafta) öğeler aksi hâlde
+   * cevapta tek tek yer almaz ve "bulunamadı"ya düşer (mimari tarama 2026-07-13, Y2).
+   */
+  async getContextMap(opts: { limit?: number; flat?: boolean } = {}): Promise<ContextMapResponse> {
+    const params = new URLSearchParams();
+    if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts.flat === true) params.set("flat", "1");
+    const query = params.toString();
+    const raw = await this.getHistory(`/api/context-map${query === "" ? "" : `?${query}`}`);
     return ContextMapResponseSchema.parse(raw);
   }
 

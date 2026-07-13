@@ -10,6 +10,21 @@ pnpm test && pnpm lint` temiz. Headless tarayıcıda GERÇEK DOM ölçümleriyle
 tek kanıtlandı. Commit `315bc4b`, origin/main'e push'landı. Öncesi: aynı gün Sonnet — H1 TAMAMEN +
 H2 + H3 + H4 BİTTİ. Öncesi: Fable — Bağlam Haritası v2 TASARIMI: ADR-019 + dilimler H1..H5.)
 
+## ✅ Yayım-öncesi tarama + Y2/Y3 düzeltmeleri (2026-07-13, Sonnet) — ROADMAP §4.5 yapılacaklar tablosu eklendi
+
+v0.2.0 draft'ı yayımlanmadan önce tam mimari tarama yapıldı → `rapor/mimari-tarama-2026-07-13.md`
+(Y1-Y6 yeni bulgular + B2/B4/B5/B6/N1 yeniden doğrulama; yayımı BLOKLAYAN bulgu yok, daemon'da
+bilinen çökme riski kalmadı). İki bulgu aynı gün kapatıldı:
+- **Y3:** `cli/index.ts` hardcode `.version("0.1.0")` → kendi `package.json`'ından okuyor
+  (core'un DAEMON_VERSION deseni; canlı doğrulandı: `symphony --version` → 0.2.0).
+- **Y2:** `symphony harita ekle` H2 katlanması yüzünden geçmiş-hafta öğelerini bulamıyordu →
+  `getContextMap` artık `{limit, flat}` opsiyonlu, `ekle` `flat:true` geçiyor (`liste`
+  DEĞİŞMEDİ — kürasyon zaten katlanmaz) + regresyon testi. 700→**701** test.
+**ROADMAP.md'ye §4.5 "Açık İşler — Yapılacaklar Listesi" eklendi** (kullanıcı isteği): kalan
+her iş tek tabloda, model atamalı (A: yayım/paketleme — çoğu Kullanıcı; B: teknik borç — çoğu
+Sonnet, N1 kararı Kullanıcı+Fable/Opus; C: v2 ertelenenler — tasarımı pahalı modele).
+**Sıradaki:** kullanıcı draft'ı yayımlar/npm'e girer (A tablosu) → sonra B tablosunun başı: Y1/B2.
+
 ## ✅ Faz 7 F6 — İLK GERÇEK release denemesi yapıldı (2026-07-13, Sonnet): v0.2.0, 3/4 platform BAŞARILI
 
 Masaüstü paketlemesinin H3/H5'ten geride kaldığı bulgusu (kullanıcı tespiti, yukarıdaki eski not)

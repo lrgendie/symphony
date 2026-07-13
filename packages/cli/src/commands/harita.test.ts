@@ -64,6 +64,12 @@ describe("haritaEkleCommand", () => {
     expect(closeMock).toHaveBeenCalledTimes(1);
   });
 
+  it("grafı flat:true ile çeker (Y2, 2026-07-13): katlanmış/geçmiş-hafta öğeleri de id çözümlemesine girsin", async () => {
+    getContextMapMock.mockResolvedValue({ nodes: [SESSION_NODE], edges: [] });
+    await haritaEkleCommand(SESSION_NODE.id, {});
+    expect(getContextMapMock).toHaveBeenCalledWith({ limit: 500, flat: true });
+  });
+
   it("TAM id ile eşleşen bir run'ı sabitler — ref.kind='run'", async () => {
     getContextMapMock.mockResolvedValue({ nodes: [SESSION_NODE, RUN_NODE], edges: [] });
     await haritaEkleCommand(RUN_NODE.id, {});
