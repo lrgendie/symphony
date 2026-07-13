@@ -10,25 +10,48 @@ pnpm test && pnpm lint` temiz. Headless tarayıcıda GERÇEK DOM ölçümleriyle
 tek kanıtlandı. Commit `315bc4b`, origin/main'e push'landı. Öncesi: aynı gün Sonnet — H1 TAMAMEN +
 H2 + H3 + H4 BİTTİ. Öncesi: Fable — Bağlam Haritası v2 TASARIMI: ADR-019 + dilimler H1..H5.)
 
-## ⚠️ Sıradaki (kullanıcı 2026-07-13'te fark etti): masaüstü paketlemesi H3/H5'ten GERİDE
+## ✅ Faz 7 F6 — İLK GERÇEK release denemesi yapıldı (2026-07-13, Sonnet): v0.2.0, 3/4 platform BAŞARILI
 
-Faz 7'nin paketleme işi (F3: Windows x64 NSIS installer, canlı doğrulandı 2026-07-11; F6:
-ARM64/macOS release matrix'i YAZILDI ama hiç GERÇEKTEN çalıştırılmadı) Bağlam Haritası v2'nin
-(H1-H5) TAMAMLANMASINDAN ÖNCE yapıldı. `ui/dist` paketleme ANINDA gömüldüğü için **mevcut
-paketlenmiş masaüstü uygulamasında H3 (kürasyon UI) ve H5 (yaşayan animasyon) hiç YOK** — bu
-zaten H3'ün Karar 7d notuydu, şimdi somut bir sonraki-adım olarak işaretleniyor (ayrıca
-`project_desktop_packaging_lags_ui` bellek kaydına da yazıldı).
+Masaüstü paketlemesinin H3/H5'ten geride kaldığı bulgusu (kullanıcı tespiti, yukarıdaki eski not)
+üzerine sürüm 0.1.0→**0.2.0** çıkarıldı (tüm `package.json`lar + `tauri.conf.json` + `Cargo.toml`/
+`Cargo.lock`), `v0.2.0` tag'i atılıp push'landı — **F6 release matrix'i (ADR-017) TARİHTE İLK KEZ
+gerçekten çalıştı.** İlk denemede iki gerçek bulgu çıktı, ikisi de düzeltildi:
 
-**Yapılması gereken (kullanıcı ne zaman isterse):**
-1. Sürüm numarasını artır (ilgili `package.json`lar).
-2. Yeni bir git tag at.
-3. F6'daki GitHub Actions release matrix'ini GERÇEKTEN tetikle — bu, ARM64/macOS build'lerinin
-   İLK gerçek denemesi olur (Mac/ARM erişimi yok, CI kendi kendini doğrulayacak).
-4. Yeni Windows installer'ı kur/doğrula (F3'ün ikinci canlı kanıtlanması).
+1. **`tauri.conf.json`'un `beforeBuildCommand`'ı** (`"pnpm --filter @symphony/ui build"`) yalnız
+   `ui`'yi derliyordu, turbo'nun `shared→ui` sırasını ATLIYORDU — temiz bir CI checkout'ta
+   `@symphony/shared`'ın `dist/*.d.ts`'i hiç yokken `ui`'nin `tsc`'si "Cannot find module
+   '@symphony/shared'" ile TÜM platformlarda aynı anda patlıyordu. F3'ün Windows kurulumu bunu
+   hiç yakalamamıştı çünkü yerelde `shared` zaten derlenmiş hâldeydi. **Düzeltme:**
+   `beforeDevCommand`/`beforeBuildCommand` artık önce `pnpm --filter @symphony/shared build`
+   çalıştırıyor (commit `ab7169a`).
+2. **`release.yml`'in `bundle` işi** düzeltme #1'den sonra Rust derleme + `.app`/`.dmg` paketlemeyi
+   BAŞARIYLA tamamladı ama draft release OLUŞTURURKEN "Resource not accessible by integration"
+   hatası verdi — repo'nun varsayılan `GITHUB_TOKEN` izni yalnız "read" (`gh api
+   repos/.../actions/permissions/workflow` ile doğrulandı), release oluşturmak `contents:write`
+   ister. **Düzeltme:** repo-geneli ayarı DEĞİL, yalnız `bundle` işine en-az-yetki ilkesiyle açık
+   `permissions: contents: write` eklendi (commit `6a69bcb`).
 
-`symphony update` (npm — core/cli günceller) bu boşluğu KAPATMAZ; yalnız installer'ın yeniden
-kurulması masaüstüne H3/H5'i taşır. Tarayıcı-dev modunda (`pnpm dev`+`dev:token`) zaten ANINDA
-görünür — geride kalan yalnız PAKETLENMİŞ masaüstü.
+Her düzeltmeden sonra `v0.2.0` tag'i silinip aynı isimle yeniden atıldı (3 deneme toplam) —
+GitHub'da draft release/artifact HİÇ oluşmadığı için bu güvenliydi (dışarıya sızan bir şey yoktu).
+**Sonuç: `v0.2.0` draft release'i 6 asset ile hazır** (Windows x64 .exe+.msi, Windows ARM64
+.exe+.msi, macOS ARM64 .dmg+.app.tar.gz) — H3/H5 masaüstüne İLK KEZ bu sürümle taşınıyor.
+**macOS Intel (`macos-13` runner) 40+ dk kuyrukta tıkalı kaldı** (GitHub'ın Intel-Mac runner
+kapasitesi kısıtlı görünüyor — ARM Mac `macos-14` sorunsuz/hızlı çalıştı) — kullanıcı onayıyla
+iptal edildi, 3 platformla devam edildi. **`publish-npm` beklendiği gibi başarısız** (NPM_TOKEN
+secret'ı hâlâ yok, F2 kullanıcı-tetiklemeli kaldı).
+
+**Sıradaki (kullanıcı ne zaman isterse):**
+1. Draft release'i (`https://github.com/lrgendie/symphony/releases`) gözden geçir, Windows
+   installer'ı GERÇEKTEN kurup H3 (kürasyon UI) + H5 (yaşayan animasyon) masaüstünde görünüyor mu
+   doğrula (F3'ün İKİNCİ canlı kanıtlanması — bu kez v0.2.0 ile).
+2. Onaylanırsa draft release'i "Publish" et (şu an DRAFT, dışarıya görünmüyor).
+3. macOS Intel ayrıca istenirse: `release.yml`'deki `macos-13` runner etiketini deneyip tekrar
+   bir tag ile denenebilir (ayrı, düşük öncelikli — Intel Mac kullanıcı kitlesi küçülüyor).
+4. NPM_TOKEN repo secret'ı eklenip F2/publish-npm gerçek şekilde tamamlanabilir (kullanıcının npm
+   hesabı gerekiyor, `npm whoami` yerelde de giriş yok).
+
+`symphony update` (npm — core/cli günceller) bu paketleme boşluğunu KAPATMAZ; yalnız yeni
+installer'ın kurulması masaüstüne H3/H5'i taşır.
 
 ## Dilim H5 — yaşayan animasyon katmanı BİTTİ — FAZ "H" (ADR-019) TAMAMEN KAPANDI (2026-07-13, Sonnet)
 
