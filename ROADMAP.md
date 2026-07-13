@@ -349,6 +349,7 @@ symphony/
 | B4 — TOCTOU | `pipeline.ts` `runForProject`: `busy=true`'yu kontrolün hemen ardına al, hata yolunda açık geri-alma + test | Sonnet |
 | B5 — DB parse guard | `store.ts:291,318` `JSON.parse` satır-başına try/catch (bozuk satır atlanır+loglanır) + test | Sonnet |
 | B6 — URL kodlama | `ui/daemon/client.ts:300` `encodeURIComponent(sessionId)` (tek satır, fetchRoadmap ile tutarlılık) | Sonnet |
+| **Y7 — bayat daemon + token uyumsuzluğu** (ORTA, canlı yaşandı 2026-07-13) | Eski bir daemon portu tutarken ikinci start token dosyasını yeniler ama portu alamayıp çıkar → eski daemon eski token'la kalır, dosya yeni token'la → tüm istemciler `AUTH_TOKEN_INVALID` alır. Çözüm o an elle yapıldı (eski PID öldür + token sil + taze start). Kalıcı düzeltme: `ensureDaemonRunning`/`token.ts` — start başarısızsa token dosyasını YENİLEME (yalnız gerçekten bind eden yazsın), ya da başlatılan daemon'ın PID'sini dosyaya yaz + health'te sürüm/pid tutarlılığı denetle | Sonnet |
 | **N1 — Türkçe tanımlayıcı KARARI** | Karar: İngilizce'ye kademeli dönüş MÜ, CLAUDE.md'de "alan terimleri (bekci/doktor/harita) muaf" gevşetmesi Mİ? Karar verilmeden her oturum birikimi büyütüyor | **Kullanıcı + Fable/Opus** (karar) → Sonnet (uygulama) |
 
 ### C) Ertelenmiş v2 özellikleri (istenirse — tasarım kararı olanlar pahalı modele)
