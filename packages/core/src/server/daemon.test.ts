@@ -1028,6 +1028,172 @@ describe("symphonyd", () => {
     expect(body.edges).toContainEqual({ from: runId, to: projectNode?.id, kind: "project" });
   });
 
+  it("kürasyon roundtrip (ADR-019 Karar 1/2, Faz H Dilim H1): pin→rename→link→group→member→detach→delete + koruma reddi + restart sonrası kalıcılık", async () => {
+    const dedicatedHome = mkdtempSync(join(tmpdir(), "symphony-map-curation-test-"));
+    const dedicatedPaths = ensureSymphonyHome(dedicatedHome);
+
+    const sessionId = crypto.randomUUID();
+    const runId = crypto.randomUUID();
+    const seedDb = new DataStore(dedicatedPaths.databaseFile);
+    try {
+      seedDb.saveConversation({
+        sessionId,
+        provider: "ollama",
+        model: "qwen3:8b",
+        messages: [{ role: "user", content: "kürasyon testi oturum başlığı" }],
+      });
+      seedDb.createAgentRun({
+        id: runId,
+        agentId: "asistan",
+        task: "kürasyon testi koşu görevi",
+        provider: "ollama",
+        model: "qwen3:8b",
+        cwd: dedicatedHome,
+        startedAt: Date.now(),
+      });
+      seedDb.finishAgentRun(runId, {
+        state: "completed",
+        result: "tamam",
+        errorCode: null,
+        usage: { inputTokens: 1, outputTokens: 1, costUsd: 0 },
+        steps: 1,
+      });
+    } finally {
+      seedDb.close();
+    }
+
+    const dedicated = await startDaemon({
+      port: 0,
+      home: dedicatedHome,
+      sampleHardware: false,
+      scheduleReports: false,
+      watchBekci: false,
+    });
+
+    let sessionNodeId = "";
+    let runNodeId = "";
+    let groupNodeId = "";
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${dedicated.port}/ws`);
+      await new Promise<void>((resolve, reject) => {
+        ws.on("open", () => {
+          ws.send(
+            JSON.stringify(
+              createMessage("hello", {
+                token: dedicated.token,
+                client: "cli",
+                protocolVersion: PROTOCOL_VERSION,
+              }),
+            ),
+          );
+        });
+        ws.on("message", (raw) => {
+          const msg = JSON.parse(String(raw)) as Envelope;
+          if (msg.type === "hello.ok") resolve();
+        });
+        ws.on("error", reject);
+      });
+
+      // 1) session'ı sabitle — başlık ref'ten türer (session.title, mesajdan deriveTitle ile)
+      const pinSession = await request(
+        ws,
+        createMessage("map.pin", { ref: { kind: "session", id: sessionId } }),
+      );
+      expect(pinSession.type).toBe("map.pin.ok");
+      sessionNodeId = (pinSession.payload as { nodeId: string }).nodeId;
+
+      // 2) run'ı sabitle — başlık koşunun görevinden türer
+      const pinRun = await request(ws, createMessage("map.pin", { ref: { kind: "run", id: runId } }));
+      expect(pinRun.type).toBe("map.pin.ok");
+      runNodeId = (pinRun.payload as { nodeId: string }).nodeId;
+
+      // 3) yeniden adlandır
+      const rename = await request(
+        ws,
+        createMessage("map.node.rename", { nodeId: sessionNodeId, title: "yeniden adlandırılmış başlık" }),
+      );
+      expect(rename.type).toBe("map.node.rename.ok");
+
+      // 4) bağla
+      const link = await request(ws, createMessage("map.link.add", { from: sessionNodeId, to: runNodeId }));
+      expect(link.type).toBe("map.link.add.ok");
+
+      // 5) grup kur
+      const group = await request(
+        ws,
+        createMessage("map.group.create", { title: "test grubu", members: [sessionNodeId] }),
+      );
+      expect(group.type).toBe("map.group.create.ok");
+      groupNodeId = (group.payload as { nodeId: string }).nodeId;
+
+      // 6) üye ekle
+      const memberAdd = await request(
+        ws,
+        createMessage("map.member.add", { groupId: groupNodeId, nodeId: runNodeId }),
+      );
+      expect(memberAdd.type).toBe("map.member.add.ok");
+
+      // 7) kopar — no-op güvenliği de aynı çağrıyla kanıtlanır (ikinci kez çağrılsa da patlamaz)
+      const memberRemove = await request(
+        ws,
+        createMessage("map.member.remove", { groupId: groupNodeId, nodeId: runNodeId }),
+      );
+      expect(memberRemove.type).toBe("map.member.remove.ok");
+
+      // koruma reddi: türetilmiş bir agent düğümü — var olup olmadığına BAKILMAKSIZIN PROTECTED
+      const protectedDelete = await request(
+        ws,
+        createMessage("map.node.delete", { nodeId: "agent:coder" }),
+      );
+      expect(protectedDelete.type).toBe("error");
+      expect((protectedDelete.payload as { code: string }).code).toBe("VALIDATION_MAP_NODE_PROTECTED");
+
+      // bilinmeyen id → UNKNOWN
+      const unknownDelete = await request(
+        ws,
+        createMessage("map.node.delete", { nodeId: "hic-boyle-bir-id-yok" }),
+      );
+      expect(unknownDelete.type).toBe("error");
+      expect((unknownDelete.payload as { code: string }).code).toBe("VALIDATION_MAP_NODE_UNKNOWN");
+
+      // map.pin'de bilinmeyen ref → REF_UNKNOWN
+      const unknownRef = await request(
+        ws,
+        createMessage("map.pin", { ref: { kind: "session", id: crypto.randomUUID() } }),
+      );
+      expect(unknownRef.type).toBe("error");
+      expect((unknownRef.payload as { code: string }).code).toBe("VALIDATION_MAP_REF_UNKNOWN");
+
+      // 8) sil — kenar kaskadı aşağıda YENİ bir DataStore ile kanıtlanır
+      const del = await request(ws, createMessage("map.node.delete", { nodeId: groupNodeId }));
+      expect(del.type).toBe("map.node.delete.ok");
+
+      ws.close();
+    } finally {
+      await dedicated.close();
+    }
+
+    // Restart sonrası kalıcılık: YENİ bir DataStore ile (gerçek restart gerekmez, mevcut testlerdeki
+    // db2 deseniyle AYNI) — silinen grup + kenar kaskadı, kalıcı rename, kalıcı link, türetilmiş başlık.
+    const db2 = new DataStore(dedicatedPaths.databaseFile);
+    try {
+      const nodes = db2.listMapNodes();
+      const edges = db2.listMapEdges();
+      expect(nodes.some((n) => n.id === groupNodeId)).toBe(false);
+      expect(edges.some((e) => e.fromId === groupNodeId || e.toId === groupNodeId)).toBe(false);
+      const renamedNode = nodes.find((n) => n.id === sessionNodeId);
+      expect(renamedNode?.title).toBe("yeniden adlandırılmış başlık");
+      expect(
+        edges.some((e) => e.kind === "link" && e.fromId === sessionNodeId && e.toId === runNodeId),
+      ).toBe(true);
+      const runNode = nodes.find((n) => n.id === runNodeId);
+      expect(runNode?.title).toBe("kürasyon testi koşu görevi");
+    } finally {
+      db2.close();
+      rmSync(dedicatedHome, { recursive: true, force: true });
+    }
+  }, 15_000);
+
   it("başarısız sohbet SQLite'a istek kaydı + telemetri düşürür; usage.query cevaplar", async () => {
     const { reply, ws } = await roundTrip(
       createMessage("hello", {

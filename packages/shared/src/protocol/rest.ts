@@ -190,32 +190,60 @@ export const ReportResponseSchema = z
 export type ReportResponse = z.infer<typeof ReportResponseSchema>;
 
 /**
- * Bağlam haritası (ADR-016 Karar 6, Dilim Z4): mevcut `sessions`/`agent_runs` verisinin
- * deterministik grafı — embedding YOK. Kenarlar run→proje (cwd) ve aynı-takvim-günü zamansal
- * komşuluk; model bağı kenar DEĞİL, düğüm `meta`'sında taşınır (görsel kanal — renk/filtre).
- * Kurucu SAF core modülü (`core/src/context-map/build.ts`), bu uç yalnız sarar.
+ * Bağlam haritası (ADR-016 Karar 6, Dilim Z4; ADR-019 Karar 2/3/4/7b, Dilim H2): mevcut
+ * `sessions`/`agent_runs` verisinin deterministik grafı + kalıcı kürasyon (`map_nodes`/
+ * `map_edges`) bindirmesi + haftalık katlanma. Kurucu SAF core modülü
+ * (`core/src/context-map/build.ts`), bu uç yalnız sarar.
  */
 export const ContextMapNodeSchema = z
   .object({
     id: z.string().min(1),
-    kind: z.enum(["session", "run", "project"]),
+    /**
+     * İstemci toleransı (ADR-019 Karar 7b): katı enum DEĞİL — daemon önde/istemci geride
+     * kaldığında bilinmeyen bir `kind` ayrıştırma hatasıyla haritayı "bağlantı yok"a düşürmesin,
+     * UI tarafı bilinmeyen türü jenerik düğüm çizer. Bilinen türler: `ContextMapNodeKind`.
+     */
+    kind: z.string(),
     label: z.string(),
     /** epoch ms */
     at: z.number().int().nonnegative(),
-    /** Görünüm için ek alanlar (provider/model/cwd) — koşu detayı v1'de buradan gelir. */
+    /** Görünüm için ek alanlar (provider/model/cwd/refKind/refId/sessionCount/...). */
     meta: z.record(z.unknown()),
   })
   .strip();
 export type ContextMapNode = z.infer<typeof ContextMapNodeSchema>;
 
+/** Bilinen düğüm türleri (dokümantasyon amaçlı union — şema `z.string()` ile gevşek kalır). */
+export type ContextMapNodeKind =
+  | "session"
+  | "run"
+  | "project"
+  | "context"
+  | "group"
+  | "week"
+  | "model"
+  | "agent";
+
 export const ContextMapEdgeSchema = z
   .object({
     from: z.string().min(1),
     to: z.string().min(1),
-    kind: z.enum(["project", "same_day"]),
+    /** İstemci toleransı (ADR-019 Karar 7b) — bkz. `ContextMapNodeSchema.kind`. */
+    kind: z.string(),
   })
   .strip();
 export type ContextMapEdge = z.infer<typeof ContextMapEdgeSchema>;
+
+/** Bilinen kenar türleri (dokümantasyon amaçlı union). */
+export type ContextMapEdgeKind =
+  | "project"
+  | "same_day"
+  | "pin"
+  | "link"
+  | "member"
+  | "model"
+  | "agent"
+  | "week";
 
 export const ContextMapResponseSchema = z
   .object({

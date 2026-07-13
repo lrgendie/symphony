@@ -17,6 +17,7 @@ import { syncCommand, syncInitCommand } from "./commands/sync.js";
 import { rollbackCommand, updateCommand } from "./commands/update.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { bekciEkleCommand, bekciListeCommand } from "./commands/bekci.js";
+import { haritaEkleCommand, haritaListeCommand } from "./commands/harita.js";
 import {
   patchApplyCommand,
   patchRejectCommand,
@@ -161,6 +162,23 @@ bekci
   .command("liste", { isDefault: true })
   .description("Kayıtlı projeleri listele")
   .action(() => bekciListeCommand());
+
+const harita = program
+  .command("harita")
+  .description("Bağlam haritası kürasyonu: sabitle/listele (ADR-019 Karar 2/6, Faz \"H\" Dilim H4)");
+
+harita
+  .command("ekle <sessionId|runId>")
+  .description("Bir sohbeti/koşuyu haritaya sabitle (id ön eki yeter — TUI'deki /harita ile AYNI eylem)")
+  .option("--baslik <başlık>", "başlık (yoksa oturum başlığı / koşu görevi kullanılır)")
+  .action((idPrefix: string, opts: { baslik?: string }) =>
+    haritaEkleCommand(idPrefix, opts).catch(fail),
+  );
+
+harita
+  .command("liste", { isDefault: true })
+  .description("Sabitlenmiş bağlamları ve grupları listele")
+  .action(() => haritaListeCommand().catch(fail));
 
 program
   .command("patches")

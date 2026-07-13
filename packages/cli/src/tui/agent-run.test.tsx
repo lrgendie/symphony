@@ -19,7 +19,7 @@ interface FakeClient {
 }
 
 /** Gerçek DaemonClient'ın on/request'ini taklit eder — olayları elle tetikleyebiliriz. */
-function fakeClient(startResolves = true): FakeClient {
+function fakeClient(startResolves = true, mapPinFails = false): FakeClient {
   const listeners = new Map<string, Set<(payload: unknown) => void>>();
   const requests: Array<{ type: string; payload: unknown }> = [];
   const client = {
@@ -35,6 +35,11 @@ function fakeClient(startResolves = true): FakeClient {
         return startResolves
           ? Promise.resolve({ runId: RUN_ID })
           : Promise.reject(new Error("AGENT_UNKNOWN: bilinmeyen agent"));
+      }
+      if (type === "map.pin") {
+        return mapPinFails
+          ? Promise.reject(new Error("Bilinmeyen referans"))
+          : Promise.resolve({ nodeId: "n1" });
       }
       return Promise.resolve({});
     },
@@ -649,6 +654,89 @@ describe("AgentRun (TUI agent modu — görev ve sonrası)", () => {
     stdin.write(""); // Esc → ana menü (lone ESC)
     await new Promise((resolve) => setTimeout(resolve, 20)); // ink lone-ESC debounce'unu bekle
     expect(exited).toBe(true);
+  });
+});
+
+describe("AgentRun /harita (ADR-019 Karar 6, Dilim H4)", () => {
+  /** awaiting_user'a kadar götürür (devam girişi açık) — /harita testlerinin ortak zemini. */
+  async function reachAwaiting(fake: FakeClient, stdin: Stdin): Promise<void> {
+    await skipCwdAndModel(stdin);
+    stdin.write("dosyaları listele");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    fake.emit("agent.delta", { runId: RUN_ID, text: "5 dosya buldum" });
+    fake.emit("agent.run.state", { runId: RUN_ID, state: "awaiting_user" });
+    await tick();
+    await tick();
+    await tick();
+  }
+
+  it("/harita girilince modele GÖNDERİLMEZ (agent.say atılmaz) — map.pin{ref:run} atılır, onay satırı basılır", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
+    );
+    await reachAwaiting(fake, stdin);
+
+    stdin.write("/harita");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    expect(fake.requests.some((r) => r.type === "agent.say")).toBe(false);
+    const pin = fake.requests.find((r) => r.type === "map.pin");
+    expect(pin?.payload).toMatchObject({ ref: { kind: "run", id: RUN_ID } });
+    expect(lastFrame()).toContain("Haritaya sabitlendi");
+  });
+
+  it("/harita <başlık> ile açık başlık title alanına geçer", async () => {
+    const fake = fakeClient();
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
+    );
+    await reachAwaiting(fake, stdin);
+
+    stdin.write("/harita önemli bulgu");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    const pin = fake.requests.find((r) => r.type === "map.pin");
+    expect(pin?.payload).toMatchObject({ title: "önemli bulgu" });
+    expect(lastFrame()).toContain('"önemli bulgu"');
+  });
+
+  it("map.pin reddedilirse hata satırı gösterir", async () => {
+    const fake = fakeClient(true, true);
+    const { stdin, lastFrame } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
+    );
+    await reachAwaiting(fake, stdin);
+
+    stdin.write("/harita");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    expect(lastFrame()).toContain("Haritaya sabitlenemedi");
+  });
+
+  it("/haritalamaya (tam eşleşme değil) NORMAL devam metni olarak agent.say ile gider", async () => {
+    const fake = fakeClient();
+    const { stdin } = render(
+      <AgentRun client={fake.client} agentId="coder" cwd="/ws" models={models} onExit={() => {}} />,
+    );
+    await reachAwaiting(fake, stdin);
+
+    stdin.write("/haritalamaya devam edelim");
+    await tick();
+    stdin.write("\r");
+    await tick();
+
+    expect(fake.requests.some((r) => r.type === "map.pin")).toBe(false);
+    const say = fake.requests.find((r) => r.type === "agent.say");
+    expect(say?.payload).toEqual({ runId: RUN_ID, text: "/haritalamaya devam edelim" });
   });
 });
 

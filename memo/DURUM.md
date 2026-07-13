@@ -3,7 +3,237 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-11 (Fable — **Bağlam Haritası v2 TASARIMI: ADR-019 + dilimler H1..H5** aşağıda; ayrıca `zanaat/OPERASYON-REHBERI.md` eklendi. Kod değişikliği yok. Öncesi: Sonnet — Dilim D7 BİTTİ ve testli; Faz 6'nın son açık maddesi kapandı)
+**Son güncelleme:** 2026-07-13 (Sonnet — **Dilim H5 BİTTİ ve CANLI DOĞRULANDI — FAZ "H" (ADR-019)
+TAMAMEN KAPANDI (H1→H5).** Yaşayan animasyon katmanı: sürekli drift, akış nabzı, spring doğuş,
+katlanmada/silmede fade, `prefers-reduced-motion` geri dönüşü. 687→**700** test, `pnpm build &&
+pnpm test && pnpm lint` temiz. Headless tarayıcıda GERÇEK DOM ölçümleriyle dört mekanizma da tek
+tek kanıtlandı (aşağıda ayrıntı). **Sıradaki: yeni bir faz/dilim için kullanıcıdan talimat
+bekleniyor** — ROADMAP.md'ye bak ya da kullanıcıya sor. Öncesi: aynı gün Sonnet — H1 TAMAMEN +
+H2 + H3 + H4 BİTTİ. Öncesi: Fable — Bağlam Haritası v2 TASARIMI: ADR-019 + dilimler H1..H5.)
+
+## Dilim H5 — yaşayan animasyon katmanı BİTTİ — FAZ "H" (ADR-019) TAMAMEN KAPANDI (2026-07-13, Sonnet)
+
+TASARIM §5 sınırları içinde uygulandı ("her animasyonun anlamı var, 60fps hedef, parçacık sayısı
+ayarlı"). Protokol/shared DEĞİŞMEDİ — tamamen `ui`.
+
+- **`ui/src/map/layout.ts`:** `buildSimulation`/`toLayoutResult` iç yardımcılarına REFAKTÖR edildi
+  (davranış BİREBİR aynı — `layoutContextMap`in mevcut testleri DEĞİŞMEDEN geçiyor). YENİ
+  `startLiveLayout(graph, width, height, onTick)`: AYNI fizik kurallarını paylaşır ama
+  `.stop().tick(300)` yerine `alphaTarget(0.02).restart()` — simülasyon hiç soğumaz, d3'ün kendi
+  zamanlayıcısı her karede `onTick`i çağırır. Dönen fonksiyon `simulation.stop()` (temizlik).
+  Bu fonksiyon `TesseractScene.tsx`/`LivingScene.tsx` ile AYNI kategoride: canlı, test edilmeyen
+  ince kabuk (SAF DEĞİL — `layoutContextMap` SAF kalmaya devam ediyor, tüm testleri sağlam).
+- **YENİ SAF `ui/src/map/motion.ts`** (testli, 13 test, `scene/tesseract/pulses.ts` deseninde):
+  `springScale(ageMs)` — kritik-altı sönümlü sinüs, 0'dan sıçramalı 1'e (yeni düğüm doğuşu);
+  `fadeOpacity(elapsedMs)` — doğrusal 1→0 (katlanma/silme süzülüşü); `isRecentEdge(fromAt,toAt,
+  nowMs)` — son 24 saat penceresi (akış nabzı adaylığı); `dashOffset(nowMs)` — sürekli kayan
+  `stroke-dashoffset` değeri.
+- **`ui/src/map/ContextMap.tsx`** (önemli refaktör): `selected` state'i artık `NodeInfo` (x/y'siz
+  — panel konuma hiç ihtiyaç duymuyordu, seçili düğümün CANLI konumu zaten `nodes` dizisinde id
+  üzerinden eşleşiyor). `reload()` artık `reduceMotionRef`e göre dallanır: reduced-motion'da ESKİ
+  statik `layoutContextMap` (H3 davranışı), aksi hâlde `startLiveLayout`. `firstSeenRef` (id→ilk
+  görülme anı, İLK yüklemede "zaten var" damgalanır ki onlarca düğüm aynı anda zıplamasın),
+  `departed` state (bir önceki çekişte olup şimdi kaybolan düğümler — son konumlarında donuk
+  kalıp `fadeOpacity` ile süzülür, `pointerEvents:none`). Render: düğüm yarıçapı `springScale(yaş)`
+  ile ölçeklenir; kenarlar `isRecentEdge` ise `stroke-dasharray` alır (reduced-motion'da da
+  GÖRÜNÜR kalır — yalnız `stroke-dashoffset` ANİMASYONU reduced-motion'da uygulanmaz, BİLGİ
+  kaybolmaz). `window.matchMedia("(prefers-reduced-motion: reduce)")` dinlenir (canlı toggle'da
+  simülasyon ANINDA durur).
+- **`index.css`:** `.map-edge-recent` (yalnız `stroke-width`, renk kind'tan gelir üzerine YAZILMAZ).
+- **Test:** `motion.test.ts` YENİ 13 (spring sınır/sıçrama/özel-süre, fade sınır/doğrusal,
+  isRecentEdge her-iki-uç/pencere-sınırı/gelecek-zaman, dashOffset yön/hız). `layout.test.ts`
+  DEĞİŞMEDİ (refaktör davranışı korudu). 687→**700** test (+13). `pnpm build && pnpm test &&
+  pnpm lint` temiz (72 dosya/700 test).
+- **CANLI DOĞRULAMA (headless Edge + ham CDP, GERÇEK DOM ölçümleriyle — ekran görüntüsü DEĞİL,
+  sayısal kanıt):** izole demo daemon + gerçek UI'ya karşı: (a) **sürekli drift** — 900ms arayla
+  iki DOM anlık görüntüsü, 9 düğümün TÜMÜNDE konum farkı (dx/dy 0.04px–34px); (b) **akış nabzı**
+  — `stroke-dashoffset` 900ms'de sürekli kaydı; (c) **prefers-reduced-motion geri dönüşü** —
+  headless tarayıcı VARSAYILAN OLARAK `reduce` bildiriyor (doğrulandı) → bu durumda konum SIFIR
+  fark + dashoffset `null` (animasyon YOK, ama dasharray deseni YİNE DE görünür — bilgi kaybı
+  yok) — CDP `Emulation.setEmulatedMedia` ile `no-preference`e zorlanınca (a)/(b) aktif oldu;
+  (d) **spring doğuş** — gerçek `map.pin` mutasyonu tetiklendi, doğan context düğümünün
+  yarıçapı 60ms aralıklarla örneklendi: 9.38 (sıçrama) → 8.95 (geri sekme) → 9 (yerleşti) —
+  `springScale`in tam beklenen eğrisi; (e) **katlanmada/silmede fade** — `map.node.delete`
+  tetiklendi, silinen düğümün opaklığı 80ms aralıklarla: 0.52 → 0.05 → tamamen kayboldu (~550ms,
+  `FADE_DURATION_MS=600` ile tutarlı). Tüm geçici süreç/dosyalar temizlendi.
+
+**FAZ "H" (ADR-019, Bağlam Haritası v2) TAMAMEN KAPANDI** — H1 (kürasyon temeli) → H2 (graf v2:
+katlanma+model/agent) → H3 (masaüstü görsel+kürasyon UI) → H4 (TUI/CLI `/harita`) → H5 (yaşayan
+animasyon). ADR-019'un kabul maddeleri (sabitlenen konu kalıcı, elle grup/bağ restart'ta yaşıyor,
+geçen hafta tek düğüme katlanmış+`?week=` ile açılıyor, agent koşusu agent→koşu→model üçlüsü)
+H1-H4'te canlı kanıtlandı; H5 görsel/animasyon katmanını tamamladı.
+
+## Dilim H4 — TUI `/harita` + CLI `symphony harita` BİTTİ (2026-07-13, Sonnet)
+
+DURUM.md'deki H4 talimatının üç adımı sırayla uygulandı (ADR-019 Karar 2/6/7f). Protokol/shared
+DEĞİŞMEDİ (map.* H1'de, context-map H2'de zaten vardı) — CLI + REHBER.md.
+
+- **`cli/src/tui/chat.tsx` + `agent-run.tsx`:** `HARITA_COMMAND = /^\/harita(?:\s+(.+))?$/` (tam
+  eşleşme — `/haritalamaya` gibi kelimeleri TETİKLEMEZ). `chat.tsx`'in `submit`inde YAKALANIR:
+  modele GÖNDERİLMEZ, `map.pin{ref:{kind:"session", id: sessionIdRef.current}, title?}` atılır,
+  `mapNote` state'i tek satır onay/hata gösterir (chat geçmişine KARIŞMAZ — modele giden
+  `messages` yalnız `history`den türer). `agent-run.tsx`'te `submitSay`de (awaiting_user'da devam
+  girişi) AYNI desen — ama `ref.kind:"run"`, `id: runId` (agent koşuları `agent_runs`
+  tablosunda; `sessionId` yeni koşularda hiç TUTULMUYOR, yalnız resume'da dolu — bu yüzden run
+  ile sabitleme mimariyle uyumlu tek seçenekti). İlk görev kutusunda (henüz runId yokken)
+  KASITLA yakalanmadı — pinlenecek bir şey henüz yok.
+- **YENİ `cli/src/commands/harita.ts`:** `haritaEkleCommand(idPrefix, {baslik?})` +
+  `haritaListeCommand()`. Ayrı bir REST/WS ucu GEREKMEDİ — `getContextMap` (YENİ, `daemon-
+  client.ts`'e eklendi, mevcut `/api/context-map`i sarar) hem id çözümlemesi (session/run
+  düğümleri arasında `history.ts`nin `resolveSession`iyle AYNI ön-ek deseni — TAM eşleşme önce,
+  sonra tekil ön-ek, belirsizlikte red) hem kürasyon listesi (context/group düğümleri, `at` DESC)
+  için TEK veri kaynağı. `index.ts`'e `bekci` deseniyle AYNI şekilde kaydedildi (`harita ekle`/
+  `harita liste` [isDefault]).
+- **`docs/REHBER.md`:** YENİ "§9 Bağlam Haritası" bölümü (küratörlü sabitleme üç yüzeyiyle:
+  masaüstü düğmesi/TUI `/harita`/CLI `harita ekle`; gruplama/bağlama; haftalık katlanma +
+  drill-down; `symphony sync`in kürasyonu TAŞIMADIĞI AÇIKÇA yazıldı) + komut tablosuna 2 satır.
+- **Test:** 667→**687** (+20: `chat.test.tsx` +4, `agent-run.test.tsx` +4, `harita.test.ts` YENİ
+  12 — id-çözümleme TAM/ön-ek/belirsiz/bulunamadı + kind-filtresi [session/run DIŞI düğümler
+  adaya GİRMEZ] + liste biçimlendirme + sıralama). `daemon-client.ts`'e `getContextMap` eklendi
+  (test YOK — ince bir REST sarmalayıcı, `getReport`/`getMemory` ile AYNI desen, zaten test
+  edilmiş `getHistory`i çağırıyor). `pnpm build && pnpm test && pnpm lint` temiz (71 dosya/687 test).
+- **CANLI DOĞRULAMA:** izole demo home tohumlandı (bir session + bir agent_run), daemon
+  7798'de başlatıldı, **gerçek `cli/dist/index.js` binary'si** `SYMPHONY_HOME` ile ona karşı
+  çalıştırıldı: `harita liste` boşken doğru mesaj → `harita ekle <8-haneli-ön-ek> --baslik "..."`
+  session'ı doğru çözüp sabitledi (açık başlık kullanıldı) → `harita ekle <tam-runId>` (başlık
+  VERİLMEDEN) run'ı sabitledi, başlık koşunun görevinden OTOMATİK türedi (daemon-taraflı
+  derivasyon, H1'den) → `harita liste` iki öğeyi de doğru etiket+ref satırıyla bastı. TUI'nin
+  `/harita`sı ink-testing-library ile (gerçek raw-mode TTY bu ortamda yok — D7 sınırıyla AYNI)
+  gerçek bileşen üzerinden doğrulandı. Geçici süreç/dosyalar temizlendi.
+
+**Sıradaki: Dilim H5** (yaşayan animasyon katmanı — TASARIM §5 sınırları: sürekli hafif drift,
+son 24 saat kenarlarında akış nabzı, yeni düğüm spring doğuşu, katlanmada fade,
+`prefers-reduced-motion`). Faz "H"nin SON dilimi. Sonnet yeterli; talimat aşağıda "Dilim H5".
+
+## Dilim H3 — masaüstü v2 BİTTİ (2026-07-13, Sonnet — Opus önerilmişti ama görsel dil TASARIM'da sabitti)
+
+ADR-019 Karar 2/3/4/6/7b/7c uygulandı. Protokol/shared DEĞİŞMEDİ (map.* zaten H1'de var; `kind`
+gevşetmesi H2'de yapıldı) — bu dilim tamamen `ui`. Adım adım talimattaki 5 adım sırayla:
+
+- **`ui/src/daemon/client.ts`:** `DaemonConnection`e istek/cevap korelasyonu eklendi (önceki
+  `respond`/`queryUsage` fire-and-forget'ti; kürasyon `.ok`/`error` BEKLER). `pending` Map (mesaj
+  id → resolver+timer), `awaitReply` (8sn timeout), `settle`; `onMessage`e pending kontrolü
+  (helloId'den SONRA, `store.handleEvent`ten ÖNCE), `onclose`ta bekleyenler DISCONNECTED ile
+  çözülür. YENİ metodlar: `pin/renameNode/deleteNode/createGroup/addMember/removeMember/addLink`
+  (hepsi `createMessage` ile şema-doğrulamalı). `CurationResult` tipi export. `fetchContextMap`
+  imzası `(limit?)` → `({limit?, week?})` (drill-down). **Sürüm sapması (Karar 7c):** eski daemon
+  `map.*` tipini tanımaz → cevap `replyTo:null` gelir (parseMessage envelope'ı geçer ama tip
+  bilinmez, sendError replyTo'suz) → korelasyon eşleşmez → 8sn timeout → "güncelle: symphony
+  update" ipucu. (Bugün yayımlanmış istemci yok, ileriye dönük.)
+- **YENİ SAF `ui/src/map/curation-actions.ts`** (testli, 8 test): `curationActionsFor(kind)` —
+  hangi düğüm türünde hangi kürasyon butonu (session/run→pin+link+group; project/model/agent→
+  link+group KORUMALI; context→rename+link+group+delete; group→rename+member-add/remove+link+
+  delete; week→open-week; bilinmeyen→[]) + `curationErrorMessage` (hata kodu→Türkçe; PROTECTED/
+  UNKNOWN/REF_UNKNOWN özel, gerisi daemon mesajını aynen — timeout ipucu dahil). `ui`de React
+  bileşen test altyapısı YOK (viewbox.ts precedent'i) → "hangi düğümde hangi buton" saf mantığı
+  bileşenden AYRILDI ki test edilsin (yanlış düğüme sil butonu koymak sinsi hata olurdu).
+- **`ui/src/map/layout.ts`:** hafta düğümleri simülasyona GİRMEZ (Karar 4) — `id` string sırasıyla
+  (kronolojik) alt kenara `fx/fy` ile sabitlenir (`WEEK_MARGIN_X=60`, `WEEK_MARGIN_Y=30`; tek
+  hafta ortaya). `layout.test.ts` +3 (alt kenar y, soldan-sağa kronoloji, tek hafta ortada).
+- **`ui/src/map/ContextMap.tsx`:** yeniden yazıldı — `reload(weekArg)` (stale-cevap kalkanı +
+  taze LayoutNode döner, seçim id'yle reconcile edilir); yeni düğüm şekilleri (week/group=`<rect>`,
+  gerisi `<circle>`), model yerel/API sınıfı (`nodeClassName` → `.map-node-model-local/-api`);
+  detay paneline kürasyon butonları (`curationActionsFor`, pin zaten sabitlenmişse gizlenir —
+  `pinnedRefIds` edge'lerden); "Bağla/Üye ekle/Kopar" HEDEF-SEÇME modu (`pending` state, üst bant +
+  Esc iptal, hedef tıklaması `completeTarget`); rename/group INLINE input (Tauri webview'de
+  `prompt()` güvenilmez → panel içi form); hafta düğümü → `WeekDetail` + "Haftayı aç" drill-down
+  (`?week=` + "← dön"); ModelDetail (yerel/API)/AgentDetail/WeekDetail eklendi; mutasyon sonrası
+  `reload`. Karar 7b: `NODE_RADIUS[kind] ?? DEFAULT` (bilinmeyen tür jenerik düğüm).
+- **`ui/src/index.css`:** yeni düğüm renkleri (model-local=green/model-api=amber [yerel↔bulut],
+  agent=copper, context=text[parlak], group=text-çerçeveli rect, week=dim rect), yeni kenar
+  stilleri (model/agent/week omurgası/pin kesikli/link cyan/member violet), kürasyon kabuğu
+  (`.map-wrap`/`.map-drill-bar`/`.map-pending-banner`/`.map-curation-error`/`.map-curation-*`).
+- **Test:** 656→**667** (+11: `curation-actions.test.ts` YENİ 8 + `layout.test.ts` +3).
+  `pnpm build && pnpm test && pnpm lint` temiz (70 dosya/667 test).
+- **CANLI DOĞRULAMA (headless tarayıcı + CDP):** izole/geçici home tohumlandı (bu-hafta+eski-hafta
+  koşuları, yerel+API modeller, sabitlenmiş context'ler, boş grup), daemon 7799'da + vite 5173'te
+  başlatıldı, Edge headless CDP ile sürüldü. Kanıtlanan: (a) harita gerçekten render oluyor —
+  yeşil/altın model ayrımı, bakır agent, beyaz context + kesikli pin kenarları, alt kenarda
+  kronolojik hafta dikdörtgenleri + omurga; (b) context düğümü → doğru butonlar (adlandır/bağla/
+  grupla/sil); (c) hafta düğümü → WeekDetail (katlanma sayıları) + "Haftayı aç"; (d) **UÇTAN UCA:
+  UI'dan yeniden-adlandır → `map.node.rename` WS → daemon → SQLite; daemon'ın `/api/context-map`'i
+  yeni başlığı döndürdü** (H1 dersi: "derleniyor ≠ tel üzerinden çalışıyor" — bu kez tel üzerinden
+  kanıtlandı). Ekran görüntüleri (map-wide, map-week) kullanıcıya gönderildi. Tüm geçici süreç/
+  dosya temizlendi, `.env.local` gerçek daemon'a geri döndü.
+
+**NOT (Karar 7d — masaüstünde görünürlük):** H3 `ui/dist`e gömülür → masaüstü Tauri kabuğunda
+görünmesi YENİ desktop installer sürümü ister (tag → F6 release matrix). Tarayıcı dev'de (`dev` +
+`dev:token`) ANINDA görünür; npm `symphony update` H3'ü masaüstüne TAŞIMAZ (yalnız daemon/CLI).
+
+**Sıradaki: Dilim H4** (TUI `/harita` + CLI `symphony harita`) VE/VEYA **Dilim H5** (yaşayan
+animasyon katmanı) — ikisi de Sonnet, sıra kullanıcıya. Talimatları aşağıda "Dilim H4"/"Dilim H5".
+
+## Dilim H2 — graf v2 BİTTİ (2026-07-13, Sonnet)
+
+DURUM.md'deki H2 talimatının dört adımı sırayla uygulandı (ADR-019 Karar 2/3/4/7b).
+
+- **`shared/src/protocol/rest.ts`:** `ContextMapNodeSchema.kind`/`ContextMapEdgeSchema.kind`
+  katı `z.enum(...)`den `z.string()`e gevşetildi (Karar 7b — istemci toleransı: bilinmeyen tür
+  ayrıştırma hatası ÜRETMEZ, jenerik düğüm çizilir) + dokümantasyon amaçlı `ContextMapNodeKind`/
+  `ContextMapEdgeKind` union tipleri export edildi. `docs/PROTOKOL.md`'nin `/api/context-map`
+  satırı güncellendi: yeni düğüm/kenar türleri + `week=`/`flat=1` query paramları.
+- **`core/src/context-map/build.ts` v2** (SAF kaldı): `isoWeekLabel` (`report/markdown.ts`) TEK
+  hafta tanımı olarak içe alındı. Yeni girdiler: `mapNodes`/`mapEdges` (kürasyon), `now`
+  (enjekte, vars. `Date.now()`), `week` (drill-down), `flat` (katlamayı tamamen kapatan geri
+  dönüş anahtarı). Algoritma: `pinnedIds` = context düğümlerinin ref'lediği session/run id'leri
+  (ASLA katlanmaz); `openWeek = week ?? isoWeekLabel(now)`; bir öğe `flat || pinnedIds.has(id) ||
+  isoWeekLabel(at)===openWeek` ise AÇIK, değilse `week:<label>` düğümüne katlanır (meta:
+  sessionCount/runCount/models, kronolojik `week` kenar zinciri). AÇIK her koşudan
+  `model:<provider>/<model>` VE `agent:<agentId>` düğümlerine kenar; AÇIK her oturumdan yalnız
+  model düğümüne (Karar 3 — model bağının kenar OLMASI kararı ADR-016'nın reddini revize etti).
+  Model düğümü `meta.origin`: `ollama`→`local`, diğerleri→`api`. Kürasyon context/group düğümleri
+  BİREBİR eklenir (tarihsizdir, hep görünür); ref'li context'ten ref'lediği öğeye `pin` kenarı
+  türetilir; `mapEdges` (`link`/`member`) BİREBİR eklenir. **Görünüm güvenliği:** bir ucu grafta
+  yer almayan kenar (ör. context ref'i OLMADAN katlanmış bir öğeye doğrudan üyelik) SVG'de kırık
+  çizgi olmasın diye son adımda süzülür (veri bütünlüğü değil, görünüm kararı).
+- **`daemon.ts`:** `/api/context-map` artık `store.listMapNodes()`/`listMapEdges()`i de çekip
+  `buildContextMap`e geçiriyor; `week`/`flat=1` query paramları eklendi; `agentId: row.agent_id`
+  run eşlemesine eklendi (agent düğümü/kenarı için).
+- **`ui/src/map/ContextMap.tsx`:** Karar 7b'nin "bilinmeyen tür jenerik düğüm çizilir" şartı için
+  minimal düzeltme — `NODE_RADIUS[n.kind]` artık `?? DEFAULT_NODE_RADIUS` (8) ile geri düşüyor;
+  aksi hâlde `noUncheckedIndexedAccess` yüzünden yeni türler (week/model/agent/context/group)
+  `r=undefined` ile GÖRÜNMEZ olurdu (`pnpm build` bunu hata vermiyordu — sessiz bir görünüm
+  hatasıydı, canlı kontrolde fark edilmedi ama ADR metni açıkça istiyor). **Renk/şekil/etkileşim
+  tasarımı H3'ün işi** — bu yalnız "kırılmasın" düzeltmesi.
+- **Test:** `build.test.ts` TAMAMEN yeniden yazıldı (v1'in 9 testi → v2'nin 20 testi: üç
+  describe — öğe-düzeyi graf [flat:true ile katlamadan bağımsız, üçlü kenar dahil], haftalık
+  katlanma [6 test: katlanma, katlanmama, sabitleme+pin kenarı, kronolojik week zinciri, `week`
+  drill-down, `flat`], kürasyon bindirmesi [3 test, dangling-kenar süzme dahil]).
+  `daemon.test.ts`'teki Z4 "bağlam haritası" testi DEĞİŞMEDİ (`toMatchObject`/`toContainEqual`
+  kullandığı için yeni model/agent düğümleri/kenarları onu kırmadı). 645→**656** test (+11).
+  `pnpm build && pnpm test && pnpm lint` temiz (69 dosya/656 test).
+- **CANLI DOĞRULAMA:** geçici bir betikle (`core/src/_h2-canli-kontrol.ts`, iş bitince silindi)
+  gerçek bir daemon'a karşı: güncel-hafta koşusu üçlü kenarla (proje/model/agent) göründü;
+  3-hafta-önceki bir koşu context düğümüyle sabitlenince (`map_nodes` ref) katlanmadı VE
+  context→run arasında `pin` kenarı gerçekten oluştu; tek eski öğe sabitlendiği için katlanacak
+  bir şey kalmayınca `week:` düğümü hiç doğmadı (beklenen — algoritma sadece kalan katlanmış
+  öğelerden hafta düğümü üretir).
+
+**Sıradaki: Dilim H3** (masaüstü v2 — yeni düğüm görselleri [yerel/API ayrımı], hafta kenarı
+yerleşimi, kürasyon UI + bağla modu + drill-down; talimat aşağıda "Dilim H3" başlığında).
+**Opus önerilir** (etkileşim yoğun, görsel yargı gerektiriyor).
+
+## Dilim H1 — kürasyon temeli TAMAMEN BİTTİ (2026-07-13, Sonnet)
+
+Önceki oturumun bıraktığı tek eksik ("6. adım: daemon.ts'in 8 handler'ı için WS-üzerinden
+uçtan-uca entegrasyon testi") tamamlandı. `daemon.test.ts`'e Z4 "bağlam haritası" testinin hemen
+ardına YENİ bir test eklendi: dedicated home + seed (`saveConversation` ile bir session,
+`createAgentRun`/`finishAgentRun` ile tamamlanmış bir agent_run) → WS hello → sırasıyla
+`map.pin{ref:session}` (başlık session'dan türedi mi) → `map.pin{ref:run}` (başlık görevden
+türedi mi) → `map.node.rename` → `map.link.add` → `map.group.create` → `map.member.add` →
+`map.member.remove` (kopar) → üç koruma reddi (`map.node.delete{nodeId:"agent:coder"}` →
+PROTECTED — türetilmiş id, var olması gerekmiyor; bilinmeyen id → UNKNOWN; `map.pin{ref:
+rastgele-uuid}` → REF_UNKNOWN) → `map.node.delete{groupNodeId}` → **daemon kapatılıp YENİ bir
+`DataStore` açılarak** `listMapNodes`/`listMapEdges` ile kalıcılık doğrulandı (grup + kenar
+kaskadı silinmiş, rename kalıcı, link kalıcı, run düğümünün başlığı görevden türemiş).
+
+- **Test:** 644→**645** (+1, mevcut `daemon.test.ts`e eklendi). `pnpm build && pnpm test &&
+  pnpm lint` temiz (69 dosya/645 test).
+- Kod değişikliği YOK — yalnız test. H1'in beş kod adımı zaten önceki oturumda bitmişti.
+
+**Faz "H" (ADR-019) artık Dilim H1 TAMAMEN kapandı. Sıradaki: Dilim H2** (graf v2 — katlanma +
+model/agent düğümleri + kürasyon bindirmesi; talimat detayı aşağıda, "Dilim H2" başlığı altında).
+Sonnet yeterli.
 
 ## Belge eki — zanaat rehberi (2026-07-11, Fable)
 
@@ -136,7 +366,7 @@ görsel doğrulama kullanıcıyla. `pnpm build && pnpm test && pnpm lint`; DURUM
 **B2 (patch apply merge çakışması) ve N1 (Türkçe tanımlayıcı kararı) HENÜZ YAPILMADI** — rapor
 §7'nin sıradaki adımları, H dilimlerinden bağımsız istenildiğinde yapılabilir.
 
-## Dilim H1 — kürasyon temeli KISMEN BİTTİ (2026-07-11, Fable) — daemon entegrasyon testi EKSİK
+## Dilim H1 — kürasyon temeli (2026-07-11, Fable) — beş kod adımı; entegrasyon testi 2026-07-13'te tamamlandı (yukarı bak)
 
 Kullanıcı talimatı ("DURUM.md'yi oku, önce tarama raporu B1+B3, sonra Dilim H1") sırasıyla
 uygulandı; H1'in altı adımından İLK BEŞİ kodlandı ve testli, **6. adım (build+test+lint +
@@ -188,7 +418,7 @@ testi yazmalı, SONRA H2'ye geçmeli.
   `listMapNodes`/`listMapEdges`ile kalıcılığı doğrula** (mevcut testlerdeki `db2 = new
   DataStore(...)` deseniyle AYNI, gerçek restart gerekmez).
 
-**Sıradaki:** yukarıdaki eksik testi tamamla (H1'i GERÇEKTEN kapat) → sonra H2'ye geç.
+**Sıradaki:** ~~yukarıdaki eksik testi tamamla~~ (2026-07-13'te tamamlandı, en üstteki girdiye bak) → şimdi H2'ye geç.
 
 ## Dilim D7 — agent tanım-güncelleme önerisi BİTTİ (2026-07-11, Sonnet) — Faz 6'nın son açık maddesi kapandı
 

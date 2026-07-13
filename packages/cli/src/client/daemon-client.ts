@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { WebSocket } from "ws";
 import type { z } from "zod";
 import {
+  ContextMapResponseSchema,
   createMessage,
   HistorySessionDetailResponseSchema,
   HistorySessionsResponseSchema,
@@ -13,6 +14,7 @@ import {
   parseMessage,
   PROTOCOL_VERSION,
   ReportResponseSchema,
+  type ContextMapResponse,
   type EventPayload,
   type EventType,
   type HistorySessionDetailResponse,
@@ -361,6 +363,15 @@ export class DaemonClient {
     const query = params.toString();
     const raw = await this.getHistory(`/api/report${query.length > 0 ? `?${query}` : ""}`);
     return ReportResponseSchema.parse(raw);
+  }
+
+  // ---- REST bağlam haritası (PROTOKOL §1.1, ADR-016 Karar 6 + ADR-019 — Dilim H4) ----
+
+  /** Kürasyon dahil TAM bağlam haritası grafı — `symphony harita`nın veri kaynağı. */
+  async getContextMap(limit?: number): Promise<ContextMapResponse> {
+    const query = limit !== undefined ? `?limit=${limit}` : "";
+    const raw = await this.getHistory(`/api/context-map${query}`);
+    return ContextMapResponseSchema.parse(raw);
   }
 
   /** Profilin TAM içeriğini değiştirir — yalnız insan arayüzünden çağrılır. */

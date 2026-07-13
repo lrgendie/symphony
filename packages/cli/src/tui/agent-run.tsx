@@ -21,6 +21,9 @@ interface RunOutcome {
 
 type ModelChoice = ModelInfo | "router";
 
+/** `/harita [başlık]` — tam eşleşme (`/haritalamaya` gibi kelimeleri tetiklemez). */
+const HARITA_COMMAND = /^\/harita(?:\s+(.+))?$/;
+
 /**
  * TUI agent modu (ROADMAP Faz 3): çalışma dizini onayı → model seçimi → görev girişi →
  * agent.start → izin kutusu (tek tuş e/d/h) + renkli diff + canlı araç günlüğü →
@@ -73,6 +76,8 @@ export function AgentRun(props: {
   // Konuşmalı koşu (ADR-012, dilim 2.2): tur bitince awaiting_user → devam girişi.
   const [awaiting, setAwaiting] = useState(false);
   const [sayDraft, setSayDraft] = useState("");
+  // /harita onay/hata satırı (ADR-019 Karar 6, Dilim H4) — döküme KARIŞMAZ, sonraki turda temizlenir.
+  const [mapNote, setMapNote] = useState<string | null>(null);
   /** Biten turların dökümü (agent cevabı + kullanıcı devamı) — ekranda kalır. Resume'da tohumlanır. */
   const [exchange, setExchange] = useState<string[]>(props.seedExchange ?? []);
   // Resume oturumu (rapor2 §3.1): prop SABİTTİR ama koşu bitip "yeni görev" ile sıfırlanınca
@@ -239,6 +244,34 @@ export function AgentRun(props: {
     const trimmed = value.trim();
     if (trimmed.length === 0 || runId === null) return;
     setSayDraft("");
+    setMapNote(null);
+
+    // "Bunu bağlam haritasına ekleyelim" anı (ADR-019 Karar 6): modele GÖNDERİLMEZ, aktif koşuyu
+    // (agent→koşu→model üçlüsündeki "koşu") map.pin ile sabitler — sessionId DEĞİL runId (agent
+    // koşuları `agent_runs` tablosunda; başlık koşunun görevinden türer).
+    const haritaMatch = HARITA_COMMAND.exec(trimmed);
+    if (haritaMatch !== null) {
+      const title = haritaMatch[1]?.trim();
+      void props.client
+        .request("map.pin", {
+          ref: { kind: "run", id: runId },
+          ...(title !== undefined && title.length > 0 ? { title } : {}),
+        })
+        .then(() => {
+          setMapNote(
+            title !== undefined && title.length > 0
+              ? `✓ Haritaya sabitlendi: "${title}"`
+              : "✓ Haritaya sabitlendi.",
+          );
+        })
+        .catch((error: unknown) => {
+          setMapNote(null);
+          setStartError(
+            `Haritaya sabitlenemedi: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+      return;
+    }
     // Biten turu döküme taşı; yeni turun delta'ları temiz akar.
     setExchange((e) => [...e, ...(streaming.length > 0 ? [`🤖 ${streaming}`] : []), `> ${trimmed}`]);
     setStreaming("");
@@ -371,11 +404,12 @@ export function AgentRun(props: {
       )}
       {awaiting && pending === null && outcome === null && (
         <Box flexDirection="column" marginTop={1}>
-          <Text dimColor>↵ devam yaz (aynı koşu sürer) · Esc: koşuyu bitir</Text>
+          <Text dimColor>↵ devam yaz (aynı koşu sürer) · Esc: koşuyu bitir · /harita: haritaya sabitle</Text>
           <Box>
             <Text color="cyan">{"> "}</Text>
             <TextInput value={sayDraft} onChange={setSayDraft} onSubmit={submitSay} />
           </Box>
+          {mapNote !== null && <Text color="cyan">{mapNote}</Text>}
         </Box>
       )}
       {outcome !== null && (

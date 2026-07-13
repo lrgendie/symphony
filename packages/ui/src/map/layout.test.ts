@@ -64,4 +64,54 @@ describe("layoutContextMap (ADR-016 Karar 6, Dilim Z5) — SAF, deterministik", 
     expect(result.nodes).toHaveLength(1);
     expect(Number.isFinite(result.nodes[0]?.x)).toBe(true);
   });
+
+  // ADR-019 Karar 4, Dilim H3: hafta düğümleri simülasyona GİRMEZ, alt kenara kronolojik sabitlenir.
+  it("hafta düğümleri alt kenara (y ≈ height - margin) sabitlenir", () => {
+    const height = 600;
+    const result = layoutContextMap(
+      {
+        nodes: [
+          { id: "week:2026-W27", kind: "week", label: "2026-W27", at: 1_000, meta: {} },
+          { id: "week:2026-W28", kind: "week", label: "2026-W28", at: 2_000, meta: {} },
+          { id: "r1", kind: "run", label: "koşu", at: 3_000, meta: {} },
+        ],
+        edges: [{ from: "week:2026-W27", to: "week:2026-W28", kind: "week" }],
+      },
+      800,
+      height,
+    );
+    const w27 = result.nodes.find((n) => n.id === "week:2026-W27");
+    const w28 = result.nodes.find((n) => n.id === "week:2026-W28");
+    // İkisi de alt kenarda (margin 30) — simülasyon onları merkeze çekMEDİ.
+    expect(w27?.y).toBe(height - 30);
+    expect(w28?.y).toBe(height - 30);
+  });
+
+  it("hafta düğümleri kronolojik (soldan sağa) sıralanır — eski hafta solda", () => {
+    const result = layoutContextMap(
+      {
+        nodes: [
+          // Bilinçle ters sırada verildi — yerleşim yine kronolojik dizmeli (id string sırası).
+          { id: "week:2026-W28", kind: "week", label: "2026-W28", at: 2_000, meta: {} },
+          { id: "week:2026-W27", kind: "week", label: "2026-W27", at: 1_000, meta: {} },
+        ],
+        edges: [],
+      },
+      800,
+      600,
+    );
+    const w27 = result.nodes.find((n) => n.id === "week:2026-W27");
+    const w28 = result.nodes.find((n) => n.id === "week:2026-W28");
+    // Eski hafta (W27) solda, yeni hafta (W28) sağda.
+    expect(w27?.x).toBeLessThan(w28?.x ?? Infinity);
+  });
+
+  it("tek hafta düğümü ortaya (width/2) sabitlenir — sıfıra bölme yok", () => {
+    const result = layoutContextMap(
+      { nodes: [{ id: "week:2026-W27", kind: "week", label: "2026-W27", at: 1_000, meta: {} }], edges: [] },
+      800,
+      600,
+    );
+    expect(result.nodes[0]?.x).toBe(400);
+  });
 });

@@ -6,6 +6,7 @@ import {
   PROTOCOL_VERSION,
   RoadmapResponseSchema,
   type ContextMapResponse,
+  type Envelope,
   type EventPayload,
   type EventType,
   type HistorySessionDetailResponse,
@@ -27,11 +28,25 @@ const BACKOFF_MS = [500, 1000, 2000, 4000, 8000, 15000];
 /** İzin kararı (SPEC-AGENT §5) — masaüstünden de gönderilebilir; ilk cevap kazanır. */
 export type PermissionDecision = "allow" | "deny" | "always_allow" | "allow_for_run";
 
+/**
+ * Bağlam haritası kürasyon isteğinin sonucu (ADR-019, Dilim H3). `respond()`/`queryUsage()`in
+ * fire-and-forget deseninden FARKLI: bu istekler `.ok`/`error` cevabını BEKLER (kürasyon
+ * düğmesi başarı/başarısızlık göstermeli). Sürüm sapması (Karar 7c): eski daemon `map.*` tipini
+ * tanımaz → cevap `replyTo:null` ile gelir, korelasyon eşleşmez → timeout → güncelleme ipucu.
+ */
+export type CurationResult =
+  | { ok: true; nodeId?: string }
+  | { ok: false; code: string; message: string };
+
+const CURATION_TIMEOUT_MS = 8000;
+
 export class DaemonConnection {
   private ws: WebSocket | null = null;
   private closed = false;
   private helloId = "";
   private attempt = 0;
+  /** Bekleyen kürasyon istekleri: mesaj id → sonucu çözecek geri çağrı + zaman aşımı timer'ı. */
+  private pending = new Map<string, { resolve: (r: CurationResult) => void; timer: number }>();
 
   start(): void {
     this.closed = false;
@@ -53,6 +68,65 @@ export class DaemonConnection {
     const ws = this.ws;
     if (ws === null || ws.readyState !== WebSocket.OPEN) return;
     ws.send(JSON.stringify(createMessage("permission.respond", { requestId, decision })));
+  }
+
+  // ---- Bağlam haritası kürasyonu (ADR-019 Karar 2/6, Dilim H3) ----
+  // Her biri tek bir `map.*` isteği yollar ve `.ok`/`error` cevabını bekler. Şema `createMessage`
+  // içinde doğrulanır (garbage-out önlemi); daemon doğrulaması (PROTECTED/UNKNOWN/REF_UNKNOWN)
+  // `error` cevabı olarak döner ve `CurationResult` içinde çağırana taşınır.
+
+  pin(ref: { kind: "session" | "run"; id: string }): Promise<CurationResult> {
+    return this.awaitReply(createMessage("map.pin", { ref }));
+  }
+  renameNode(nodeId: string, title: string): Promise<CurationResult> {
+    return this.awaitReply(createMessage("map.node.rename", { nodeId, title }));
+  }
+  deleteNode(nodeId: string): Promise<CurationResult> {
+    return this.awaitReply(createMessage("map.node.delete", { nodeId }));
+  }
+  createGroup(title: string, members: string[]): Promise<CurationResult> {
+    return this.awaitReply(createMessage("map.group.create", { title, members }));
+  }
+  addMember(groupId: string, nodeId: string): Promise<CurationResult> {
+    return this.awaitReply(createMessage("map.member.add", { groupId, nodeId }));
+  }
+  removeMember(groupId: string, nodeId: string): Promise<CurationResult> {
+    return this.awaitReply(createMessage("map.member.remove", { groupId, nodeId }));
+  }
+  addLink(from: string, to: string): Promise<CurationResult> {
+    return this.awaitReply(createMessage("map.link.add", { from, to }));
+  }
+
+  /** Mesajı yollar, `replyTo` ile eşleşen cevabı (ya da zaman aşımını) bekler. */
+  private awaitReply(msg: Envelope): Promise<CurationResult> {
+    const ws = this.ws;
+    if (ws === null || ws.readyState !== WebSocket.OPEN) {
+      return Promise.resolve({
+        ok: false,
+        code: "DISCONNECTED",
+        message: "Daemon bağlantısı yok — yeniden bağlanılıyor, sonra tekrar dene.",
+      });
+    }
+    return new Promise((resolve) => {
+      const timer = window.setTimeout(() => {
+        this.settle(msg.id, {
+          ok: false,
+          code: "TIMEOUT",
+          message: "Daemon yanıt vermedi. Eski bir daemon olabilir — güncelle: symphony update",
+        });
+      }, CURATION_TIMEOUT_MS);
+      this.pending.set(msg.id, { resolve, timer });
+      ws.send(JSON.stringify(msg));
+    });
+  }
+
+  /** Bekleyen bir isteği çözer (cevap geldi, timeout doldu ya da bağlantı kapandı). */
+  private settle(id: string, result: CurationResult): void {
+    const entry = this.pending.get(id);
+    if (entry === undefined) return;
+    window.clearTimeout(entry.timer);
+    this.pending.delete(id);
+    entry.resolve(result);
   }
 
   /**
@@ -101,6 +175,10 @@ export class DaemonConnection {
 
     ws.onclose = () => {
       this.ws = null;
+      // Bekleyen kürasyon istekleri asılı kalmasın — hepsi bağlantı-kapandı ile çözülür.
+      for (const id of [...this.pending.keys()]) {
+        this.settle(id, { ok: false, code: "DISCONNECTED", message: "Bağlantı kapandı." });
+      }
       if (this.closed) return;
       useStore.getState().setStatus("disconnected");
       const delay = BACKOFF_MS[Math.min(this.attempt, BACKOFF_MS.length - 1)] ?? 15000;
@@ -141,6 +219,18 @@ export class DaemonConnection {
       return;
     }
 
+    // Bekleyen bir kürasyon isteğinin cevabı mı? (map.*.ok / hedefli error) — store'a düşmez.
+    if (replyTo !== null && this.pending.has(replyTo)) {
+      if (type === "error") {
+        const err = payload as EventPayload<"error">;
+        this.settle(replyTo, { ok: false, code: err.code, message: err.message });
+      } else {
+        const ok = payload as { nodeId?: string };
+        this.settle(replyTo, { ok: true, nodeId: ok.nodeId });
+      }
+      return;
+    }
+
     store.handleEvent(type as EventType, payload);
   }
 }
@@ -175,15 +265,21 @@ export async function fetchRoadmap(dir: string): Promise<RoadmapPhase[] | null> 
  * REST, bağlantı yok/ağ hatası/şema uyuşmazlığı → sessizce `null` (throw etmez, görünüm boş
  * mesajı gösterir). Sekme her açılışta yeniden çeker (agresif polling yok).
  */
-export async function fetchContextMap(limit?: number): Promise<ContextMapResponse | null> {
+export async function fetchContextMap(
+  opts: { limit?: number; week?: string } = {},
+): Promise<ContextMapResponse | null> {
   const boot = getBootstrap();
   if (boot === null) return null;
-  const query = limit !== undefined ? `?limit=${limit}` : "";
+  const params = new URLSearchParams();
+  if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts.week !== undefined) params.set("week", opts.week);
+  const query = params.toString();
   let res: Response;
   try {
-    res = await fetch(`http://127.0.0.1:${boot.port}/api/context-map${query}`, {
-      headers: { authorization: `Bearer ${boot.token}` },
-    });
+    res = await fetch(
+      `http://127.0.0.1:${boot.port}/api/context-map${query === "" ? "" : `?${query}`}`,
+      { headers: { authorization: `Bearer ${boot.token}` } },
+    );
   } catch {
     return null;
   }

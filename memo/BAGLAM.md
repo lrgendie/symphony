@@ -145,12 +145,19 @@ protokol WS/REST üzerinden konuşulur.
   ReportResponse` — `routerStats`'tan `successTable` + eşik-tabanlı `findings` (yalnız kanıtlı
   VE `score<0.5`). Sıfır adapter/fetch erişimi (lokallik kabul maddesi) — girdi daemon'da
   ÇOKTAN çekilmiş veridir
-- `context-map/build.ts` — SAF, testli (ADR-016 Karar 6, Dilim Z4): `buildContextMap({runs,
-  sessions, limit}): ContextMapResponse` — sessions+runs birleşiminden en-yeni `limit` (vars.
-  500) öğeden düğüm (session/run/proje[cwd, ADR-015 basename kuralı]) + kenar (run→proje,
-  aynı-takvim-günü ARDIŞIK zincir "same_day") üretir. Model bağı kenar DEĞİL, düğüm meta'sında
-  (görsel kanal). `store.ts`'e yeni okuma metodu GEREKMEDİ — `listSessions`/`recentAgentRuns`
-  yeniden kullanılır. **v2'de (H2) `isoWeekLabel`+katlanma+kürasyon bindirmesi ekleniyor.**
+- `context-map/build.ts` — SAF, testli (ADR-016 Karar 6, Dilim Z4 + ADR-019 Karar 2/3/4, Dilim
+  H2): `buildContextMap({runs, sessions, limit, mapNodes?, mapEdges?, now?, week?, flat?}):
+  ContextMapResponse`. `isoWeekLabel` (`report/markdown.ts`) TEK hafta tanımı. Bir öğe `flat ||
+  pinnedIds.has(id) || isoWeekLabel(at)===openWeek` (openWeek = `week` param ?? o anki hafta) ise
+  AÇIK; değilse `week:<label>` düğümüne katlanır (meta: sessionCount/runCount/models + kronolojik
+  `week` kenar zinciri). `pinnedIds` = context kürasyon düğümlerinin ref'lediği session/run
+  id'leri — ASLA katlanmaz. AÇIK koşudan `model:<provider>/<model>` VE `agent:<agentId>`
+  düğümüne kenar, AÇIK oturumdan yalnız model düğümüne (Karar 3 — model bağı artık KENAR, ADR-016
+  Karar 6'nın reddi REVİZE edildi; model `meta.origin`: ollama→local, diğer→api). Kürasyon
+  context/group düğümleri BİREBİR + ref'li context→ref arası `pin` kenarı + `mapEdges`
+  (link/member) BİREBİR eklenir; bir ucu grafta olmayan kenar (görünüm güvenliği, veri bütünlüğü
+  DEĞİL) son adımda süzülür. `store.ts`'e yeni okuma metodu GEREKMEDİ — `listSessions`/
+  `recentAgentRuns`/`listMapNodes`/`listMapEdges` yeniden kullanılır.
 - `context-map/curation.ts` — SAF, testli (ADR-019 Karar 1/2, Faz "H" Dilim H1): Bağlam Haritası
   kürasyonunun doğrulama çekirdeği — `isDerivedNodeId`/`isKnownGraphReference` (proje/model/
   agent/hafta önekleri + gerçek session/run) + `checkCurationTarget`/`checkGraphReference`/
@@ -160,8 +167,9 @@ protokol WS/REST üzerinden konuşulur.
   metodları eklendi (`insertMapNode`/`deleteMapNode`[kenar kaskadı]/`insertMapEdge`/
   `deleteMapEdgeBetween` vb.); `daemon.ts`'e 8 handler (`map.pin`/`map.node.rename`/
   `map.node.delete`/`map.group.create`/`map.member.add\|remove`/`map.link.add\|remove`).
-  **DİKKAT (2026-07-11 kaydı):** bu 8 handler'ın WS-üzerinden uçtan-uca entegrasyon testi
-  HENÜZ YOK (yalnız curation.ts SAF testli) — DURUM.md'deki H1 bölümüne bak.
+  Bu 8 handler'ın WS-üzerinden uçtan-uca entegrasyon testi `daemon.test.ts`'te (2026-07-13,
+  "kürasyon roundtrip" — pin/rename/link/group/member/detach/delete + üç koruma reddi + restart
+  sonrası kalıcılık).
 - `router/hardware.ts` — nvidia-smi: `detectVramGb` (router) + `sampleGpus`/`parseGpuCsv` (saf,
   testli) → GPU vitalleri (util/VRAM/ısı). Daemon 2sn poll → `hardware.updated` yayını
   (`DaemonOptions.sampleHardware`, testte kapalı)
@@ -222,7 +230,9 @@ protokol WS/REST üzerinden konuşulur.
 ### packages/cli/src — symphony komutu
 - `index.ts` — commander kayıtları; argümansız → TUI
 - `client/daemon-client.ts` — WS istemcisi + otomatik daemon başlatma (`connectToDaemon`) +
-  REST geçmiş sorguları (`listSessions`/`sessionDetail` — Bearer token, shared şema, 404→null)
+  REST geçmiş sorguları (`listSessions`/`sessionDetail` — Bearer token, shared şema, 404→null).
+  `getContextMap(limit?)` (ADR-019, Dilim H4): `getReport`/`getMemory` ile AYNI desen (özel
+  `getHistory` REST yardımcısını kullanır) — `symphony harita`nın TEK veri kaynağı
 - `commands/` — status/models/watch/history/memory/agents/agent/feedback/report/add/sync (her komut tek dosya)
   - `add.ts` — `symphony add <npm-paketi>`: eklenti sistemi, `mcp.addServer` isteği atar
   - `sync-plan.ts` (ADR-017 Karar 3, Dilim F4) — SAF, testli: `SYNC_WHITELIST` (config/providers/
@@ -242,6 +252,11 @@ protokol WS/REST üzerinden konuşulur.
   - `bekci.ts` (ADR-018 Karar 7, Dilim D6) — `symphony bekci ekle <ad> <repo> <log> [--test]` /
     `bekci liste`. `ekle`, `repoPath`nin GERÇEK bir git repo KÖKÜ olduğunu doğrular (canlı bulgu:
     aksi hâlde worktree ata repo'ya sızabilirdi) — daemon YENİDEN BAŞLATILMADAN 10sn içinde görülür
+  - `harita.ts` (ADR-019 Karar 2/6, Faz "H" Dilim H4) — `symphony harita ekle <sessionId|runId>
+    [--baslik X]` / `harita liste`. `resolvePinTarget`: `history.ts`'in `resolveSession`iyle AYNI
+    ön-ek deseni (TAM eşleşme önce, sonra tekil ön-ek, belirsizlikte/bulunamayınca red) — yalnız
+    `kind==="session"|"run"` düğümler aday (`client.getContextMap`ten). `map.pin` isteğini atar;
+    TUI'nin `/harita`sıyla AYNI eylem, farklı giriş yüzeyi
   - `agent-suggestion.ts` (ADR-018 Karar 8, Dilim D7 — Faz 6'nın son açık maddesini kapatır) —
     `symphony agent-oneri uygula <agentId>`: `symphony report`ın `agentSuggestions`ını YENİDEN
     çeker (ikinci hesap YOK), eşleşeni bulur, `agent/definition.ts`'in YENİ `applyAgentModelPin`
@@ -287,7 +302,10 @@ protokol WS/REST üzerinden konuşulur.
     (ResumePicker) → AgentRun. Devam: `sessionDetail` tohumu → AgentRun'a `initialSessionId`/
     `seedExchange`/`fixedModel`; agent.start `sessionId` ile aynı oturuma yazar (2.3b üstüne oturur)
   - `model-picker.tsx` / `chat.tsx` — Sohbet dalı (`chat.tsx`: opsiyonel `initialSessionId`/`initialHistory`
-    tohumu → önceki oturuma devam; `HistoryEntry` dışa aktarılır)
+    tohumu → önceki oturuma devam; `HistoryEntry` dışa aktarılır). H4 (ADR-019 Karar 6): `/harita
+    [başlık]` (`HARITA_COMMAND` tam eşleşme) `submit`te YAKALANIR — modele GİTMEZ,
+    `map.pin{ref:{kind:"session",id:sessionIdRef.current}}` atılır, `mapNote` state'i tek satır
+    onay/hata gösterir (chat `history`sine KARIŞMAZ)
   - `resume-picker.tsx` — "Yeni sohbet / Önceki sohbete devam et" seçici (↑/↓+Enter; picker deseni)
   - `agent-run.tsx` — asistan/coder personası: görev girişi + canlı koşu (izin kutusu tek tuş e/d/h, renkli diff,
     araç günlüğü, Esc iptal) — `cli/commands/agent.ts` ile aynı olaylara abone, Ink sunumu.
@@ -299,7 +317,11 @@ protokol WS/REST üzerinden konuşulur.
     GİBİ seçiciyi ATLAMAZ, yalnız `AgentModelPicker`nin BAŞLANGIÇ imlecini o modele koyar (liste TAM
     kalır, "(varsayılan)" etiketiyle işaretlenir). `resetForNewTask({clearModel})`: koşu BAŞARISIZ
     olunca "yeni görev" model seçiciyi de yeniden gösterir (aynı modelle sessizce tekrar denenmez);
-    BAŞARILI koşuda davranış DEĞİŞMEDİ (aynı model, doğrudan görev girişi)
+    BAŞARILI koşuda davranış DEĞİŞMEDİ (aynı model, doğrudan görev girişi). H4 (ADR-019 Karar 6):
+    `/harita [başlık]` `submitSay`de (awaiting_user devam girişi) YAKALANIR — `agent.say`e GİTMEZ,
+    `map.pin{ref:{kind:"run",id:runId}}` atılır (`sessionId` DEĞİL — yeni koşularda hiç
+    TUTULMUYOR, agent koşuları `agent_runs` tablosunda). İlk görev kutusunda (runId henüz yokken)
+    KASITLA yakalanmaz
 
 ### packages/ui/src — masaüstü dashboard (React+Vite, Faz 4) — hem tarayıcı hem Tauri
 - `config.ts` — `getBootstrap()`: token+port'u `window.__SYMPHONY__` (Tauri enjekte eder) ya
@@ -307,8 +329,14 @@ protokol WS/REST üzerinden konuşulur.
 - `daemon/client.ts` — `DaemonConnection`: native WebSocket + `shared` şemaları; hello
   handshake → snapshot → yayın olaylarını store'a akıtır; bağlanınca `queryUsage()`
   (`usage.query {groupBy:"model"}`); üstel geri çekilmeli yeniden bağlanma. `fetchRoadmap`/
-  `fetchContextMap`/`fetchSessionDetail`: WS DIŞI, istek-başına REST (roadmap deseni — bağlantı
-  yok/hata/şema uyuşmazlığı → sessizce `null`, throw etmez)
+  `fetchContextMap({limit?,week?})`/`fetchSessionDetail`: WS DIŞI, istek-başına REST (roadmap
+  deseni — bağlantı yok/hata/şema uyuşmazlığı → sessizce `null`, throw etmez). H3 (ADR-019 Karar
+  2/6): `respond`/`queryUsage` fire-and-forget'in AKSİNE, kürasyon metodları (`pin`/`renameNode`/
+  `deleteNode`/`createGroup`/`addMember`/`removeMember`/`addLink`) `.ok`/`error` cevabını BEKLER —
+  `pending` Map (mesaj id→resolver+timer) + `awaitReply` (8sn timeout) + `settle`; `onMessage`
+  pending'i helloId'den SONRA, `store.handleEvent`ten ÖNCE kontrol eder; `onclose` bekleyenleri
+  DISCONNECTED ile çözer. `CurationResult` export. Sürüm sapması (Karar 7c): eski daemon `map.*`
+  tipini tanımaz → cevap `replyTo:null` (korelasyon eşleşmez) → timeout → "güncelle" ipucu
 - `store.ts` — zustand; `handleEvent` olay tiplerini UI durumuna (providers/runs/log/pending +
   usage + `limits` + oturum cache sayaçları) çevirir. **WS→UI eşlemesinin TEK yeri**
   (testli: `store.test.ts`). Usage: `usage.query.ok` seed'ler, `usage.updated` girdiyi totals'la
@@ -344,25 +372,64 @@ protokol WS/REST üzerinden konuşulur.
 - `scene/mood.ts` — SAF: sistem durumu → mood (offline>error>awaiting>executing>thinking>idle) +
   stil. `MoodStyle.activity` = GPU'dan bağımsız LLM sürücüsü (iç sinaps atım oranını sürer)
 - `scene/hardware-vitals.ts` — SAF: `deriveGpuVitals` (en yoğun GPU → load/heat/memPct). Testli
-- `map/layout.ts` — SAF, testli (ADR-016 Karar 6, Dilim Z5): `layoutContextMap(graph, width,
-  height)` — d3-force YALNIZ konum hesaplar (deterministik başlangıç: indekse göre çember),
-  render `map/ContextMap.tsx`'in SVG'si. `d3-force` bağımlılığı (GEREKSINIMLER.md'de işli)
+- `map/layout.ts` — SAF, testli (ADR-016 Karar 6, Dilim Z5 + ADR-019 Karar 4/5, Dilim H3+H5):
+  `layoutContextMap(graph, width, height)` — d3-force YALNIZ konum hesaplar (deterministik
+  başlangıç: indekse göre çember), render `map/ContextMap.tsx`'in SVG'si. H3: `week` düğümleri
+  simülasyona GİRMEZ — `id` (="week:YYYY-Www") string sırasıyla (kronolojik) alt kenara `fx/fy`
+  ile sabitlenir (`WEEK_MARGIN_X/Y`; tek hafta ortaya). İç mantık `buildSimulation`/
+  `toLayoutResult`e refaktör edildi (H5) — `layoutContextMap`in davranışı BİREBİR aynı kaldı.
+  YENİ `startLiveLayout(graph,width,height,onTick)` (H5, "sürekli hafif drift"): AYNI fizik,
+  ama `.stop().tick(300)` YERİNE `alphaTarget(0.02).restart()` — simülasyon hiç soğumaz, d3'ün
+  kendi zamanlayıcısı her karede `onTick`i çağırır. Bu fonksiyon ARTIK SAF DEĞİL — `TesseractScene.
+  tsx`/`LivingScene.tsx` ile AYNI "canlı, test edilmeyen ince kabuk" kategorisinde (dönen `stop()`
+  temizlik). `d3-force` bağımlılığı (GEREKSINIMLER'de)
+- `map/motion.ts` — SAF, testli, `scene/tesseract/pulses.ts` deseninde (ADR-019 Karar 5, Dilim H5):
+  `springScale(ageMs)` — kritik-altı sönümlü sinüs, yeni düğüm doğuşu (0→sıçrama→1); `fadeOpacity
+  (elapsedMs)` — doğrusal 1→0, katlanma/silme süzülüşü; `isRecentEdge(fromAt,toAt,nowMs)` — son
+  24 saat penceresi (akış nabzı adaylığı); `dashOffset(nowMs)` — sürekli kayan SVG dash-offset.
+  Canlı DOM ölçümüyle doğrulandı (ekran görüntüsü değil, sayısal kanıt): spring 9→9.38→8.95→9,
+  fade 1→0.52→0.05→kayboldu
+- `map/curation-actions.ts` — SAF, testli (ADR-019 Karar 2/6, Dilim H3): `curationActionsFor(kind)`
+  bir düğüm türünde detay panelinde HANGİ kürasyon butonunun çıkacağını verir (session/run→pin+
+  link+group; project/model/agent→link+group KORUMALI; context→rename+link+group+delete; group→
+  rename+member-add/remove+link+delete; week→open-week; bilinmeyen→[]) + `curationErrorMessage`
+  (hata kodu→Türkçe). `viewbox.ts` precedent'i: `ui`de bileşen testi YOK → "hangi düğümde hangi
+  buton" saf mantığı bileşenden AYRILDI (yanlış düğüme sil butonu koymak sinsi hata olurdu)
 - `map/viewbox.ts` — SAF, testli (kullanıcı isteği, 2026-07-11): `zoomViewBox`/`panViewBox` —
   `ui` paketinde React bileşen testi altyapısı (jsdom/testing-library) YOK, bu yüzden yakınlaştır/
   kaydır matematiği `ContextMap.tsx`'ten AYRILDI ki `layout.ts` deseniyle (saf girdi/çıktı) test
   edilebilsin. `zoomViewBox`: "zoom to cursor" (imlecin altındaki dünya noktası SABİT kalır,
   MIN/MAX genişlikte kırpılır). `panViewBox`: HER ÇAĞRIDA sürüklemenin BAŞLANGIÇ viewBox'ından
   hesaplanır (birikmez, kaymayı önler)
-- `map/ContextMap.tsx` — Bağlam Haritası (Dilim Z5): dashboard'dan AYRI görünüm, `App.tsx`'teki
-  `view` sekme state'iyle açılır. Düğüm rengi=tür (session cyan/run magenta/project violet),
-  tıkla→yan panel (run/project meta'dan anında, session `fetchSessionDetail` ile REST). Yakınlaştır/
-  kaydır (2026-07-11): SVG `viewBox` durumu React state'inde; fare tekerleği `zoomViewBox` çağırır
-  (native `wheel` dinleyici — React'ın sentetik `onWheel`'i passive olabilir, `preventDefault`
-  sessizce yok sayılırdı); tekerlek tuşu (orta tık, `e.button===1`) basılıyken sürükleme
-  `panViewBox` çağırır (window seviyesinde dinlenir — fare SVG dışına çıksa bile doğru biter).
-  Düğüm tıklaması (sol tık) ETKİLENMEDİ — viewBox ne olursa olsun gerçek kullanıcı-uzayı koordinatı
+- `map/ContextMap.tsx` — Bağlam Haritası (Dilim Z5 + ADR-019 Karar 2/3/4/5/6/7b, Dilim H3+H5):
+  dashboard'dan AYRI görünüm, `App.tsx`'teki `view` sekme state'iyle açılır. Yakınlaştır/kaydır
+  (2026-07-11): SVG `viewBox` state'te; fare tekerleği `zoomViewBox` (native `wheel` dinleyici —
+  React sentetik `onWheel` passive olabilir), tekerlek tuşu (orta tık `e.button===1`) basılı
+  sürükleme `panViewBox` (window seviyesi). Sol tık = düğüm seçimi (viewBox'tan bağımsız gerçek
+  koordinat). **H3 kürasyon:** `reload(weekArg)` (stale-cevap kalkanı `reloadSeq`); düğüm şekli
+  türe göre (`week`/`group`=`<rect>`, gerisi `<circle>`), model yerel/API sınıfı (`nodeClassName`
+  →`.map-node-model-local/-api`), bilinmeyen tür `NODE_RADIUS[kind] ?? DEFAULT` (Karar 7b jenerik
+  düğüm); detay panelinde `curationActionsFor` butonları (pin zaten sabitlenmişse
+  `pinnedRefIds`ten gizlenir); "Bağla/Üye ekle/Kopar" HEDEF-SEÇME modu (`pending` state + üst
+  bant + Esc iptal + hedef tıklaması `completeTarget`); rename/group INLINE panel-içi form (Tauri
+  webview'de `prompt()` güvenilmez); hafta düğümü → `WeekDetail` + "Haftayı aç" drill-down
+  (`fetchContextMap({week})` + "← dön"). Kürasyon istekleri `daemon.*` (client.ts, `.ok`/`error`
+  bekler), hata → `.map-curation-error` bandı (sürüm sapması ipucu dahil, Karar 7c). **H5 yaşayan
+  katman:** `selected` artık `NodeInfo` (x/y'siz — panel konuma ihtiyaç duymaz, canlı konum
+  `nodes`de id'yle eşleşir); `reload()` `reduceMotionRef`e göre `startLiveLayout` (canlı, sürekli
+  drift) YA DA `layoutContextMap` (statik, H3 davranışı) seçer; `firstSeenRef` (id→doğum anı, İLK
+  yüklemede TÜM düğümler "zaten var" damgalanır — aynı anda zıplama olmasın) + `departed` state
+  (kaybolan düğümler son konumlarında donuk `fadeOpacity` ile süzülür, `pointerEvents:none`);
+  render'da yarıçap `springScale(yaş)` ile ölçeklenir, kenarlar `isRecentEdge` ise dash alır
+  (reduced-motion'da desen KALIR, yalnız `stroke-dashoffset` ANİMASYONU durur — bilgi kaybolmaz).
+  `matchMedia("(prefers-reduced-motion: reduce)")` dinlenir, canlı toggle'da simülasyon ANINDA durur
 - `index.css` — marka paleti (cyan/magenta/red, logo ile aynı); düz CSS; `.map-*`/`.view-tab*`
-  (Dilim Z5)
+  (Dilim Z5). H3 (ADR-019): yeni düğüm renkleri (`.map-node-model-local`=green/`-api`=amber
+  [yerel↔bulut], `-agent`=copper, `-context`=text parlak, `-group`=text-çerçeveli rect,
+  `-week`=dim rect), yeni kenar stilleri (`-model`/`-agent`/`-week` omurga/`-pin` kesikli/`-link`
+  cyan/`-member` violet), kürasyon kabuğu (`.map-wrap`/`.map-drill-bar`/`.map-pending-banner`/
+  `.map-curation-error`/`.map-curation-*`). H5: `.map-edge-recent` (yalnız `stroke-width` — renk
+  kind'tan gelir, ÜZERİNE YAZILMAZ; dash deseni/kayması JS'ten dinamik gelir)
 
 ### packages/desktop/src-tauri — Tauri 2 kabuğu (Rust) — `ui/dist`'i sarar
 - `src/lib.rs` — `run()`: token'ı `~/.symphony/daemon.token`'dan + portu config'ten okur,

@@ -694,11 +694,13 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
     return buildWeeklyReport(from, to);
   });
 
-  // Bağlam haritası (ADR-016 Karar 6, Dilim Z4): mevcut sessions/agent_runs'ın deterministik
-  // grafı — embedding YOK, hiçbir provider çağrısı yapmaz. `limit`: sessions+runs biriminden
-  // en-yeni N (vars./tavan 500) — `/api/history/sessions`'la AYNI clamp deseni.
+  // Bağlam haritası (ADR-016 Karar 6, Dilim Z4 + ADR-019 Karar 2/3/4, Dilim H2): mevcut
+  // sessions/agent_runs'ın deterministik grafı + kalıcı kürasyon bindirmesi + haftalık katlanma
+  // — embedding YOK, hiçbir provider çağrısı yapmaz. `limit`: sessions+runs biriminden en-yeni N
+  // (vars./tavan 500) — `/api/history/sessions`'la AYNI clamp deseni. `week`/`flat`: Karar 4.
   app.get("/api/context-map", async (request) => {
-    const rawLimit = Number((request.query as { limit?: string }).limit ?? 500);
+    const query = request.query as { limit?: string; week?: string; flat?: string };
+    const rawLimit = Number(query.limit ?? 500);
     const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 500) : 500;
     const runs = store.recentAgentRuns(limit).map((row) => ({
       id: row.id,
@@ -706,6 +708,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       task: row.task,
       provider: row.provider,
       model: row.model,
+      agentId: row.agent_id,
       at: row.started_at,
     }));
     const sessions = store.listSessions(limit).map((s) => ({
@@ -715,7 +718,15 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
       model: s.model,
       at: s.updatedAt,
     }));
-    return buildContextMap({ runs, sessions, limit });
+    return buildContextMap({
+      runs,
+      sessions,
+      limit,
+      mapNodes: store.listMapNodes(),
+      mapEdges: store.listMapEdges(),
+      week: query.week,
+      flat: query.flat === "1",
+    });
   });
 
   // Otomatik güncelleme/rollback (ADR-017 Karar 4, Dilim F5): daemon'ı TEMİZ kapatır. Cevap

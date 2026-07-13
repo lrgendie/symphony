@@ -176,6 +176,8 @@ symphony bekci ekle <ad> <repo> <log> [--test <komut>]   Kendi projeni izlemeye 
 symphony bekci liste              Kayıtlı bekçi projelerini listele
 symphony doctor --proje <ad>      Bekçi projesi için AYNI teşhis/yama boru hattını çalıştır
 symphony agent-oneri uygula <agentId>   Agent tanım önerisini uygula (model pinler, onay ister)
+symphony harita ekle <id> [--baslik X]  Bir sohbeti/koşuyu haritaya sabitle (id ön eki yeter)
+symphony harita liste             Sabitlenmiş bağlamları ve grupları listele
 ```
 
 ## 7. Kurulum, senkronizasyon ve güncelleme akışı
@@ -252,3 +254,31 @@ arka planda sessizce yürümez:
    ve senin verdiğin `--test` komutuyla (vermezsen yama testsiz/dürüstçe işaretlenir —
    asla sessizce "geçti" sayılmaz). **Şart:** `repo-yolu` gerçek bir git deposunun KÖKÜ
    olmalı — değilse kayıt reddedilir (bir üst dizinin repo olması yeterli değildir).
+
+## 9. Bağlam Haritası (ADR-016 Karar 6 + ADR-019)
+
+Masaüstündeki "Bağlam Haritası" sekmesi, sohbetlerini/agent koşularını **kürasyonlu, tarihsel**
+bir grafta gösterir — düğümler: sohbet, koşu, proje, model (yerel/API ayrımıyla), agent, hafta;
+kenarlar: agent→koşu→model üçlüsü, aynı-gün komşuluğu, kürasyon (sabitleme/bağlantı/üyelik).
+
+- **Küratörlü sabitleme:** "bunu haritaya ekleyelim" dediğin an kalıcı bir düğüm doğar —
+  masaüstünde bir düğüme tıklayıp "Haritaya sabitle" ile, **TUI'de** aktif sohbet/koşu
+  ekranında `/harita [başlık]` yazıp Enter'a basarak (modele GÖNDERİLMEZ, tek satır onay
+  gelir), ya da **komut satırından** geçmiş herhangi bir oturum/koşu için
+  `symphony harita ekle <sessionId|runId> [--baslik X]` (id'nin ön eki yeter, `symphony
+  history`teki kısa-id kolaylığıyla AYNI). Sabitlenen bir öğe bir daha ASLA otomatik silinmez
+  ve haftalık katlanmadan MUAF tutulur (aşağıya bak).
+- **Gruplama ve bağlama:** masaüstünde "Grupla"/"Bağla"/"Üye ekle"/"Kopar" düğmeleriyle
+  düğümleri birbirine bağlayabilir ya da bir grup altında toplayabilirsin. `symphony harita
+  liste` sabitlenmiş bağlamları ve grupları (ne zaman eklendiği, neyi işaret ettiği) sıralı
+  gösterir.
+- **Haftalık katlanma:** içinde bulunduğun ISO haftası dışındaki (ve sabitlenmemiş) öğeler
+  tek tek gösterilmez — hafta başına TEK bir düğüme katlanıp haritanın alt kenarına kronolojik
+  dizilir. Bu, harita büyüdükçe karman-çorman olmasını önler; geçmiş bir haftaya tıklayıp
+  "Haftayı aç" ile o haftanın tam grafını (drill-down) görebilirsin. DB'den hiçbir şey
+  silinmez — katlanma yalnız GÖRÜNÜM kuralıdır.
+- **`symphony sync` kürasyonu TAŞIMAZ (bilinçli):** haritadaki sabitlemeler/gruplar yerel
+  SQLite'ta (`~/.symphony/data/`) tutulur — bu, sync'in "veritabanı asla senkronlanmaz"
+  kuralının (bkz. §7) doğal bir uzantısıdır. Çok-makine kürasyon paylaşımı ileride ayrı bir
+  dışa/içe-aktarma komutuyla (JSON) gelebilir; bugün için harita her makinede kendi kürasyonunu
+  tutar.
