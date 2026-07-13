@@ -10,6 +10,37 @@ pnpm test && pnpm lint` temiz. Headless tarayıcıda GERÇEK DOM ölçümleriyle
 tek kanıtlandı. Commit `315bc4b`, origin/main'e push'landı. Öncesi: aynı gün Sonnet — H1 TAMAMEN +
 H2 + H3 + H4 BİTTİ. Öncesi: Fable — Bağlam Haritası v2 TASARIMI: ADR-019 + dilimler H1..H5.)
 
+## 🔧 Canlı olaylar 2026-07-13 akşamı (Sonnet) — token + harita hatası kök nedenleri; KULLANICI DOĞRULAMASI BEKLİYOR
+
+Kullanıcı iki hata bildirdi, ikisinin de kök nedeni bulundu (kod bug'ı DEĞİL, ortam durumu):
+
+1. **`AUTH_TOKEN_INVALID: Geçersiz token`** (hem masaüstü hem CLI) → **Y7:** port 7770'te 2 gün
+   önceki (2026-07-11) v0.1.0 daemon zombisi çalışıyordu; bellekteki token'ı diskteki
+   `daemon.token` (sonradan yenilenmiş) ile UYUŞMUYORDU. Hello el sıkışmasıyla mismatch KESİN
+   doğrulandı. Çözüm: eski PID öldürüldü + token dosyası silindi + taze **v0.2.0** daemon
+   `node cli/dist/index.js status` (auto-start) ile başlatıldı → hello testi artık KABUL, health
+   0.2.0. ROADMAP §4.5 B tablosuna Y7 kalıcı-düzeltme maddesi eklendi.
+
+2. **"Bağlam haritası yüklenemedi — daemon'a bağlantı yok"** (masaüstü) → **SÜRÜM SAPMASI**
+   (ADR-019 Karar 7b'nin öngördüğü + `project_desktop_packaging_lags_ui` belleğindeki paketleme
+   gecikmesi): çalışan ESKİ masaüstü arayüzü katı zod enum'uyla (`session|run|project`) yeni
+   daemon'ın döndürdüğü **`week`** düğümünü ayrıştıramıyor → `safeParse` fail → fetch null →
+   "bağlantı yok". Daemon+veri %100 SAĞLIKLI (curl ile kanıtlandı: `/api/context-map` HTTP 200,
+   2 düğüm, ikisi de `kind:"week"`). Kod tarafı ZATEN düzeltilmiş (H2, `z.string()` gevşetmesi) —
+   ama o düzeltme v0.2.0 `ui/dist`'inde, çalışan eski masaüstünde yok. `desktop:dev` ile güncel
+   arayüzün derlenip açıldığı İKİ KEZ kanıtlandı (loglar: "Running app.exe" + UI render), AMA
+   pencere benim arka-plan/detached kabuğumdan kalıcı AÇIK TUTULAMIYOR (Ink-TUI'yle AYNI
+   interaktif/TTY sınırlaması) — pencere açılıp exit 0 ile kapanıyor.
+
+**KULLANICI DOĞRULAYACAK ("doğrularım bunları da"):**
+- (a) Kendi terminalinde `pnpm --filter @symphony/desktop desktop:dev` → pencere açık kalır,
+  "Bağlam Haritası" sekmesinde `week` düğümü artık AYRIŞTIRILIR ve gösterilir (bugünkü hatanın
+  gitmesi). NOT: gerçek `~/.symphony`'de yalnız eski/katlanmış veri var → harita şimdilik yalnız
+  2 `week` düğümü gösterecek; canlanması için bu hafta yeni sohbet/koşu ya da `/harita` sabitleme.
+- (b) Kalıcı yol (ROADMAP §4.5 A): v0.2.0 draft release installer'ını (`Symphony_0.2.0_x64-setup.
+  exe`) indir→kur→aç; adım adım süreç kullanıcıya SÖYLENDİ (bu oturum). Yayımlamak ŞART değil,
+  kendi makinesi için draft'tan indirmek yeter.
+
 ## ✅ Yayım-öncesi tarama + Y2/Y3 düzeltmeleri (2026-07-13, Sonnet) — ROADMAP §4.5 yapılacaklar tablosu eklendi
 
 v0.2.0 draft'ı yayımlanmadan önce tam mimari tarama yapıldı → `rapor/mimari-tarama-2026-07-13.md`
