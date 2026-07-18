@@ -342,7 +342,6 @@ symphony/
 
 | İş | Ne yapılacak | Kim/Model |
 |---|---|---|
-| **Y7 — bayat daemon + token uyumsuzluğu** (ORTA, canlı yaşandı 2026-07-13) | Eski bir daemon portu tutarken ikinci start token dosyasını yeniler ama portu alamayıp çıkar → eski daemon eski token'la kalır, dosya yeni token'la → tüm istemciler `AUTH_TOKEN_INVALID` alır. Çözüm o an elle yapıldı (eski PID öldür + token sil + taze start). Kalıcı düzeltme: `ensureDaemonRunning`/`token.ts` — start başarısızsa token dosyasını YENİLEME (yalnız gerçekten bind eden yazsın), ya da başlatılan daemon'ın PID'sini dosyaya yaz + health'te sürüm/pid tutarlılığı denetle | Sonnet |
 | **N1 — Türkçe tanımlayıcı KARARI** | Karar: İngilizce'ye kademeli dönüş MÜ, CLAUDE.md'de "alan terimleri (bekci/doktor/harita) muaf" gevşetmesi Mİ? Karar verilmeden her oturum birikimi büyütüyor | **Kullanıcı + Fable/Opus** (karar) → Sonnet (uygulama) |
 
 ### C) Ertelenmiş v2 özellikleri (istenirse — tasarım kararı olanlar pahalı modele)
@@ -365,9 +364,15 @@ idempotency: mükerrer pin/üye + self-link/self-üye reddi) · Y6 (yetim pin li
 (bekçi TOCTOU — kilit kontrolden hemen sonra + hata yolunda geri alma) · B5 (DB parse guard —
 telemetry.context/patch.files bozuk JSON'da satır atlanır+loglanır) · B6 (URL kodlama tutarlılığı)
 · **Y8** (Tauri client token-tazelik — canlı bulundu VE aynı oturumda düzeltildi, ayrıntı DURUM.md).
-701→**714 test**, `pnpm build && pnpm test && pnpm lint` her adımda temiz. **Sıradaki: v0.2.1
-sürüm ataması + release pipeline'ın yeniden çalıştırılması** (bu düzeltmeler henüz v0.2.0
-draft'ında YOK — bkz. A tablosu).
+701→**714 test**, `pnpm build && pnpm test && pnpm lint` her adımda temiz. Yayım: v0.2.1 sürüldü,
+Windows x64 canlı doğrulandı, publish edildi ✅ (bkz. A tablosu) · **Y7 (aynı gün, ikinci tur):**
+teorik mekanizma ("ikinci start portu alamadan token dosyasını YENİLER") YENİ bir regresyon
+testiyle (`daemon.test.ts`) canlı sınandı — yabancı/yanıtsız bir süreç portu tutarken bile
+(`probeRunningDaemon` `null` dönse dahi) `app.listen()` erken `EADDRINUSE` fırlatıyor, token
+dosyası HİÇ ELE GEÇİRİLMİYOR (mevcut "dinleme sonrası yaz" + "tek-kopya sondası" ikilisi zaten
+bu raceyi kapatıyormuş — kod DEĞİŞMEDİ, yalnız kanıtlandı). 714→**715 test**. 2026-07-13'teki
+gerçek olayın kesin mekanizması hâlâ tam doğrulanamadı (muhtemelen tek seferlik/elle müdahale
+kaynaklı) ama koddaki güvence şimdi TESTLE sabit — B tablosuna dönmesi gerekirse yeniden açılır.
 
 ---
 

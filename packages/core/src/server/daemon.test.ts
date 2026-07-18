@@ -525,6 +525,39 @@ describe("symphonyd", () => {
     expect(res.status).toBe(200);
   });
 
+  it("Y7: port YABANCI bir süreç tarafından tutuluyorsa (sonda tanımıyor → EADDRINUSE erken fırlar) token dosyası YİNE EZİLMEZ", async () => {
+    // "Yabancı süreç" = health sondasını GEÇEMEYEN ama portu GERÇEKTEN tutan bir şey — probe
+    // önce null döner (2026-07-13 canlı bulgusunun teorik mekanizması), sonra app.listen()
+    // erken EADDRINUSE fırlatmalı; token dosyası hiç ele geçirilmemeli.
+    const foreign = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ ok: false })); // bizim protokolümüzü KONUŞMUYOR — probe null döner
+    });
+    const foreignHome = mkdtempSync(join(tmpdir(), "symphony-daemon-y7-test-"));
+    const foreignPaths = ensureSymphonyHome(foreignHome);
+    const existingToken = "a".repeat(64);
+    writeFileSync(foreignPaths.daemonTokenFile, existingToken, { mode: 0o600 });
+
+    await new Promise<void>((resolve) => foreign.listen(0, "127.0.0.1", resolve));
+    const address = foreign.address();
+    const port = typeof address === "object" && address !== null ? address.port : 0;
+
+    try {
+      await expect(startDaemon({ port, home: foreignHome })).rejects.toThrow(/EADDRINUSE/i);
+      expect(readFileSync(foreignPaths.daemonTokenFile, "utf8")).toBe(existingToken); // EZİLMEDİ
+    } finally {
+      await new Promise<void>((resolve) => foreign.close(() => resolve()));
+      // Windows: startDaemon() EADDRINUSE'da yarım kalan SQLite dosya tutamacını (app.listen'DAN
+      // ÖNCE açılan DataStore) bu test sürecinde asla bırakmıyor — üretimde süreç zaten çöküp OS
+      // geri alıyor, burada temp dizin silinemeyebilir (zararsız — OS temp temizliği devralır).
+      try {
+        rmSync(foreignHome, { recursive: true, force: true });
+      } catch {
+        /* bkz. yukarıdaki not */
+      }
+    }
+  });
+
   it("iki turlu sohbet TEK oturum olarak geçmişe yazılır; REST geçmiş uçları çalışır", async () => {
     const { reply, ws } = await roundTrip(
       createMessage("hello", {
