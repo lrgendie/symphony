@@ -1,6 +1,6 @@
 {
   "name": "@symphony/desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Symphony masaüstü kabuğu (Tauri 2) — packages/ui'yi native pencerede paketler, daemon token'ını dosyadan okuyup webview'e enjekte eder.",

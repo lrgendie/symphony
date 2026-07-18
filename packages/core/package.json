@@ -1,6 +1,6 @@
 {
   "name": "@symphony/core",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
   "type": "module",
   "description": "symphonyd — Symphony çekirdek daemon'ı: provider katmanı, WS/REST sunucu, sır kasası",
