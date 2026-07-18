@@ -1,6 +1,6 @@
 {
   "name": "@lrgendie/core",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "license": "MIT",
   "type": "module",
   "description": "symphonyd — Symphony çekirdek daemon'ı: provider katmanı, WS/REST sunucu, sır kasası",
