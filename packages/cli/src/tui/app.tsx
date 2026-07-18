@@ -6,8 +6,8 @@ import type {
   ModelInfo,
   ProviderHealth,
   Usage,
-} from "@symphony/shared";
-import { getSymphonyPaths, loadProfile } from "@symphony/core";
+} from "@lrgendie/shared";
+import { getSymphonyPaths, loadProfile } from "@lrgendie/core";
 import { connectToDaemon, type DaemonClient } from "../client/daemon-client.js";
 import { AgentRun } from "./agent-run.js";
 import { Chat, type HistoryEntry } from "./chat.js";

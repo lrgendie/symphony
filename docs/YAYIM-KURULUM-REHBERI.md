@@ -126,7 +126,7 @@ Yayımlamak istersen:
 
 ## 4. CLI'ı npm'e yayımlama (F2 — OPSİYONEL, `symphony`'yi dünyaya açmak)
 
-> Bu, `npm install -g @symphony/cli` ile herkesin kurabilmesi içindir. **Zorunlu değil** —
+> Bu, `npm install -g @lrgendie/cli` ile herkesin kurabilmesi içindir. **Zorunlu değil** —
 > kendi makinende zaten çalışıyor. Yapmak istersen aşağıdaki 4 adım.
 
 ### Adım 4.1 — npm hesabı + giriş
@@ -137,7 +137,7 @@ Yayımlamak istersen:
    ```
    Tarayıcı açılır, onaylarsın. Kontrol: `npm whoami` → kullanıcı adın çıkmalı.
 
-> ⚠️ **Paket adı sorunu (önemli):** Paketler `@symphony/cli`, `@symphony/core`, `@symphony/shared`
+> ⚠️ **Paket adı sorunu (önemli):** Paketler `@lrgendie/cli`, `@lrgendie/core`, `@lrgendie/shared`
 > adında (scoped). npm'de **`symphony` organizasyonu senin değilse yayımlanamaz.** İki seçenek:
 > **(a)** npm'de "symphony" adında bir **Organization** oluştur (npmjs.com → sağ üst profil →
 > "Add Organization" → ücretsiz plan public paketler için yeter), **VEYA** **(b)** paketleri
@@ -162,7 +162,7 @@ ya yeni bir yama sürümü (`v0.2.1`) atarsın ya da mevcut tag'i yeniden itersi
 yama sürümü** — bunu bana söyle, `0.2.1`e çıkarıp tag'i atarım; CI bu sefer `NPM_TOKEN` olduğu
 için npm'e de yayımlar.
 
-**✅ Kontrol:** `npm view @symphony/cli version` → 0.2.x döner (yayım başarılı).
+**✅ Kontrol:** `npm view @lrgendie/cli version` → 0.2.x döner (yayım başarılı).
 
 ---
 

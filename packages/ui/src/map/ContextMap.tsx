@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { HistorySessionDetailResponse } from "@symphony/shared";
+import type { HistorySessionDetailResponse } from "@lrgendie/shared";
 import { daemon, fetchContextMap, fetchSessionDetail, type CurationResult } from "../daemon/client";
 import { layoutContextMap, startLiveLayout, type LayoutEdge, type LayoutNode } from "./layout";
 import { panViewBox, zoomViewBox, type ViewBox } from "./viewbox";

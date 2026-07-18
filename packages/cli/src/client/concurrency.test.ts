@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { startDaemon, type RunningDaemon } from "@symphony/core";
+import { startDaemon, type RunningDaemon } from "@lrgendie/core";
 import { DaemonClient } from "./daemon-client.js";
 import { attachWatchOutput } from "../commands/watch.js";
 

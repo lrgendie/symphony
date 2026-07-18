@@ -187,7 +187,7 @@ symphony harita liste             Sabitlenmiş bağlamları ve grupları listele
 **İlk kurulum:**
 
 ```
-npm install -g @symphony/cli
+npm install -g @lrgendie/cli
 symphony
 ```
 

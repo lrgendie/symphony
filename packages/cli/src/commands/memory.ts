@@ -1,8 +1,8 @@
 import { existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import chalk from "chalk";
-import { getSymphonyPaths } from "@symphony/core";
-import type { ModelInfo } from "@symphony/shared";
+import { getSymphonyPaths } from "@lrgendie/core";
+import type { ModelInfo } from "@lrgendie/shared";
 import { connectToDaemon, type DaemonClient } from "../client/daemon-client.js";
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { GpuSample } from "@symphony/shared";
+import type { GpuSample } from "@lrgendie/shared";
 import { deriveGpuVitals, TEMP_ALERT_C, TEMP_MAX_C } from "./hardware-vitals.js";
 
 const gpu = (over: Partial<GpuSample>): GpuSample => ({

@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { existsSync } from "node:fs";
 import chalk from "chalk";
 import { CheckRepoActions, simpleGit } from "simple-git";
-import { getSymphonyPaths, readBekciRegistry, withBekciProject, writeBekciRegistry } from "@symphony/core";
+import { getSymphonyPaths, readBekciRegistry, withBekciProject, writeBekciRegistry } from "@lrgendie/core";
 
 /**
  * Bekçi kayıt defteri komutları (ADR-018 Karar 7, Faz 8 Dilim D6) — `trust.ts`/D4 ile AYNI

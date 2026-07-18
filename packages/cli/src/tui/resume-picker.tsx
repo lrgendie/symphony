@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from "ink";
 import { useState, type JSX } from "react";
-import type { HistorySessionSummary } from "@symphony/shared";
+import type { HistorySessionSummary } from "@lrgendie/shared";
 
 export type ResumeChoice = "new" | "continue";
 

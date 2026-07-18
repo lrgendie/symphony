@@ -447,9 +447,9 @@ PDF rehber. Faz 8'in ön koşulu: kendini geliştirme döngüsünün dört sigor
 (2026-07-10): 4 platform installer CI ile hazırlansın (Mac erişimi ileride doğabilir), sync
 kapsamı = ayarlar+agent+hafıza (geçmiş DB HARİÇ), güncelleme manuel `update`+`rollback`
 (arka plan otomatiği YOK), CLI dağıtımı = **halka açık npm yayını**. Mevcut zemin şaşırtıcı
-ölçüde hazır: CLI daemon'ı `require.resolve("@symphony/core/daemon")` ile başlatıyor (repo
+ölçüde hazır: CLI daemon'ı `require.resolve("@lrgendie/core/daemon")` ile başlatıyor (repo
 yoluna bağımlı DEĞİL — kurulu node_modules'ta da çalışır); tek eksik yayın metadata'sı ve
-`private:true` bayrakları. npm kontrolü (2026-07-10): `@symphony/*` paketleri YOK (404);
+`private:true` bayrakları. npm kontrolü (2026-07-10): `@lrgendie/*` paketleri YOK (404);
 scope'un sahiplenilebilirliği ancak yayın anında (npm login ile org denemesi) netleşir.
 
 **Karar 1 — Yayın birimi: ÜÇ paket (`shared`+`core`+`cli`), lockstep tek sürüm; scope yayın
@@ -460,7 +460,7 @@ kök `package.json.version` → build sırasında koda gömülmez, `DAEMON_VERSI
 package.json'ından okunur (hardcoded "0.1.0" kalkar). `ui`/`desktop` npm'e YAYINLANMAZ
 (masaüstü dağıtımı installer'ın işi). Scope: yayın oturumunda önce `@symphony` org'u denenir
 (ücretsiz, public); ALINMIŞSA kullanıcının npm kullanıcı-scope'u ya da uygun bir org adı
-seçilir ve üç paketin adı repo çapında mekanik olarak yeniden adlandırılır — iç `@symphony/*`
+seçilir ve üç paketin adı repo çapında mekanik olarak yeniden adlandırılır — iç `@lrgendie/*`
 adı yayın adından ayrışmaz (publishConfig ile ad değiştirme pnpm'de kırılgan, REDDEDİLDİ).
 *Reddedilen:* tek-dosya binary (pkg/bun compile) — native modüller kırar, DEVIR.md tuzak listesi.
 

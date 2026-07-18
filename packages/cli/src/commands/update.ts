@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import chalk from "chalk";
 import { execa } from "execa";
-import { getSymphonyPaths, loadConfig } from "@symphony/core";
+import { getSymphonyPaths, loadConfig } from "@lrgendie/core";
 import { ensureDaemonRunning } from "../client/daemon-client.js";
 
 /**
@@ -47,7 +47,7 @@ interface OwnPackage {
 
 function readOwnPackage(): OwnPackage {
   const require = createRequire(import.meta.url);
-  return require("@symphony/cli/package.json") as OwnPackage;
+  return require("@lrgendie/cli/package.json") as OwnPackage;
 }
 
 /**

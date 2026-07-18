@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { ActiveRun, Snapshot } from "@symphony/shared";
+import type { ActiveRun, Snapshot } from "@lrgendie/shared";
 import { groupRunsByProject, orderRunsForDisplay, useStore } from "./store.js";
 
 /**

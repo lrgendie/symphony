@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Logger } from "pino";
-import type { DoctorCandidate } from "@symphony/shared";
+import type { DoctorCandidate } from "@lrgendie/shared";
 import { AgentError } from "../agent/errors.js";
 import type { DataStore, TelemetryEntry } from "../db/store.js";
 import type { EventBus } from "../server/bus.js";

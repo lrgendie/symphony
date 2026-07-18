@@ -13,7 +13,7 @@ import {
   type RequestPayload,
   type RiskClass,
   type Usage,
-} from "@symphony/shared";
+} from "@lrgendie/shared";
 import type { DataStore } from "../db/store.js";
 import { formatProfileContext } from "../memory/profile.js";
 import { computeCostUsd, type CacheTokens } from "../providers/pricing.js";

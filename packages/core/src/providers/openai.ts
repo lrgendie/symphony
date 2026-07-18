@@ -1,6 +1,6 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, type LanguageModel } from "ai";
-import type { ModelInfo } from "@symphony/shared";
+import type { ModelInfo } from "@lrgendie/shared";
 import type { SecretStore } from "../secrets/secret-store.js";
 import { computeCostUsd } from "./pricing.js";
 import type { ChatStreamRequest, ChatUsageResult, ProviderAdapter } from "./types.js";
@@ -50,7 +50,7 @@ export class OpenAIAdapter implements ProviderAdapter {
     if (!apiKey) {
       throw new Error(
         "PROVIDER_NOT_CONFIGURED: OpenAI anahtarı kayıtlı değil. " +
-          "Kaydetmek için: pnpm --filter @symphony/core key:set openai",
+          "Kaydetmek için: pnpm --filter @lrgendie/core key:set openai",
       );
     }
     return createOpenAI({ apiKey })(modelId);

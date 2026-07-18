@@ -1,4 +1,4 @@
-import type { RoadmapPhase } from "@symphony/shared";
+import type { RoadmapPhase } from "@lrgendie/shared";
 
 /**
  * Yol haritası ayrıştırıcı (ADR-015 Karar 3, Dilim P2). SAF: dosya G/Ç yok, yalnız

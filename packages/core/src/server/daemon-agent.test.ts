@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import { MockLanguageModelV3 } from "ai/test";
-import { createMessage, PROTOCOL_VERSION, type Envelope, type ModelInfo } from "@symphony/shared";
+import { createMessage, PROTOCOL_VERSION, type Envelope, type ModelInfo } from "@lrgendie/shared";
 import type { ChatStreamRequest, ChatUsageResult, ProviderAdapter } from "../providers/types.js";
 import { loadMcpServerConfigs } from "../agent/mcp.js";
 import { startDaemon, type RunningDaemon } from "./daemon.js";

@@ -29,7 +29,7 @@ simultaneous interfaces connected to the same core.
 ## Getting started (end users)
 
 ```
-npm install -g @symphony/cli
+npm install -g @lrgendie/cli
 symphony
 ```
 

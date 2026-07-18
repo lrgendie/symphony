@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ContextMapResponse } from "@symphony/shared";
+import type { ContextMapResponse } from "@lrgendie/shared";
 import { layoutContextMap } from "./layout";
 
 function graph(overrides: Partial<ContextMapResponse> = {}): ContextMapResponse {

@@ -1,5 +1,5 @@
-// symphonyd giriş noktası: `pnpm --filter @symphony/core dev`
-import { PROTOCOL_VERSION } from "@symphony/shared";
+// symphonyd giriş noktası: `pnpm --filter @lrgendie/core dev`
+import { PROTOCOL_VERSION } from "@lrgendie/shared";
 import { startDaemon, DAEMON_VERSION } from "./server/daemon.js";
 
 const daemon = await startDaemon().catch((error: unknown) => {

@@ -5,7 +5,7 @@ import type {
   HistorySessionSummary,
   ModelInfo,
   Usage,
-} from "@symphony/shared";
+} from "@lrgendie/shared";
 import type { DaemonClient } from "../client/daemon-client.js";
 import { ChatFlow } from "./app.js";
 

@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
 import chalk from "chalk";
-import { getSymphonyPaths, isTrusted, readTrust, touchesProtected } from "@symphony/core";
+import { getSymphonyPaths, isTrusted, readTrust, touchesProtected } from "@lrgendie/core";
 import { connectToDaemon, type DaemonClient } from "../client/daemon-client.js";
 import { renderDiff } from "./agent.js";
 import { patchApplyCommand } from "./patch.js";

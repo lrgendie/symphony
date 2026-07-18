@@ -47,8 +47,8 @@ vi.mock("node:readline/promises", () => ({
 // Gerçek dosyaya yazar (trust.ts'in readTrust/writeTrust'ı GERÇEK kalır — ...actual ile) ki
 // `patch trust`in dosya kalıcılığı da kanıtlansın, yalnız iç mantığı değil.
 let trustFile = "";
-vi.mock("@symphony/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@symphony/core")>();
+vi.mock("@lrgendie/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lrgendie/core")>();
   return {
     ...actual, // protectedMatches/readTrust/writeTrust/categoryRecord GERÇEK kalır
     findRepoRoot: () => "/repo",
@@ -58,7 +58,7 @@ vi.mock("@symphony/core", async (importOriginal) => {
 });
 
 import { patchApplyCommand, patchTrustCommand, patchUntrustCommand } from "./patch.js";
-import { readTrust, writeTrust } from "@symphony/core";
+import { readTrust, writeTrust } from "@lrgendie/core";
 
 const PATCH = {
   id: "11111111-1111-4111-8111-111111111111",

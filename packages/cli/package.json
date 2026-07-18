@@ -1,5 +1,5 @@
 {
-  "name": "@symphony/cli",
+  "name": "@lrgendie/cli",
   "version": "0.2.1",
   "license": "MIT",
   "type": "module",
@@ -27,8 +27,8 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@symphony/core": "workspace:*",
-    "@symphony/shared": "workspace:*",
+    "@lrgendie/core": "workspace:*",
+    "@lrgendie/shared": "workspace:*",
     "chalk": "^5.6.2",
     "commander": "^15.0.0",
     "execa": "^9.6.1",

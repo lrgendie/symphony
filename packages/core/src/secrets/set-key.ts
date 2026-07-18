@@ -4,7 +4,7 @@
 //
 // Kullanım (PowerShell):
 //   $env:SYMPHONY_KEY = "sk-ant-..."
-//   pnpm --filter @symphony/core key:set anthropic
+//   pnpm --filter @lrgendie/core key:set anthropic
 //   Remove-Item Env:SYMPHONY_KEY
 import { createSecretStore } from "./secret-store.js";
 

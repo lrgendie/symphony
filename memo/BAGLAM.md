@@ -440,7 +440,7 @@ protokol WS/REST üzerinden konuşulur.
   updated` poll deseniyle (core/daemon.ts) AYNI kategori: düşük sıklık, canlı, testsiz ince kabuk.
 - `tauri.conf.json` — `frontendDist: ../../ui/dist`, `devUrl` vite; `windows: []` (Rust kurar)
 - `Cargo.toml` / `Cargo.lock` — Rust bağımlılıkları (commit'lenir; `target/` gitignore)
-- çalıştırma: `pnpm --filter @symphony/desktop desktop:dev` (tauri dev — vite'i de başlatır)
+- çalıştırma: `pnpm --filter @lrgendie/desktop desktop:dev` (tauri dev — vite'i de başlatır)
 
 ## Değişmez hatırlatmalar (tam listesi CLAUDE.md'de)
 

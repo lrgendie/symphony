@@ -1,4 +1,4 @@
-# @symphony/cli
+# @lrgendie/cli
 
 `symphony` — yerel (Ollama) ve bulut (Claude/GPT/Gemini) LLM'leri ve kod agent'larını tek
 terminal komutundan yöneten arayüz. Argümansız `symphony` bir karşılama ekranı + sohbet/agent
@@ -9,7 +9,7 @@ komutlar durum sorgular.
 ## Kurulum
 
 ```
-npm install -g @symphony/cli
+npm install -g @lrgendie/cli
 symphony
 ```
 

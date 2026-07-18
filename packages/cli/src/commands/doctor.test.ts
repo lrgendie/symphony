@@ -35,15 +35,15 @@ const patchApplyMock = vi.fn(async () => undefined);
 vi.mock("./patch.js", () => ({ patchApplyCommand: (...args: unknown[]) => patchApplyMock(...args) }));
 
 let trustFile = "";
-vi.mock("@symphony/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@symphony/core")>();
+vi.mock("@lrgendie/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lrgendie/core")>();
   return {
     ...actual, // isTrusted/readTrust/touchesProtected GERÇEK kalır — güven mantığı sahtelenmez
     getSymphonyPaths: () => ({ home: "/home", trustFile }),
   };
 });
 
-import { writeTrust } from "@symphony/core";
+import { writeTrust } from "@lrgendie/core";
 import { doctorCommand } from "./doctor.js";
 
 function emit(type: string, payload: unknown): void {

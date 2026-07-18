@@ -1,6 +1,6 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { streamText, type LanguageModel } from "ai";
-import type { ModelInfo } from "@symphony/shared";
+import type { ModelInfo } from "@lrgendie/shared";
 import type { SecretStore } from "../secrets/secret-store.js";
 import { applyPromptCacheBreakpoints } from "../agent/prompt-cache.js";
 import { computeCostUsd } from "./pricing.js";
@@ -53,7 +53,7 @@ export class AnthropicAdapter implements ProviderAdapter {
     if (!apiKey) {
       throw new Error(
         "PROVIDER_NOT_CONFIGURED: Anthropic anahtarı kayıtlı değil. " +
-          "Kaydetmek için: pnpm --filter @symphony/core key:set anthropic",
+          "Kaydetmek için: pnpm --filter @lrgendie/core key:set anthropic",
       );
     }
     return createAnthropic({ apiKey })(modelId);

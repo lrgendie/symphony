@@ -11,14 +11,14 @@ import {
   type EventType,
   type HistorySessionDetailResponse,
   type RoadmapPhase,
-} from "@symphony/shared";
+} from "@lrgendie/shared";
 import { getBootstrap } from "../config";
 import { useStore } from "../store";
 
 /**
  * Tarayıcı/webview tarafı daemon istemcisi — PROTOKOL.md'nin UI ayağı.
  * CLI'nin DaemonClient'ı node `ws` + dosya sistemine bağlıdır; bu ise native
- * WebSocket + `@symphony/shared` (saf zod) kullanır, hiçbir Node API'sine dokunmaz.
+ * WebSocket + `@lrgendie/shared` (saf zod) kullanır, hiçbir Node API'sine dokunmaz.
  * Read-only: hello el sıkışması → snapshot → yayın olaylarını store'a akıtır.
  * Yeniden bağlanma üstel geri çekilmeli (ADR-011: replay yok, her bağlanışta snapshot).
  */
@@ -152,7 +152,7 @@ export class DaemonConnection {
       store.setStatus("disconnected");
       store.setError(
         "Daemon bağlantı bilgisi yok. Daemon çalışmıyor olabilir — terminalde " +
-          "`symphony status` ile başlat. (Tarayıcı dev için: `pnpm --filter @symphony/ui dev:token`.)",
+          "`symphony status` ile başlat. (Tarayıcı dev için: `pnpm --filter @lrgendie/ui dev:token`.)",
       );
       return;
     }

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { startDaemon, type RunningDaemon } from "@symphony/core";
+import { startDaemon, type RunningDaemon } from "@lrgendie/core";
 import {
   DaemonClient,
   DaemonError,

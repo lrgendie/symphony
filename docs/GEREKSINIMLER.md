@@ -62,7 +62,7 @@
 |---|---|
 | `react` + `vite` | Arayüz çatısı ve derleyici ✅ kuruldu 2026-07-05 (React 19, Vite 8) |
 | `zustand` | Durum yönetimi (WS olaylarından beslenen store) ✅ 2026-07-05 |
-| `@symphony/shared` | Protokol şemaları (saf zod, tarayıcı-güvenli) — UI'nin daemon'la konuştuğu tek sözleşme ✅ |
+| `@lrgendie/shared` | Protokol şemaları (saf zod, tarayıcı-güvenli) — UI'nin daemon'la konuştuğu tek sözleşme ✅ |
 | `three` + `@react-three/fiber` + `@react-three/drei` | "Living Interface" parçacık küresi (WebGL) — sonraki dilim |
 | `tailwindcss` | Stil sistemi — şimdilik düz CSS (index.css, marka paleti); gerekirse eklenir |
 | `d3-force` | Bağlam Haritası (ADR-016 Karar 6, Dilim Z5): YALNIZ kuvvet-yönlü 2D yerleşim simülasyonu — render kendi SVG'imiz (TASARIM.md §3 kararı: tesseract sahnesine bindirilmez, ayrı görünüm) |

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { z } from "zod";
-import type { AgentSummary } from "@symphony/shared";
+import type { AgentSummary } from "@lrgendie/shared";
 import { AgentError } from "./errors.js";
 import { TOOL_NAMES } from "./tools.js";
 

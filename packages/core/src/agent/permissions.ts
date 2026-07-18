@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import picomatch from "picomatch";
 import { z } from "zod";
-import type { RiskClass } from "@symphony/shared";
+import type { RiskClass } from "@lrgendie/shared";
 
 /**
  * İzin denetimi (SPEC-AGENT.md §5). Kural dosyası `~/.symphony/permissions.json`;

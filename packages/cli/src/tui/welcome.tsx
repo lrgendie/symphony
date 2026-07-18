@@ -1,6 +1,6 @@
 import { Box, Text } from "ink";
 import type { JSX } from "react";
-import { PROTOCOL_VERSION, type ProviderHealth, type Usage } from "@symphony/shared";
+import { PROTOCOL_VERSION, type ProviderHealth, type Usage } from "@lrgendie/shared";
 import { LOGO_LINES, LOGO_TAGLINE } from "./logo.js";
 
 /** index.ts'teki program.version ile aynı tutulur (kaynak: packages/cli/package.json). */

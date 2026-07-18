@@ -2,9 +2,9 @@ import { createInterface } from "node:readline/promises";
 import chalk from "chalk";
 import { execa } from "execa";
 import { simpleGit } from "simple-git";
-import type { PatchSummary } from "@symphony/shared";
-import { findRepoRoot, getSymphonyPaths, loadConfig } from "@symphony/core";
-import { protectedMatches } from "@symphony/core";
+import type { PatchSummary } from "@lrgendie/shared";
+import { findRepoRoot, getSymphonyPaths, loadConfig } from "@lrgendie/core";
+import { protectedMatches } from "@lrgendie/core";
 import {
   categoryRecord,
   categoryTouchedProtected,
@@ -13,7 +13,7 @@ import {
   withoutTrust,
   withTrust,
   writeTrust,
-} from "@symphony/core";
+} from "@lrgendie/core";
 import { connectToDaemon, ensureDaemonRunning, type DaemonClient } from "../client/daemon-client.js";
 import { shutdownDaemonIfRunning } from "./update.js";
 

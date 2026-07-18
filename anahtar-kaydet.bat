@@ -8,7 +8,7 @@ echo  === Symphony Anahtar Kaydi ===
 echo.
 set /p SYMPHONY_KEY="Anthropic API anahtarini yapistir ve Enter'a bas: "
 echo.
-call pnpm --filter @symphony/core key:set anthropic
+call pnpm --filter @lrgendie/core key:set anthropic
 set SYMPHONY_KEY=
 echo.
 pause

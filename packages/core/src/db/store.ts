@@ -5,7 +5,7 @@ import type {
   HistorySessionDetailResponse,
   HistorySessionSummary,
   Usage,
-} from "@symphony/shared";
+} from "@lrgendie/shared";
 
 /**
  * Veri katmanı (ADR-006): tüm kalıcı veri tek SQLite dosyasında

@@ -5,7 +5,7 @@ import {
   MESSAGE_PAYLOAD_SCHEMAS,
   type Envelope,
   type MessageType,
-} from "@symphony/shared";
+} from "@lrgendie/shared";
 
 type PayloadInput<T extends MessageType> = z.input<(typeof MESSAGE_PAYLOAD_SCHEMAS)[T]>;
 

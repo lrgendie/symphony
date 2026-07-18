@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { ModelInfo } from "@symphony/shared";
+import type { ModelInfo } from "@lrgendie/shared";
 import type { DaemonClient } from "../client/daemon-client.js";
 import {
   buildDistillTask,

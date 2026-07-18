@@ -2,7 +2,7 @@
 // symphony CLI — daemon'a bağlanan terminal arayüzü (ROADMAP Faz 2).
 import { createRequire } from "node:module";
 import { Command } from "commander";
-import { PROTOCOL_VERSION } from "@symphony/shared";
+import { PROTOCOL_VERSION } from "@lrgendie/shared";
 import { modelsCommand } from "./commands/models.js";
 import { statusCommand } from "./commands/status.js";
 import { watchCommand } from "./commands/watch.js";

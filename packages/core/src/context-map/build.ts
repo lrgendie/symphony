@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import type { ContextMapResponse } from "@symphony/shared";
+import type { ContextMapResponse } from "@lrgendie/shared";
 import { isoWeekLabel } from "../report/markdown.js";
 
 /**

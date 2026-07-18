@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "ink-testing-library";
-import type { AgentSummary } from "@symphony/shared";
+import type { AgentSummary } from "@lrgendie/shared";
 import { PersonaPicker, type Persona } from "./persona-picker.js";
 
 const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));

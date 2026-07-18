@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "ink-testing-library";
-import type { ProviderHealth, Usage } from "@symphony/shared";
+import type { ProviderHealth, Usage } from "@lrgendie/shared";
 import { LOGO_LINES, logoLineText } from "./logo.js";
 import { Welcome } from "./welcome.js";
 

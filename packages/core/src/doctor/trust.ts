@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import type { PatchSummary } from "@symphony/shared";
+import type { PatchSummary } from "@lrgendie/shared";
 import { touchesProtected } from "./protected.js";
 
 /**

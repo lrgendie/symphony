@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { z } from "zod";
-import { DEFAULT_DAEMON_PORT } from "@symphony/shared";
+import { DEFAULT_DAEMON_PORT } from "@lrgendie/shared";
 import { getSymphonyPaths, type SymphonyPaths } from "./paths.js";
 
 /** `~/.symphony/config.json` şeması — bilinmeyen alanlar atılır (ileri uyumluluk). */

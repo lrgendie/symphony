@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ModelInfo } from "@symphony/shared";
+import type { ModelInfo } from "@lrgendie/shared";
 import { classifyTask, suggestModels, type RouterContext } from "./router.js";
 import { routerStatsKey, type RouterStats, type RouterStatsEntry } from "./stats.js";
 

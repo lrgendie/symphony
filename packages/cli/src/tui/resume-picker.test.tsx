@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "ink-testing-library";
-import type { HistorySessionSummary } from "@symphony/shared";
+import type { HistorySessionSummary } from "@lrgendie/shared";
 import { ResumePicker, type ResumeChoice } from "./resume-picker.js";
 
 const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));

@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import type { ContextMapNode } from "@symphony/shared";
+import type { ContextMapNode } from "@lrgendie/shared";
 import { connectToDaemon } from "../client/daemon-client.js";
 
 /**

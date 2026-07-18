@@ -6,7 +6,7 @@ import { glob as tinyGlob } from "tinyglobby";
 import { createTwoFilesPatch } from "diff";
 import { z } from "zod";
 import type { FlexibleSchema } from "ai";
-import type { RiskClass } from "@symphony/shared";
+import type { RiskClass } from "@lrgendie/shared";
 import { AgentError } from "./errors.js";
 import type { WorkspaceJail } from "./jail.js";
 

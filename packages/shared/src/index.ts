@@ -1,4 +1,4 @@
-// @symphony/shared — protokol sözleşmesinin tek kaynağı.
+// @lrgendie/shared — protokol sözleşmesinin tek kaynağı.
 // Bu paket ortam-bağımsızdır (Node VE tarayıcı): Node API'si import ETME.
 export * from "./protocol/constants.js";
 export * from "./protocol/common.js";

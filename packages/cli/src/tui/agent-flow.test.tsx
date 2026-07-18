@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "ink-testing-library";
-import type { HistorySessionDetailResponse, HistorySessionSummary, ModelInfo } from "@symphony/shared";
+import type { HistorySessionDetailResponse, HistorySessionSummary, ModelInfo } from "@lrgendie/shared";
 import type { DaemonClient } from "../client/daemon-client.js";
 import { AgentFlow } from "./app.js";
 

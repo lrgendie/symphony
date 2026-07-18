@@ -200,7 +200,7 @@ symphony harita liste             List pinned contexts and groups
 **First install:**
 
 ```
-npm install -g @symphony/cli
+npm install -g @lrgendie/cli
 symphony
 ```
 

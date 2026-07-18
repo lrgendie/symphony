@@ -8,12 +8,12 @@ import type {
   ProviderLimitsPayload,
   Snapshot,
   Usage,
-} from "@symphony/shared";
+} from "@lrgendie/shared";
 
 /**
  * WS olaylarıyla beslenen tek durum kaynağı (zustand). DaemonConnection (daemon/client.ts)
  * bu store'un action'larını çağırır; React bileşenleri selector'larla okur. Protokol
- * yalnız `@symphony/shared` tipleriyle konuşulur (CLAUDE.md kural 1).
+ * yalnız `@lrgendie/shared` tipleriyle konuşulur (CLAUDE.md kural 1).
  */
 
 export type ConnStatus = "connecting" | "connected" | "disconnected";

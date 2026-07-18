@@ -5,7 +5,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import type { ActiveRun } from "@symphony/shared";
+import type { ActiveRun } from "@lrgendie/shared";
 import { MOOD_STYLE, type SphereMood } from "./mood";
 import type { GpuVitals } from "./hardware-vitals";
 import { buildTesseract, projectNodes, type TesseractEdge } from "./tesseract/geometry";

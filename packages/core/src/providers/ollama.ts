@@ -1,6 +1,6 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { streamText, type LanguageModel } from "ai";
-import type { ModelInfo } from "@symphony/shared";
+import type { ModelInfo } from "@lrgendie/shared";
 import type { ChatStreamRequest, ChatUsageResult, ProviderAdapter } from "./types.js";
 
 export const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";

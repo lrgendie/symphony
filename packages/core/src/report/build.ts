@@ -1,4 +1,4 @@
-import type { DoctorCandidate, ReportResponse, ReportSelfDevCategory } from "@symphony/shared";
+import type { DoctorCandidate, ReportResponse, ReportSelfDevCategory } from "@lrgendie/shared";
 import type { AgentModelUsageRow, PatchEntry } from "../db/store.js";
 import type { UsageQueryResult } from "../db/store.js";
 import { categoryRecord } from "../doctor/trust.js";

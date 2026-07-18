@@ -4,7 +4,7 @@
  * TASARIM.md §2: her hareketin GERÇEK anlamı var — burada anlam = donanım yükü/ısısı/belleği.
  */
 
-import type { GpuSample } from "@symphony/shared";
+import type { GpuSample } from "@lrgendie/shared";
 
 export interface GpuVitals {
   /** Gösterge etiketi için birincil (en yoğun) GPU adı. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "ink-testing-library";
-import type { ModelInfo } from "@symphony/shared";
+import type { ModelInfo } from "@lrgendie/shared";
 import type { DaemonClient } from "../client/daemon-client.js";
 import { AgentRun } from "./agent-run.js";
 

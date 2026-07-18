@@ -4,8 +4,8 @@ import {
   HistorySessionDetailResponseSchema,
   HistorySessionsResponseSchema,
   type HistorySessionSummary,
-} from "@symphony/shared";
-import { getSymphonyPaths } from "@symphony/core";
+} from "@lrgendie/shared";
+import { getSymphonyPaths } from "@lrgendie/core";
 import { ensureDaemonRunning } from "../client/daemon-client.js";
 
 /**

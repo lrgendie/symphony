@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
-import { createMessage, PROTOCOL_VERSION, type Envelope } from "@symphony/shared";
+import { createMessage, PROTOCOL_VERSION, type Envelope } from "@lrgendie/shared";
 import { DataStore } from "../db/store.js";
 import { ensureSymphonyHome } from "../config/paths.js";
 import { reportFilePath } from "../report/markdown.js";

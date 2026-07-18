@@ -2,7 +2,7 @@ import { existsSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import chalk from "chalk";
 import { CheckRepoActions, simpleGit } from "simple-git";
-import { getSymphonyPaths } from "@symphony/core";
+import { getSymphonyPaths } from "@lrgendie/core";
 import { buildGitignoreContent, planLocalBackup, SYNC_WHITELIST } from "./sync-plan.js";
 
 /**

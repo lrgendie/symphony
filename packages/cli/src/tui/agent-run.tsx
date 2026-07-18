@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import { useEffect, useRef, useState, type JSX } from "react";
-import type { ModelInfo, PendingPermission, Usage } from "@symphony/shared";
+import type { ModelInfo, PendingPermission, Usage } from "@lrgendie/shared";
 import type { DaemonClient } from "../client/daemon-client.js";
 
 interface ToolLogEntry {

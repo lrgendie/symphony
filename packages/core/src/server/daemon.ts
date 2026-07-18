@@ -21,7 +21,7 @@ import {
   type RequestPayload,
   type Snapshot,
   type Usage,
-} from "@symphony/shared";
+} from "@lrgendie/shared";
 import { ensureSymphonyHome } from "../config/paths.js";
 import { loadConfig } from "../config/config.js";
 import { createSecretStore } from "../secrets/secret-store.js";
@@ -71,10 +71,10 @@ import { DeltaBatcher } from "./delta-batcher.js";
 import { generateDaemonToken, loadExistingToken, persistDaemonToken } from "./token.js";
 
 // ADR-017 (Faz 7, Dilim F1): sürüm tek kaynağı package.json — hardcode edilmez. Self-referans
-// (`@symphony/core/package.json`) `exports` haritasındaki `./package.json` girdisiyle çalışır.
+// (`@lrgendie/core/package.json`) `exports` haritasındaki `./package.json` girdisiyle çalışır.
 const require = createRequire(import.meta.url);
 export const DAEMON_VERSION: string = (
-  require("@symphony/core/package.json") as { version: string }
+  require("@lrgendie/core/package.json") as { version: string }
 ).version;
 
 export interface DaemonOptions {

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import { useRef, useState, type JSX } from "react";
-import type { ChatMessage, ModelInfo, Usage } from "@symphony/shared";
+import type { ChatMessage, ModelInfo, Usage } from "@lrgendie/shared";
 import type { DaemonClient } from "../client/daemon-client.js";
 
 export interface HistoryEntry {

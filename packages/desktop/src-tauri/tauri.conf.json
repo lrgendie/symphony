@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../../ui/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "pnpm --filter @symphony/shared build && pnpm --filter @symphony/ui dev",
-    "beforeBuildCommand": "pnpm --filter @symphony/shared build && pnpm --filter @symphony/ui build"
+    "beforeDevCommand": "pnpm --filter @lrgendie/shared build && pnpm --filter @lrgendie/ui dev",
+    "beforeBuildCommand": "pnpm --filter @lrgendie/shared build && pnpm --filter @lrgendie/ui build"
   },
   "app": {
     "windows": [],

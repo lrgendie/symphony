@@ -1,5 +1,5 @@
 // symphonyd çekirdeği — dışa açılan yüzey.
-export { PROTOCOL_VERSION, DEFAULT_DAEMON_PORT, DAEMON_HOST } from "@symphony/shared";
+export { PROTOCOL_VERSION, DEFAULT_DAEMON_PORT, DAEMON_HOST } from "@lrgendie/shared";
 export * from "./config/paths.js";
 export * from "./config/config.js";
 export * from "./secrets/secret-store.js";

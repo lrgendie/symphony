@@ -1,4 +1,4 @@
-import type { ModelInfo } from "@symphony/shared";
+import type { ModelInfo } from "@lrgendie/shared";
 import { computeCostUsd } from "../providers/pricing.js";
 import {
   hasEnoughEvidence,

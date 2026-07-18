@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import chalk from "chalk";
-import { formatReportMarkdown, getSymphonyPaths, reportFilePath } from "@symphony/core";
+import { formatReportMarkdown, getSymphonyPaths, reportFilePath } from "@lrgendie/core";
 import { connectToDaemon } from "../client/daemon-client.js";
 
 function parseDateOption(value: string | undefined, flag: string): number | undefined {

@@ -6,7 +6,7 @@ import {
   type ProviderLimitsPayload,
   type RoadmapPhase,
   type Usage,
-} from "@symphony/shared";
+} from "@lrgendie/shared";
 import { daemon, fetchRoadmap, type PermissionDecision } from "./daemon/client";
 import { ContextMap } from "./map/ContextMap";
 import { LivingScene } from "./scene/LivingScene";

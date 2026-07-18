@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pino } from "pino";
-import type { MessageType } from "@symphony/shared";
+import type { MessageType } from "@lrgendie/shared";
 import { DataStore } from "../db/store.js";
 import { EventBus } from "../server/bus.js";
 import { writeBekciRegistry } from "../bekci/registry.js";

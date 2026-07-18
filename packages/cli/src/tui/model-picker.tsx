@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from "ink";
 import { useState, type JSX } from "react";
-import type { ModelInfo } from "@symphony/shared";
+import type { ModelInfo } from "@lrgendie/shared";
 
 /** Açılış model seçici: ↑/↓ gezinme, Enter seçim (ROADMAP Faz 2). */
 export function ModelPicker(props: {

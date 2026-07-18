@@ -13,15 +13,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 let bekciFile = "";
-vi.mock("@symphony/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@symphony/core")>();
+vi.mock("@lrgendie/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lrgendie/core")>();
   return {
     ...actual, // readBekciRegistry/writeBekciRegistry/withBekciProject GERÇEK kalır
     getSymphonyPaths: () => ({ home: "/home", bekciFile }),
   };
 });
 
-import { readBekciRegistry } from "@symphony/core";
+import { readBekciRegistry } from "@lrgendie/core";
 import { bekciEkleCommand, bekciListeCommand } from "./bekci.js";
 
 let dir: string;

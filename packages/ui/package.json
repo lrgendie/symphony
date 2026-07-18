@@ -1,5 +1,5 @@
 {
-  "name": "@symphony/ui",
+  "name": "@lrgendie/ui",
   "version": "0.2.1",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@react-three/fiber": "^9.6.1",
-    "@symphony/shared": "workspace:*",
+    "@lrgendie/shared": "workspace:*",
     "d3-force": "^3.0.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

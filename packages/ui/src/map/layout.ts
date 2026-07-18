@@ -6,7 +6,7 @@ import {
   forceSimulation,
   type SimulationNodeDatum,
 } from "d3-force";
-import type { ContextMapEdge, ContextMapNode, ContextMapResponse } from "@symphony/shared";
+import type { ContextMapEdge, ContextMapNode, ContextMapResponse } from "@lrgendie/shared";
 
 /**
  * Bağlam haritası yerleşimi (ADR-016 Karar 6, Dilim Z5, TASARIM.md §3 + ADR-019 Karar 5, Dilim

@@ -25,8 +25,8 @@ import {
   type RequestType,
   type Snapshot,
   type Usage,
-} from "@symphony/shared";
-import { getSymphonyPaths, loadConfig } from "@symphony/core";
+} from "@lrgendie/shared";
+import { getSymphonyPaths, loadConfig } from "@lrgendie/core";
 
 /**
  * Daemon istemcisi — PROTOKOL.md'nin istemci tarafı.
@@ -431,11 +431,11 @@ async function healthOk(port: number): Promise<boolean> {
   }
 }
 
-/** `@symphony/core`'un daemon giriş noktası (dist/main.js) — spawn hedefi. */
+/** `@lrgendie/core`'un daemon giriş noktası (dist/main.js) — spawn hedefi. */
 export function resolveDaemonEntry(): string {
   const require = createRequire(import.meta.url);
   // core, exports haritasında "./daemon" alt yolunu bu amaçla açar.
-  return require.resolve("@symphony/core/daemon");
+  return require.resolve("@lrgendie/core/daemon");
 }
 
 /**

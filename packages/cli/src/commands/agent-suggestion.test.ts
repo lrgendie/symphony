@@ -15,8 +15,8 @@ vi.mock("../client/daemon-client.js", () => ({
 }));
 
 let agentsDir = "";
-vi.mock("@symphony/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@symphony/core")>();
+vi.mock("@lrgendie/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lrgendie/core")>();
   return {
     ...actual, // applyAgentModelPin/agentDefinitionFilePath GERÇEK kalır
     getSymphonyPaths: () => ({ home: "/home", agentsDir }),

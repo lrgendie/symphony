@@ -1,5 +1,5 @@
 import type { LanguageModel } from "ai";
-import type { ChatMessage, ModelInfo } from "@symphony/shared";
+import type { ChatMessage, ModelInfo } from "@lrgendie/shared";
 import type { RateLimitSnapshot } from "./telemetry.js";
 
 export interface ChatStreamRequest {

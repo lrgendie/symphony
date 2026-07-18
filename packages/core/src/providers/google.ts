@@ -1,6 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { streamText, type LanguageModel } from "ai";
-import type { ModelInfo } from "@symphony/shared";
+import type { ModelInfo } from "@lrgendie/shared";
 import type { SecretStore } from "../secrets/secret-store.js";
 import { computeCostUsd } from "./pricing.js";
 import type { ChatStreamRequest, ChatUsageResult, ProviderAdapter } from "./types.js";
@@ -42,7 +42,7 @@ export class GoogleAdapter implements ProviderAdapter {
     if (!apiKey) {
       throw new Error(
         "PROVIDER_NOT_CONFIGURED: Google anahtarı kayıtlı değil. " +
-          "Kaydetmek için: pnpm --filter @symphony/core key:set google",
+          "Kaydetmek için: pnpm --filter @lrgendie/core key:set google",
       );
     }
     return createGoogleGenerativeAI({ apiKey })(modelId);

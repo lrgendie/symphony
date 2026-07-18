@@ -10,7 +10,7 @@ import {
   type EventPayload,
   type MessageType,
   type ModelInfo,
-} from "@symphony/shared";
+} from "@lrgendie/shared";
 import { DataStore } from "../db/store.js";
 import { EventBus } from "../server/bus.js";
 import type { ChatStreamRequest, ChatUsageResult, ProviderAdapter } from "../providers/types.js";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { join } from "node:path";
-import type { ReportResponse } from "@symphony/shared";
+import type { ReportResponse } from "@lrgendie/shared";
 import { decideWeeklyReport, formatReportMarkdown, isoWeekLabel, reportFilePath } from "./markdown.js";
 
 /** ADR-016 Karar 5 (Dilim Z3) + ADR-018 Karar 5/6 (Dilim D5) — CLI'den TAŞINDI (core artık

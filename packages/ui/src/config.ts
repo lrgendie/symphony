@@ -2,7 +2,7 @@
  * Daemon bağlantı bilgisi (port + token) iki kaynaktan gelebilir:
  *  1. Tauri: Rust tarafı `~/.symphony/daemon.token`'ı okuyup webview'e enjekte eder
  *     (`window.__SYMPHONY__`). Token hiçbir zaman diske/koda gömülmez, dosyadan gelir.
- *  2. Tarayıcı dev: `pnpm --filter @symphony/ui dev:token` ile üretilen .env.local
+ *  2. Tarayıcı dev: `pnpm --filter @lrgendie/ui dev:token` ile üretilen .env.local
  *     (`VITE_SYMPHONY_TOKEN` / `VITE_SYMPHONY_PORT`) — yalnız geliştirme kolaylığı.
  */
 

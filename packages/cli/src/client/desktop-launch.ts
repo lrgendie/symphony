@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getSymphonyPaths, loadConfig } from "@symphony/core";
+import { getSymphonyPaths, loadConfig } from "@lrgendie/core";
 
 /**
  * Faz 4: `symphony` başlatılınca masaüstü uygulaması da otomatik açılır (kapalıysa) —
@@ -121,7 +121,7 @@ export function ensureDesktopRunning(home?: string): void {
     const repoRoot = findRepoRoot();
     if (repoRoot === null) return; // ne kurulu uygulama ne repo checkout'u — vazgeç
 
-    const command = "pnpm --filter @symphony/desktop desktop:dev";
+    const command = "pnpm --filter @lrgendie/desktop desktop:dev";
     const isWindows = process.platform === "win32";
     spawnDetached(
       isWindows ? "powershell.exe" : "bash",

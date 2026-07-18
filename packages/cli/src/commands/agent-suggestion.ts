@@ -1,7 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import { readFileSync, writeFileSync } from "node:fs";
 import chalk from "chalk";
-import { agentDefinitionFilePath, applyAgentModelPin, getSymphonyPaths } from "@symphony/core";
+import { agentDefinitionFilePath, applyAgentModelPin, getSymphonyPaths } from "@lrgendie/core";
 import { connectToDaemon } from "../client/daemon-client.js";
 
 /**

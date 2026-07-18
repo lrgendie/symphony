@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ReportResponse } from "@symphony/shared";
+import type { ReportResponse } from "@lrgendie/shared";
 import { TASK_KIND_LABEL } from "./build.js";
 
 /**

@@ -35,10 +35,10 @@ importers:
 
   packages/cli:
     dependencies:
-      '@symphony/core':
+      '@lrgendie/core':
         specifier: workspace:*
         version: link:../core
-      '@symphony/shared':
+      '@lrgendie/shared':
         specifier: workspace:*
         version: link:../shared
       chalk:
@@ -99,15 +99,15 @@ importers:
       '@fastify/cors':
         specifier: ^11.3.0
         version: 11.3.0
+      '@lrgendie/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
       '@napi-rs/keyring':
         specifier: ^1.3.0
         version: 1.3.0
-      '@symphony/shared':
-        specifier: workspace:*
-        version: link:../shared
       ai:
         specifier: ^7.0.11
         version: 7.0.11(zod@3.25.76)
@@ -179,12 +179,12 @@ importers:
 
   packages/ui:
     dependencies:
+      '@lrgendie/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@react-three/fiber':
         specifier: ^9.6.1
         version: 9.6.1(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(three@0.185.1)
-      '@symphony/shared':
-        specifier: workspace:*
-        version: link:../shared
       d3-force:
         specifier: ^3.0.0
         version: 3.0.0

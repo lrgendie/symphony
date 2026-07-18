@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { GpuSample } from "@symphony/shared";
+import type { GpuSample } from "@lrgendie/shared";
 
 const execFileAsync = promisify(execFile);
 

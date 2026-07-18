@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from "ink";
 import { useState, type JSX } from "react";
-import type { AgentSummary } from "@symphony/shared";
+import type { AgentSummary } from "@lrgendie/shared";
 
 /**
  * Birleşik giriş seçimi (ADR-012, Dilim 2.3): eski "Sohbet / Agent modu" ikilisi kalktı.
