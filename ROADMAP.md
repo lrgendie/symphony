@@ -333,7 +333,7 @@ symphony/
 
 | İş | Ne yapılacak | Kim/Model |
 |---|---|---|
-| **v0.2.0 draft ARTIK YAYIMLANMAYACAK** — bkz. v0.2.1 | 2026-07-18'de B tablosunun tamamı + Y8 kapandı; bu düzeltmeler v0.2.0 draft'ının derlendiği commit'te YOK. Yerine: sürüm 0.2.0→0.2.1, eski tag/draft silinip yeni tag'le release pipeline yeniden çalıştırılacak, SONRA installer canlı doğrulanıp publish edilecek | Sonnet (sürüm+tag) → **Kullanıcı** (installer doğrula + publish) |
+| ✅ **v0.2.1 YAYIMLANDI** (2026-07-18) | Eski v0.2.0 draft'ı silinip sürüm 0.2.1'e çekildi (B tablosu + Y8 düzeltmeleri dahil) → yeni tag → release pipeline → Windows x64 installer kullanıcı tarafından GERÇEKTEN kurulup canlı doğrulandı (bağlı, Bağlam Haritası, sohbet çalışıyor) → publish edildi: https://github.com/lrgendie/symphony/releases/tag/v0.2.1 (6 asset: Windows x64/ARM64 .exe+.msi, macOS ARM64 .dmg+.app.tar.gz). **macOS Intel bilerek beklenmedi** (kuyrukta 45+ dk, v0.2.0'da da aynı runner tıkanmıştı — kullanıcı kararıyla 3 platformla devam edildi, aşağıdaki satıra bkz.) | ✅ Kapalı |
 | F2: npm yayını | npm login/org kararı + repo'ya `NPM_TOKEN` secret'ı + `publish-npm` işinin yeşillenmesi. ÖN KOŞUL: Y3 kapandı ✅ (2026-07-13) | **Kullanıcı** (Sonnet eşlik) |
 | macOS Intel bundle | `macos-13` runner kuyruğu boşalınca yeni tag ile tekrar dene (Intel kitlesi küçülüyor — düşük öncelik) | Sonnet |
 | Windows .msi (yönetici) yolu | Program Files kurulumunun canlı doğrulaması (yalnız NSIS/kullanıcı-dizini yolu denendi) | **Kullanıcı** |

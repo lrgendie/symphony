@@ -3,7 +3,14 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-18 akşam (Sonnet — **ROADMAP §4.5 B tablosu TAMAMEN KAPANDI (tek
+**Son güncelleme:** 2026-07-18 gece (Sonnet — **v0.2.1 YAYIMLANDI ✅** https://github.com/lrgendie/
+symphony/releases/tag/v0.2.1 — Windows x64 installer kullanıcı tarafından GERÇEKTEN kurulup canlı
+doğrulandı (bağlı, Bağlam Haritası, sohbet çalışıyor); 3/4 platform (Windows x64/ARM64, macOS
+ARM64) hazır, macOS Intel bilinçli beklenmedi (kuyrukta 45+ dk — v0.2.0'da da aynı runner
+tıkanmıştı, kullanıcı kararıyla atlandı). Bu, B tablosu + Y8 düzeltmelerini İÇEREN İLK gerçek
+kullanıcı sürümü. Sıradaki: Y7 kalıcı düzeltmesi / N1 kararı / NPM_TOKEN — hiçbiri acil değil.
+
+**Önceki (aynı gün, öğleden sonra):** ROADMAP §4.5 B tablosu TAMAMEN KAPANDI (tek
 oturumda 7 madde) + Y8 (canlı bulunan yeni hata) düzeltildi.** Y1/B2 (merge çakışması try/catch+
 `--abort`) · Y4 (map.pin boş başlık→"(adsız)") · Y5 (kürasyon idempotency: mükerrer pin/üye +
 self-link/self-üye reddi) · Y6 (yetim pin `limit` kesitinden muaf) · B4 (bekçi TOCTOU — kilit
