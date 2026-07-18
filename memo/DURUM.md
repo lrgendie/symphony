@@ -3,7 +3,22 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-18 gece en son (Sonnet — **N1'in "worldwide" kaygısı belgelerle
+**Son güncelleme:** 2026-07-18 gece geç geç (Sonnet — **F2 (npm yayını) KAPANDI ✅.** Kullanıcı
+npm hesabı açtı; `symphony` org adı ALINMIŞ çıktı (başkasına ait) → `lrgendie` org'unu kullandı.
+Bu, paket scope'unun değişmesini GEREKTİRDİ: `@symphony/{shared,core,cli,ui,desktop}` →
+`@lrgendie/{...}` — 109 dosyada mekanik rename (tüm import'lar, package.json'lar, docs;
+`memo/oturumlar/` tarihi günlükleri BİLİNÇLİ dokunulmadı). `NPM_TOKEN` (Automation tipi, 2FA
+atlamalı, Okuma+Yazma) repo secret'ı eklendi. Sürüm 0.2.2'ye çekilip yeni tag'le test edildi:
+**`@lrgendie/shared`\|`core`\|`cli`@0.2.2 npm registry'de CANLI DOĞRULANDI** (registry API'den
+gerçek JSON çekildi). v0.2.2'nin GitHub Release'i kullanıcı kararıyla DRAFT bırakıldı (masaüstü
+tarafı v0.2.1'den farksız — yalnız npm scope değişti, kod/protokol/davranış AYNI; v0.2.1 zaten
+canlı yayında, `Symphony_0.2.1_x64-setup.exe` kullanıcının kurduğu haliyle GEÇERLİ, hiç
+değişmesine gerek yok). **Yan not:** GitHub'daki genel `CI` iş akışında bir kez `chat-flow.
+test.tsx` zaman aşımıyla düştü (5000ms) — release pipeline'ının kendi test koşusunda AYNI paket
+hemen ardından sorunsuz geçti; muhtemelen flaky/CI-runner yavaşlığı, tek seferlik, izlemeye
+değer ama acil değil. 715/715 test yerel + release'te tutarlı yeşil.
+
+**Önceki (aynı gün, biraz erken):** N1'in "worldwide" kaygısı belgelerle
 karşılandı, kod DEĞİŞMEDİ.** Kullanıcı tam i18n (CLI/masaüstü/daemon çalışma zamanı) yerine
 kapsamı belgelerle sınırladı: `README.en.md` + `docs/REHBER.en.md` yazıldı (+ `docs:pdf:en`
 script'i), Türkçe belgeler TEK kaynak kalıyor. `bekci`/`harita` gibi CLI-katmanı Türkçe
