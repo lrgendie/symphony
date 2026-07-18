@@ -3,7 +3,16 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-18 gece geç (Sonnet — **Y7 CANLI SINANDI, kod DEĞİŞMEDİ ama artık
+**Son güncelleme:** 2026-07-18 gece en son (Sonnet — **N1'in "worldwide" kaygısı belgelerle
+karşılandı, kod DEĞİŞMEDİ.** Kullanıcı tam i18n (CLI/masaüstü/daemon çalışma zamanı) yerine
+kapsamı belgelerle sınırladı: `README.en.md` + `docs/REHBER.en.md` yazıldı (+ `docs:pdf:en`
+script'i), Türkçe belgeler TEK kaynak kalıyor. `bekci`/`harita` gibi CLI-katmanı Türkçe
+tanımlayıcılar/protokol hata kodları BİLİNÇLİ değiştirilmedi (rename protokolü kırar — 
+`VALIDATION_BEKCI_*` kodları + `bekci.json` formatı — fayda yalnız üslup). **AÇIK KALAN:**
+CLAUDE.md'ye "alan terimleri bekci/harita muaf" cümlesini resmen eklemek için hâlâ kullanıcı
+onayı bekleniyor — sorulmadı, teklif masada duruyor.
+
+**Önceki (aynı gün, biraz erken):** Y7 CANLI SINANDI, kod DEĞİŞMEDİ ama artık
 TESTLE kanıtlı.** `daemon.test.ts`e yeni regresyon: portu tutan "yabancı" (health protokolümüzü
 konuşmayan) bir süreç varken `probeRunningDaemon` `null` dönse bile `app.listen()` erken
 `EADDRINUSE` fırlatıyor — token dosyası hiç ele geçirilmiyor. Yani "dinleme sonrası yaz" (2026-07-03)
