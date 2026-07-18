@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchRoadmap } from "./client.js";
+import { fetchRoadmap, fetchSessionDetail } from "./client.js";
 
 /**
  * `fetchRoadmap` (Faz 4 Dilim P3, ADR-015 Karar 3) — WS'in dışında, istek başına REST çağrısı.
@@ -65,5 +65,38 @@ describe("fetchRoadmap", () => {
     );
 
     expect(await fetchRoadmap("/tmp/proje")).toBeNull();
+  });
+});
+
+describe("fetchSessionDetail", () => {
+  it("B6: sessionId URL'e kodlanmış geçer (fetchRoadmap'in dir kodlamasıyla TUTARLI)", async () => {
+    vi.stubGlobal("window", { __SYMPHONY__: { token: "tok123", port: 7770 } });
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        session: {
+          sessionId: "11111111-1111-4111-8111-111111111111",
+          provider: "anthropic",
+          model: "claude-sonnet-5",
+          title: "test",
+          createdAt: 1,
+          updatedAt: 1,
+          messageCount: 0,
+        },
+        messages: [],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    // sessionId'de kodlanması gereken karakterler (gerçekte UUID olsa da, tutarlılık kanıtı için).
+    const sessionId = "id/with space+plus";
+    await fetchSessionDetail(sessionId);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      `http://127.0.0.1:7770/api/history/sessions/${encodeURIComponent(sessionId)}`,
+    );
+    expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok123");
   });
 });

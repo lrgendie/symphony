@@ -99,18 +99,25 @@ export function buildContextMap(input: ContextMapBuildInput): ContextMapResponse
   const flat = input.flat === true;
   const openWeek = input.week ?? isoWeekLabel(now);
 
-  const items: Item[] = [
+  const allItems: Item[] = [
     ...input.runs.map((run): Item => ({ kind: "run", input: run })),
     ...input.sessions.map((session): Item => ({ kind: "session", input: session })),
-  ]
-    .sort((a, b) => b.input.at - a.input.at)
-    .slice(0, limit);
+  ].sort((a, b) => b.input.at - a.input.at);
 
   // Sabitlenmiş öğe = bir `context` kürasyon düğümünün ref'lediği session/run — ASLA katlanmaz
   // (ADR-019 Karar 4, istisna a: insan emeği hep görünür).
   const pinnedIds = new Set(
     mapNodes.filter((n) => n.kind === "context" && n.refId !== null).map((n) => n.refId as string),
   );
+
+  // Y6: `limit` en-yeni N'i tutar ama bir pin ÇOK eskiyse kesitin dışında kalıp "yetim" (grafiksiz)
+  // hâle gelebilirdi — sabitlenmiş öğe kesit dışında kalsa bile GERİ EKLENİR (ADR-019 Karar 4).
+  const withinLimit = allItems.slice(0, limit);
+  const withinLimitIds = new Set(withinLimit.map((i) => i.input.id));
+  const pinnedButCut = allItems.filter(
+    (i) => pinnedIds.has(i.input.id) && !withinLimitIds.has(i.input.id),
+  );
+  const items = [...withinLimit, ...pinnedButCut];
 
   const isOpen = (item: Item): boolean =>
     flat || pinnedIds.has(item.input.id) || isoWeekLabel(item.input.at) === openWeek;

@@ -30,7 +30,9 @@ export function isKnownGraphReference(id: string, exists: MapRefExistsFn): boole
 export type MapValidationErrorCode =
   | "VALIDATION_MAP_NODE_UNKNOWN"
   | "VALIDATION_MAP_NODE_PROTECTED"
-  | "VALIDATION_MAP_REF_UNKNOWN";
+  | "VALIDATION_MAP_REF_UNKNOWN"
+  | "VALIDATION_MAP_SELF_LINK"
+  | "VALIDATION_MAP_SELF_MEMBER";
 
 export type MapValidationResult = { ok: true } | { ok: false; code: MapValidationErrorCode };
 
@@ -77,5 +79,17 @@ export function checkPinRef(
 ): MapValidationResult {
   if (ref === undefined) return { ok: true };
   if (!exists(ref.kind, ref.id)) return { ok: false, code: "VALIDATION_MAP_REF_UNKNOWN" };
+  return { ok: true };
+}
+
+/** `map.link.add`: kendine bağ anlamsız — sessizce yutmak yerine AÇIKÇA reddedilir (Y5). */
+export function checkSelfLink(from: string, to: string): MapValidationResult {
+  if (from === to) return { ok: false, code: "VALIDATION_MAP_SELF_LINK" };
+  return { ok: true };
+}
+
+/** `map.member.add`: bir düğüm kendi grubuna üye olamaz (Y5). */
+export function checkSelfMember(nodeId: string, groupId: string): MapValidationResult {
+  if (nodeId === groupId) return { ok: false, code: "VALIDATION_MAP_SELF_MEMBER" };
   return { ok: true };
 }

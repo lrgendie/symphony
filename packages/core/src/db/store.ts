@@ -280,7 +280,17 @@ interface TelemetryRow {
   context: string | null;
 }
 
-function toTelemetryEntry(row: TelemetryRow): TelemetryEntry {
+/** B5: `context` bozuk JSON içerirse (ör. elle bozulmuş satır) TÜM sorguyu çökertmesin. */
+function toTelemetryEntry(row: TelemetryRow): TelemetryEntry | null {
+  let context: Record<string, unknown> | undefined;
+  if (row.context !== null) {
+    try {
+      context = JSON.parse(row.context) as Record<string, unknown>;
+    } catch (error) {
+      console.error(`[store] telemetry.context JSON bozuk, satır atlandı (id=${row.id}): ${String(error)}`);
+      return null;
+    }
+  }
   return {
     id: row.id,
     at: row.at,
@@ -288,7 +298,7 @@ function toTelemetryEntry(row: TelemetryRow): TelemetryEntry {
     code: row.code,
     message: row.message,
     ...(row.stack !== null ? { stack: row.stack } : {}),
-    ...(row.context !== null ? { context: JSON.parse(row.context) as Record<string, unknown> } : {}),
+    ...(context !== undefined ? { context } : {}),
   };
 }
 
@@ -308,14 +318,22 @@ interface PatchRow {
   resolved_at: number | null;
 }
 
-function toPatchEntry(row: PatchRow): PatchEntry {
+/** B5: `files` bozuk JSON içerirse (ör. elle bozulmuş satır) TÜM sorguyu çökertmesin. */
+function toPatchEntry(row: PatchRow): PatchEntry | null {
+  let files: string[];
+  try {
+    files = JSON.parse(row.files) as string[];
+  } catch (error) {
+    console.error(`[store] patch.files JSON bozuk, satır atlandı (id=${row.id}): ${String(error)}`);
+    return null;
+  }
   return {
     id: row.id,
     createdAt: row.created_at,
     errorCode: row.error_code,
     category: row.category,
     branch: row.branch,
-    files: JSON.parse(row.files) as string[],
+    files,
     diff: row.diff,
     testOk: row.test_ok === 1,
     testSummary: row.test_summary,
@@ -701,7 +719,7 @@ export class DataStore {
     const rows = this.db
       .prepare(`SELECT * FROM telemetry ORDER BY at DESC, id DESC LIMIT ?`)
       .all(limit) as TelemetryRow[];
-    return rows.map(toTelemetryEntry);
+    return rows.map(toTelemetryEntry).filter((e): e is TelemetryEntry => e !== null);
   }
 
   /**
@@ -713,7 +731,7 @@ export class DataStore {
     const rows = this.db
       .prepare(`SELECT * FROM telemetry WHERE code = ? AND at >= ? ORDER BY at DESC`)
       .all(code, sinceMs) as TelemetryRow[];
-    return rows.map(toTelemetryEntry);
+    return rows.map(toTelemetryEntry).filter((e): e is TelemetryEntry => e !== null);
   }
 
   // ---- Agent koşuları (v3, SPEC-AGENT §7) ----
@@ -1007,7 +1025,7 @@ export class DataStore {
       });
   }
 
-  /** Tek bir yama kaydı — yoksa null. */
+  /** Tek bir yama kaydı — yoksa (ya da `files` bozuksa, B5) null. */
   patchById(id: string): PatchEntry | null {
     const row = this.db.prepare(`SELECT * FROM patches WHERE id = ?`).get(id) as
       | PatchRow
@@ -1030,7 +1048,7 @@ export class DataStore {
             .all(state)
         : this.db.prepare(`SELECT * FROM patches ORDER BY created_at DESC, rowid DESC`).all()
     ) as PatchRow[];
-    return rows.map(toPatchEntry);
+    return rows.map(toPatchEntry).filter((p): p is PatchEntry => p !== null);
   }
 
   /**

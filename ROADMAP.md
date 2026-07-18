@@ -333,7 +333,7 @@ symphony/
 
 | İş | Ne yapılacak | Kim/Model |
 |---|---|---|
-| v0.2.0 release yayımı | Draft'ı gözden geçir → Windows installer'ı kur, H3 (kürasyon UI) + H5 (animasyon) masaüstünde görünüyor mu doğrula → "Publish" | **Kullanıcı** (Sonnet eşlik) |
+| **v0.2.0 draft ARTIK YAYIMLANMAYACAK** — bkz. v0.2.1 | 2026-07-18'de B tablosunun tamamı + Y8 kapandı; bu düzeltmeler v0.2.0 draft'ının derlendiği commit'te YOK. Yerine: sürüm 0.2.0→0.2.1, eski tag/draft silinip yeni tag'le release pipeline yeniden çalıştırılacak, SONRA installer canlı doğrulanıp publish edilecek | Sonnet (sürüm+tag) → **Kullanıcı** (installer doğrula + publish) |
 | F2: npm yayını | npm login/org kararı + repo'ya `NPM_TOKEN` secret'ı + `publish-npm` işinin yeşillenmesi. ÖN KOŞUL: Y3 kapandı ✅ (2026-07-13) | **Kullanıcı** (Sonnet eşlik) |
 | macOS Intel bundle | `macos-13` runner kuyruğu boşalınca yeni tag ile tekrar dene (Intel kitlesi küçülüyor — düşük öncelik) | Sonnet |
 | Windows .msi (yönetici) yolu | Program Files kurulumunun canlı doğrulaması (yalnız NSIS/kullanıcı-dizini yolu denendi) | **Kullanıcı** |
@@ -342,13 +342,6 @@ symphony/
 
 | İş | Ne yapılacak | Kim/Model |
 |---|---|---|
-| **Y1/B2 — merge çakışması** (ORTA, en önemli) | `patch.ts:289` merge'ü try/catch'e al → `git merge --abort` + `reset --hard` + `resolveState("failed")` + çakıştırma senaryolu test | Sonnet (~yarım oturum) |
-| Y4 — boş başlık | `daemon.ts` map.pin türetilmiş başlık boşsa `"(adsız)"` yedeği + test | Sonnet (5 dk) |
-| Y5 — kürasyon idempotency | Mükerrer pin→mevcut düğümü döndür; `group.create`'te `new Set(members)`; self-link/self-üye reddi + testler | Sonnet |
-| Y6 — yetim pin | Pinlenmiş ref'leri `limit` kesitinden MUAF tut (`build.ts`, pinnedIds zaten elde) + test | Sonnet |
-| B4 — TOCTOU | `pipeline.ts` `runForProject`: `busy=true`'yu kontrolün hemen ardına al, hata yolunda açık geri-alma + test | Sonnet |
-| B5 — DB parse guard | `store.ts:291,318` `JSON.parse` satır-başına try/catch (bozuk satır atlanır+loglanır) + test | Sonnet |
-| B6 — URL kodlama | `ui/daemon/client.ts:300` `encodeURIComponent(sessionId)` (tek satır, fetchRoadmap ile tutarlılık) | Sonnet |
 | **Y7 — bayat daemon + token uyumsuzluğu** (ORTA, canlı yaşandı 2026-07-13) | Eski bir daemon portu tutarken ikinci start token dosyasını yeniler ama portu alamayıp çıkar → eski daemon eski token'la kalır, dosya yeni token'la → tüm istemciler `AUTH_TOKEN_INVALID` alır. Çözüm o an elle yapıldı (eski PID öldür + token sil + taze start). Kalıcı düzeltme: `ensureDaemonRunning`/`token.ts` — start başarısızsa token dosyasını YENİLEME (yalnız gerçekten bind eden yazsın), ya da başlatılan daemon'ın PID'sini dosyaya yaz + health'te sürüm/pid tutarlılığı denetle | Sonnet |
 | **N1 — Türkçe tanımlayıcı KARARI** | Karar: İngilizce'ye kademeli dönüş MÜ, CLAUDE.md'de "alan terimleri (bekci/doktor/harita) muaf" gevşetmesi Mİ? Karar verilmeden her oturum birikimi büyütüyor | **Kullanıcı + Fable/Opus** (karar) → Sonnet (uygulama) |
 
@@ -366,7 +359,15 @@ symphony/
 | H5 tick seyreltme | Kullanıcıdan yavaşlık raporu GELİRSE: `startLiveLayout` her N tick'te bir `onTick` | Sonnet |
 
 **Kapalı (bu tabloya girmeden çözüldü):** B1+B3 (2026-07-11) · Y2 harita-ekle katlanma + Y3
-hardcode --version (2026-07-13, aynı gün bulunup kapatıldı).
+hardcode --version (2026-07-13, aynı gün bulunup kapatıldı) · **2026-07-18 (Sonnet, tek oturum):**
+Y1/B2 (merge çakışması try/catch+abort) · Y4 (map.pin boş başlık "(adsız)") · Y5 (kürasyon
+idempotency: mükerrer pin/üye + self-link/self-üye reddi) · Y6 (yetim pin limit'ten muaf) · B4
+(bekçi TOCTOU — kilit kontrolden hemen sonra + hata yolunda geri alma) · B5 (DB parse guard —
+telemetry.context/patch.files bozuk JSON'da satır atlanır+loglanır) · B6 (URL kodlama tutarlılığı)
+· **Y8** (Tauri client token-tazelik — canlı bulundu VE aynı oturumda düzeltildi, ayrıntı DURUM.md).
+701→**714 test**, `pnpm build && pnpm test && pnpm lint` her adımda temiz. **Sıradaki: v0.2.1
+sürüm ataması + release pipeline'ın yeniden çalıştırılması** (bu düzeltmeler henüz v0.2.0
+draft'ında YOK — bkz. A tablosu).
 
 ---
 

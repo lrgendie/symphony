@@ -442,4 +442,56 @@ describe("DoctorPipeline.runForProject (ADR-018 Karar 7, Dilim D6) — bekçi mo
     await pipeline.runForProject("proje-a");
     await expect(pipeline.runForProject("proje-a")).rejects.toThrow(/doktor koşusu/i);
   });
+
+  it("B4 (TOCTOU): isRepoRoot await'i SIRASINDA ikinci çağrı sızmaz — kilit kontrolden HEMEN SONRA alınır", async () => {
+    openStore();
+    seedTelemetry("BEKCI_PROJE_A", 1);
+    const bekciFile = bekciFileFor(dir);
+    writeBekciRegistry(bekciFile, {
+      projeler: [{ ad: "proje-a", repoPath: "/proje/a", logFile: "/proje/a/log.txt" }],
+    });
+    const { bus } = busWithLog();
+    let resolveIsRepoRoot: (v: boolean) => void = () => undefined;
+    const isRepoRootGate = new Promise<boolean>((resolve) => {
+      resolveIsRepoRoot = resolve;
+    });
+    const pipeline = new DoctorPipeline({
+      store,
+      bus,
+      log,
+      startRun: async () => ({ runId: crypto.randomUUID() }),
+      selfDev,
+      ops: fakeOps({ isRepoRoot: () => isRepoRootGate, createSandbox: () => new Promise(() => undefined) }),
+      bekciFile,
+    });
+
+    // İlk çağrı `isRepoRoot`u BEKLERKEN (henüz çözülmedi) atılıyor — await'lenmiyor.
+    const first = pipeline.runForProject("proje-a");
+    // Eski kodda busy=true bu await'ten SONRA set edilirdi — ikinci çağrı da geçerdi (TOCTOU).
+    await expect(pipeline.runForProject("proje-a")).rejects.toThrow(/doktor koşusu/i);
+
+    resolveIsRepoRoot(true); // ilk çağrının temizce tamamlanmasına izin ver
+    await first;
+  });
+
+  it("B4: doğrulama BAŞARISIZ olursa kilit AÇIKÇA geri alınır — sonraki çağrı 'meşgul'e KİLİTLENMEZ", async () => {
+    openStore();
+    const bekciFile = bekciFileFor(dir);
+    writeBekciRegistry(bekciFile, { projeler: [] }); // proje YOK → doğrulama başarısız
+    const { bus } = busWithLog();
+    const pipeline = new DoctorPipeline({
+      store,
+      bus,
+      log,
+      startRun: async () => ({ runId: crypto.randomUUID() }),
+      selfDev,
+      ops: fakeOps(),
+      bekciFile,
+    });
+
+    await expect(pipeline.runForProject("hic-olmayan")).rejects.toThrow(/Kayıtlı bekçi projesi yok/);
+    // Kilit STUCK kalsaydı bu ikinci çağrı AGENT_DOCTOR_BUSY ile patlardı — AYNI doğrulama
+    // hatasını almak, kilidin ilk başarısızlıkta düzgünce geri alındığını kanıtlar.
+    await expect(pipeline.runForProject("hic-olmayan")).rejects.toThrow(/Kayıtlı bekçi projesi yok/);
+  });
 });

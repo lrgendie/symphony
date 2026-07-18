@@ -1194,6 +1194,164 @@ describe("symphonyd", () => {
     }
   }, 15_000);
 
+  it("Y4: map.pin türetilmiş başlık BOŞSA '(adsız)' yedeği kullanılır", async () => {
+    const home = mkdtempSync(join(tmpdir(), "symphony-map-pin-empty-title-test-"));
+    const paths = ensureSymphonyHome(home);
+    const runId = crypto.randomUUID();
+    const seedDb = new DataStore(paths.databaseFile);
+    try {
+      seedDb.createAgentRun({
+        id: runId,
+        agentId: "asistan",
+        task: "", // boş görev → türetilmiş başlık boş
+        provider: "ollama",
+        model: "qwen3:8b",
+        cwd: home,
+        startedAt: Date.now(),
+      });
+    } finally {
+      seedDb.close();
+    }
+
+    const dedicated = await startDaemon({
+      port: 0,
+      home,
+      sampleHardware: false,
+      scheduleReports: false,
+      watchBekci: false,
+    });
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${dedicated.port}/ws`);
+      await new Promise<void>((resolve, reject) => {
+        ws.on("open", () => {
+          ws.send(
+            JSON.stringify(
+              createMessage("hello", {
+                token: dedicated.token,
+                client: "cli",
+                protocolVersion: PROTOCOL_VERSION,
+              }),
+            ),
+          );
+        });
+        ws.on("message", (raw) => {
+          const msg = JSON.parse(String(raw)) as Envelope;
+          if (msg.type === "hello.ok") resolve();
+        });
+        ws.on("error", reject);
+      });
+
+      const pin = await request(ws, createMessage("map.pin", { ref: { kind: "run", id: runId } }));
+      expect(pin.type).toBe("map.pin.ok");
+      const nodeId = (pin.payload as { nodeId: string }).nodeId;
+      ws.close();
+
+      const db2 = new DataStore(paths.databaseFile);
+      try {
+        const node = db2.listMapNodes().find((n) => n.id === nodeId);
+        expect(node?.title).toBe("(adsız)");
+      } finally {
+        db2.close();
+      }
+    } finally {
+      await dedicated.close();
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("Y5: kürasyon idempotency — mükerrer pin/üye çoğaltmaz + self-link/self-üye reddi", async () => {
+    const home = mkdtempSync(join(tmpdir(), "symphony-map-y5-test-"));
+    const paths = ensureSymphonyHome(home);
+    const runId = crypto.randomUUID();
+    const seedDb = new DataStore(paths.databaseFile);
+    try {
+      seedDb.createAgentRun({
+        id: runId,
+        agentId: "asistan",
+        task: "Y5 testi görevi",
+        provider: "ollama",
+        model: "qwen3:8b",
+        cwd: home,
+        startedAt: Date.now(),
+      });
+    } finally {
+      seedDb.close();
+    }
+
+    const dedicated = await startDaemon({
+      port: 0,
+      home,
+      sampleHardware: false,
+      scheduleReports: false,
+      watchBekci: false,
+    });
+    try {
+      const ws = new WebSocket(`ws://127.0.0.1:${dedicated.port}/ws`);
+      await new Promise<void>((resolve, reject) => {
+        ws.on("open", () => {
+          ws.send(
+            JSON.stringify(
+              createMessage("hello", {
+                token: dedicated.token,
+                client: "cli",
+                protocolVersion: PROTOCOL_VERSION,
+              }),
+            ),
+          );
+        });
+        ws.on("message", (raw) => {
+          const msg = JSON.parse(String(raw)) as Envelope;
+          if (msg.type === "hello.ok") resolve();
+        });
+        ws.on("error", reject);
+      });
+
+      // 1) mükerrer pin → AYNI nodeId (yeni düğüm ÜRETİLMEZ)
+      const pin1 = await request(ws, createMessage("map.pin", { ref: { kind: "run", id: runId } }));
+      const pin2 = await request(ws, createMessage("map.pin", { ref: { kind: "run", id: runId } }));
+      expect(pin1.type).toBe("map.pin.ok");
+      expect(pin2.type).toBe("map.pin.ok");
+      const nodeId = (pin1.payload as { nodeId: string }).nodeId;
+      expect((pin2.payload as { nodeId: string }).nodeId).toBe(nodeId);
+
+      // 2) group.create'te mükerrer üye id'si → tek kenar
+      const group = await request(
+        ws,
+        createMessage("map.group.create", { title: "y5 grubu", members: [nodeId, nodeId] }),
+      );
+      expect(group.type).toBe("map.group.create.ok");
+      const groupId = (group.payload as { nodeId: string }).nodeId;
+
+      // 3) self-link reddi
+      const selfLink = await request(ws, createMessage("map.link.add", { from: nodeId, to: nodeId }));
+      expect(selfLink.type).toBe("error");
+      expect((selfLink.payload as { code: string }).code).toBe("VALIDATION_MAP_SELF_LINK");
+
+      // 4) self-üye reddi (bir grup kendi kendine üye olamaz)
+      const selfMember = await request(
+        ws,
+        createMessage("map.member.add", { groupId, nodeId: groupId }),
+      );
+      expect(selfMember.type).toBe("error");
+      expect((selfMember.payload as { code: string }).code).toBe("VALIDATION_MAP_SELF_MEMBER");
+
+      ws.close();
+
+      const db2 = new DataStore(paths.databaseFile);
+      try {
+        const memberEdges = db2
+          .listMapEdges()
+          .filter((e) => e.kind === "member" && e.fromId === nodeId && e.toId === groupId);
+        expect(memberEdges).toHaveLength(1); // mükerrer üye ÇOĞALTILMADI
+      } finally {
+        db2.close();
+      }
+    } finally {
+      await dedicated.close();
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("başarısız sohbet SQLite'a istek kaydı + telemetri düşürür; usage.query cevaplar", async () => {
     const { reply, ws } = await roundTrip(
       createMessage("hello", {

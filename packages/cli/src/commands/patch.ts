@@ -286,7 +286,17 @@ export async function patchApplyCommand(idPrefix: string, options: { evet?: bool
   };
 
   console.log(chalk.dim(`\n▶ merge ${patch.branch} → HEAD`));
-  await git.raw(["merge", "--no-ff", patch.branch, "-m", `doktor yaması: ${patch.errorCode} (${patch.id.slice(0, 8)})`]);
+  try {
+    await git.raw(["merge", "--no-ff", patch.branch, "-m", `doktor yaması: ${patch.errorCode} (${patch.id.slice(0, 8)})`]);
+  } catch {
+    // Y1/B2: ÇAKIŞMA — merge yarım kalmış ağaçta (conflict marker'lar) devam ETMEMELİ.
+    // `--abort` HEAD'i baseSha'ya (merge-öncesi) geri döndürür; repo TEMİZ çıkar.
+    console.error(chalk.red("\n✘ merge ÇAKIŞTI — yama canlıya ALINMADI."));
+    await git.raw(["merge", "--abort"]).catch(() => undefined);
+    await resolveState("failed");
+    client.close();
+    process.exit(1);
+  }
 
   // build+test ANA DALDA koşar — sandbox yeşili merge SONRASI dünyayı kanıtlamaz.
   for (const step of ["build", "test"] as const) {

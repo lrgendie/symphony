@@ -297,7 +297,7 @@ export async function fetchSessionDetail(sessionId: string): Promise<HistorySess
   if (boot === null) return null;
   let res: Response;
   try {
-    res = await fetch(`http://127.0.0.1:${boot.port}/api/history/sessions/${sessionId}`, {
+    res = await fetch(`http://127.0.0.1:${boot.port}/api/history/sessions/${encodeURIComponent(sessionId)}`, {
       headers: { authorization: `Bearer ${boot.token}` },
     });
   } catch {

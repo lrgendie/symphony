@@ -138,55 +138,64 @@ export class DoctorPipeline {
     if (this.busy) {
       throw new AgentError("AGENT_DOCTOR_BUSY", "Zaten süren bir doktor koşusu var");
     }
-    if (this.deps.bekciFile === undefined) {
-      throw new AgentError(
-        "VALIDATION_BEKCI_NOT_CONFIGURED",
-        "Bekçi kayıt defteri yapılandırılmamış (daemon içi hata)",
-      );
-    }
-    const project = findBekciProject(readBekciRegistry(this.deps.bekciFile), ad);
-    if (project === null) {
-      throw new AgentError(
-        "VALIDATION_BEKCI_PROJECT_UNKNOWN",
-        `Kayıtlı bekçi projesi yok: '${ad}' — \`symphony bekci ekle\` ile kaydet`,
-      );
-    }
-    // Savunma katmanı (canlı prova bulgusu): `bekci ekle` kayıt anında ZATEN bunu doğrular, ama
-    // elle düzenlenmiş ya da düzeltmeden ÖNCE kaydedilmiş bir girdi de burada yakalanır — repo
-    // kökü DEĞİLSE `git worktree add` sessizce bir ATA dizinin repo'suna sızabilirdi.
-    if (!(await this.ops.isRepoRoot(project.repoPath))) {
-      throw new AgentError(
-        "VALIDATION_BEKCI_NOT_A_REPO",
-        `'${project.repoPath}' bir git repo KÖKÜ değil — \`symphony bekci ekle\` ile düzelt`,
-      );
-    }
-    const errorCode = bekciErrorCode(ad);
-    const sinceMs = Date.now() - this.deps.selfDev.windowDays * DAY_MS;
-    const rows = this.deps.store.telemetryRowsForCode(errorCode, sinceMs);
-    if (rows.length === 0) {
-      throw new AgentError(
-        "VALIDATION_BEKCI_NO_EVIDENCE",
-        `'${ad}' için son ${this.deps.selfDev.windowDays} günde bekçi kaydı yok — henüz bir hata yakalanmadı`,
-      );
-    }
-
-    const verify: (worktreePath: string) => Promise<VerificationResult> =
-      project.testCommand !== undefined
-        ? (worktreePath) => runProjectVerification(worktreePath, project.testCommand as string)
-        : () =>
-            Promise.resolve({
-              ok: false,
-              summary:
-                "test komutu tanımsız — bu proje için doğrulama YAPILMADI " +
-                "(`symphony bekci ekle <ad> <repo> <log> --test <komut>` ile ekle)",
-            });
-
+    // B4 (TOCTOU): kilit kontrolden HEMEN SONRA alınır — aşağıdaki `await isRepoRoot` sırasında
+    // ikinci bir çağrı araya sızıp AYNI ANDA ikinci bir koşu başlatamasın. Doğrulama adımlarından
+    // biri (repo/proje/kanıt yok) düşerse kilit `catch`te AÇIKÇA geri alınır — yoksa boru hattı
+    // hiç başlamadan kalıcı "meşgul" kilitlenirdi.
     this.busy = true;
-    void this
-      .execute({ repoPath: project.repoPath, errorCode, count: rows.length, rows, verify })
-      .finally(() => {
-        this.busy = false;
-      });
+    try {
+      if (this.deps.bekciFile === undefined) {
+        throw new AgentError(
+          "VALIDATION_BEKCI_NOT_CONFIGURED",
+          "Bekçi kayıt defteri yapılandırılmamış (daemon içi hata)",
+        );
+      }
+      const project = findBekciProject(readBekciRegistry(this.deps.bekciFile), ad);
+      if (project === null) {
+        throw new AgentError(
+          "VALIDATION_BEKCI_PROJECT_UNKNOWN",
+          `Kayıtlı bekçi projesi yok: '${ad}' — \`symphony bekci ekle\` ile kaydet`,
+        );
+      }
+      // Savunma katmanı (canlı prova bulgusu): `bekci ekle` kayıt anında ZATEN bunu doğrular, ama
+      // elle düzenlenmiş ya da düzeltmeden ÖNCE kaydedilmiş bir girdi de burada yakalanır — repo
+      // kökü DEĞİLSE `git worktree add` sessizce bir ATA dizinin repo'suna sızabilirdi.
+      if (!(await this.ops.isRepoRoot(project.repoPath))) {
+        throw new AgentError(
+          "VALIDATION_BEKCI_NOT_A_REPO",
+          `'${project.repoPath}' bir git repo KÖKÜ değil — \`symphony bekci ekle\` ile düzelt`,
+        );
+      }
+      const errorCode = bekciErrorCode(ad);
+      const sinceMs = Date.now() - this.deps.selfDev.windowDays * DAY_MS;
+      const rows = this.deps.store.telemetryRowsForCode(errorCode, sinceMs);
+      if (rows.length === 0) {
+        throw new AgentError(
+          "VALIDATION_BEKCI_NO_EVIDENCE",
+          `'${ad}' için son ${this.deps.selfDev.windowDays} günde bekçi kaydı yok — henüz bir hata yakalanmadı`,
+        );
+      }
+
+      const verify: (worktreePath: string) => Promise<VerificationResult> =
+        project.testCommand !== undefined
+          ? (worktreePath) => runProjectVerification(worktreePath, project.testCommand as string)
+          : () =>
+              Promise.resolve({
+                ok: false,
+                summary:
+                  "test komutu tanımsız — bu proje için doğrulama YAPILMADI " +
+                  "(`symphony bekci ekle <ad> <repo> <log> --test <komut>` ile ekle)",
+              });
+
+      void this
+        .execute({ repoPath: project.repoPath, errorCode, count: rows.length, rows, verify })
+        .finally(() => {
+          this.busy = false;
+        });
+    } catch (error) {
+      this.busy = false;
+      throw error;
+    }
   }
 
   private phase(

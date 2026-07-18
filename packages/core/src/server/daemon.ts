@@ -49,6 +49,8 @@ import {
   checkGraphReference,
   checkGroupTarget,
   checkPinRef,
+  checkSelfLink,
+  checkSelfMember,
   type MapNodeLookupFn,
   type MapRefExistsFn,
 } from "../context-map/curation.js";
@@ -926,13 +928,27 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
               return;
             }
             const ref = payload.ref;
-            const title =
+            // Y5: aynı ref ZATEN sabitlenmişse yeni düğüm üretme — mevcut olanı döndür
+            // (mükerrer tıklama/istek çoğaltılmış "aynı şey" düğümü yaratmasın).
+            if (ref !== undefined) {
+              const existingPin = store
+                .listMapNodes()
+                .find((n) => n.kind === "context" && n.refKind === ref.kind && n.refId === ref.id);
+              if (existingPin !== undefined) {
+                bus.sendTo(ws, "map.pin.ok", { nodeId: existingPin.id }, message.id);
+                return;
+              }
+            }
+            const derivedTitle =
               payload.title ??
               (ref?.kind === "session"
                 ? (store.sessionDetail(ref.id)?.session.title ?? "")
                 : ref !== undefined
                   ? (store.agentRunById(ref.id)?.task ?? "")
                   : "");
+            // Y4: türetilmiş başlık BOŞ olabilir (session/koşu başlıksız kaydedilmiş) — haritada
+            // etiketsiz bir düğüm görünmesin.
+            const title = derivedTitle.trim() === "" ? "(adsız)" : derivedTitle;
             const nodeId = randomUUID();
             store.insertMapNode({
               id: nodeId,
@@ -977,7 +993,9 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           }
           case "map.group.create": {
             const payload = message.payload as RequestPayload<"map.group.create">;
-            for (const memberId of payload.members) {
+            // Y5: aynı id'nin çağrıda tekrarı çoğaltılmış "member" kenarı üretmesin.
+            const members = [...new Set(payload.members)];
+            for (const memberId of members) {
               const check = checkGraphReference(memberId, mapNodeLookup, mapRefExists);
               if (!check.ok) {
                 sendError({ code: check.code, message: `Bilinmeyen düğüm: ${memberId}` }, message.id);
@@ -994,7 +1012,7 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
               refKind: null,
               refId: null,
             });
-            for (const memberId of payload.members) {
+            for (const memberId of members) {
               store.insertMapEdge({ id: randomUUID(), fromId: memberId, toId: nodeId, kind: "member", createdAt: now });
             }
             bus.sendTo(ws, "map.group.create.ok", { nodeId }, message.id);
@@ -1002,6 +1020,14 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           }
           case "map.member.add": {
             const payload = message.payload as RequestPayload<"map.member.add">;
+            const selfCheck = checkSelfMember(payload.nodeId, payload.groupId);
+            if (!selfCheck.ok) {
+              sendError(
+                { code: selfCheck.code, message: "Bir düğüm kendi grubuna üye olamaz" },
+                message.id,
+              );
+              return;
+            }
             const groupCheck = checkGroupTarget(payload.groupId, mapNodeLookup);
             if (!groupCheck.ok) {
               sendError({ code: groupCheck.code, message: `Grup değil: ${payload.groupId}` }, message.id);
@@ -1037,6 +1063,11 @@ export async function startDaemon(options: DaemonOptions = {}): Promise<RunningD
           }
           case "map.link.add": {
             const payload = message.payload as RequestPayload<"map.link.add">;
+            const selfCheck = checkSelfLink(payload.from, payload.to);
+            if (!selfCheck.ok) {
+              sendError({ code: selfCheck.code, message: "Bir düğüm kendine bağlanamaz" }, message.id);
+              return;
+            }
             const fromCheck = checkGraphReference(payload.from, mapNodeLookup, mapRefExists);
             if (!fromCheck.ok) {
               sendError({ code: fromCheck.code, message: `Bilinmeyen düğüm: ${payload.from}` }, message.id);

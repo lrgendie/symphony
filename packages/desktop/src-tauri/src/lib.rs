@@ -1,4 +1,12 @@
 use std::path::PathBuf;
+use std::time::Duration;
+
+/// Y8 (2026-07-18, canlı bulgu): daemon restart'ta YENİ token üretir (`token.ts`) ama pencere
+/// açılışta okuduğu token'ı bir daha hiç yenilemiyordu — restart sonrası REST istekleri (Bearer)
+/// sessizce 401 alıyordu, kullanıcı yalnızca pencereyi kapatıp açarak fark ediyordu. Bu aralık
+/// GPU/donanım poll'uyla (`daemon.ts` 2sn) aynı kategoride "canlı, kalıcı bağlantı" — çok sık
+/// olmasına gerek yok, token yalnız daemon restart'ında değişir.
+const TOKEN_WATCH_INTERVAL: Duration = Duration::from_secs(5);
 
 /// ~/.symphony dizini (SYMPHONY_HOME ile taşınabilir — core/config/paths.ts ile aynı sözleşme).
 fn symphony_home() -> PathBuf {
@@ -51,12 +59,32 @@ pub fn run() {
         "window.__SYMPHONY__ = {{ token: {token_literal}, port: {port} }};"
       );
 
-      tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+      let window = tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
         .title("Symphony")
         .inner_size(1100.0, 720.0)
         .min_inner_size(720.0, 480.0)
         .initialization_script(init_script.as_str())
         .build()?;
+
+      // Y8: arka planda token dosyasını izle, değişince (daemon restart) CANLI pencereye
+      // yeniden enjekte et. `eval` webview'in kendi thread'inde çalışmalı — `run_on_main_thread`
+      // ile oraya taşınır (yoksa Windows'ta WebView2 panik/no-op riski).
+      let app_handle = app.handle().clone();
+      let mut last_token = token;
+      std::thread::spawn(move || loop {
+        std::thread::sleep(TOKEN_WATCH_INTERVAL);
+        let (fresh_token, fresh_port) = read_daemon_bootstrap();
+        if fresh_token.is_empty() || fresh_token == last_token {
+          continue;
+        }
+        last_token = fresh_token.clone();
+        let literal = serde_json::to_string(&fresh_token).unwrap_or_else(|_| "\"\"".to_string());
+        let script = format!("window.__SYMPHONY__ = {{ token: {literal}, port: {fresh_port} }};");
+        let window = window.clone();
+        let _ = app_handle.run_on_main_thread(move || {
+          let _ = window.eval(script.as_str());
+        });
+      });
 
       Ok(())
     })

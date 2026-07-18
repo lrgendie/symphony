@@ -433,7 +433,11 @@ protokol WS/REST üzerinden konuşulur.
 
 ### packages/desktop/src-tauri — Tauri 2 kabuğu (Rust) — `ui/dist`'i sarar
 - `src/lib.rs` — `run()`: token'ı `~/.symphony/daemon.token`'dan + portu config'ten okur,
-  webview'e `initialization_script` ile enjekte eder (sayfa JS'inden ÖNCE), pencereyi kurar
+  webview'e `initialization_script` ile enjekte eder (sayfa JS'inden ÖNCE), pencereyi kurar.
+  Y8 (2026-07-18, canlı bulgu+düzeltme): arka plan `std::thread` 5sn'de bir token dosyasını
+  yeniden okur; DEĞİŞTİYSE (daemon restart → yeni token) `run_on_main_thread` ile webview'e
+  `window.__SYMPHONY__`'yi YENİDEN `eval` eder — pencere kapat/aç GEREKMEZ artık. `hardware.
+  updated` poll deseniyle (core/daemon.ts) AYNI kategori: düşük sıklık, canlı, testsiz ince kabuk.
 - `tauri.conf.json` — `frontendDist: ../../ui/dist`, `devUrl` vite; `windows: []` (Rust kurar)
 - `Cargo.toml` / `Cargo.lock` — Rust bağımlılıkları (commit'lenir; `target/` gitignore)
 - çalıştırma: `pnpm --filter @symphony/desktop desktop:dev` (tauri dev — vite'i de başlatır)

@@ -164,6 +164,23 @@ describe("patch apply — MUTLU YOL", () => {
 });
 
 describe("patch apply — WATCHDOG (bozuk yama canlıya ÇIKAMAZ)", () => {
+  it("Y1/B2: merge ÇAKIŞIRSA --abort ile temizlenir + failed; build/test HİÇ çalışmaz", async () => {
+    // ÖNEMLİ: `mockImplementationOnce` — yalnız İLK git.raw çağrısını (merge --no-ff) etkiler;
+    // sonraki çağrılar (merge --abort) VE sonraki testler varsayılan (başarılı) davranışa döner.
+    gitRaw.mockImplementationOnce(async () => {
+      throw new Error("CONFLICT (content): Merge conflict");
+    });
+
+    await expect(patchApplyCommand("1111", { evet: true })).rejects.toThrow("__EXIT__");
+
+    const git = gitCommands();
+    expect(git.some((c) => c.startsWith("merge --no-ff"))).toBe(true);
+    expect(git.some((c) => c === "merge --abort")).toBe(true); // repo TEMİZ çıkar
+    expect(execaSteps()).toEqual([]); // build/test'e hiç ulaşmadı
+    expect(shutdownMock).not.toHaveBeenCalled();
+    expect(resolvedState()).toBe("failed");
+  });
+
   it("pnpm test DÜŞERSE: reset + YENİDEN DERLE + failed; daemon HİÇ yeniden başlatılmaz", async () => {
     execaMock.mockImplementation(async (_cmd: unknown, args: unknown) => {
       if ((args as string[])[0] === "test") throw new Error("2 test düştü");

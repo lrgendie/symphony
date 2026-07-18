@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import Database from "better-sqlite3";
 import { DataStore, type RequestRecord } from "./store.js";
 
 let dir: string;
@@ -438,6 +439,46 @@ describe("DataStore", () => {
       expect(rows.find((r) => r.message === "1")?.stack).toBe("s1");
 
       expect(store.telemetryRowsForCode("AGENT_TOOL_LOOP", Date.now() + 60_000)).toEqual([]);
+    });
+
+    it("B5: patch.files bozuk JSON içerirse o kayıt ATLANIR, diğerleri dönmeye devam eder", () => {
+      openStore();
+      store.createPatch(makePatch({ id: "p1" }));
+      store.createPatch(makePatch({ id: "p2" }));
+      // Doğrudan SQL ile boz — normal API her zaman geçerli JSON yazar, bu yalnız bozuk-veri
+      // savunmasını (B5) tetiklemek için.
+      const raw = new Database(join(dir, "symphony.db"));
+      raw.prepare(`UPDATE patches SET files = 'bozuk-json[' WHERE id = ?`).run("p2");
+      raw.close();
+
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        expect(store.listPatches().map((p) => p.id)).toEqual(["p1"]); // p2 sessizce ÇÖKMEDİ, atlandı
+        expect(store.patchById("p2")).toBeNull();
+        expect(errorSpy).toHaveBeenCalled(); // hata YUTULMADI, loglandı
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    it("B5: telemetry.context bozuk JSON içerirse o kayıt ATLANIR, diğerleri dönmeye devam eder", () => {
+      openStore();
+      store.recordTelemetry({ scope: "agent", code: "A", message: "iyi kayıt" });
+      store.recordTelemetry({ scope: "agent", code: "A", message: "bozulacak kayıt", context: { ok: true } });
+
+      const raw = new Database(join(dir, "symphony.db"));
+      raw.prepare(`UPDATE telemetry SET context = 'bozuk-json[' WHERE message = ?`).run("bozulacak kayıt");
+      raw.close();
+
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        const entries = store.recentTelemetry();
+        expect(entries).toHaveLength(1);
+        expect(entries[0]?.message).toBe("iyi kayıt");
+        expect(errorSpy).toHaveBeenCalled();
+      } finally {
+        errorSpy.mockRestore();
+      }
     });
   });
 });

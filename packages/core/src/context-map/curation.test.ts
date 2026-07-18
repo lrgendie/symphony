@@ -4,6 +4,8 @@ import {
   checkGraphReference,
   checkGroupTarget,
   checkPinRef,
+  checkSelfLink,
+  checkSelfMember,
   isDerivedNodeId,
   isKnownGraphReference,
   type MapNodeLookupFn,
@@ -138,5 +140,25 @@ describe("checkPinRef — map.pin'in ref'i", () => {
       ok: false,
       code: "VALIDATION_MAP_REF_UNKNOWN",
     });
+  });
+});
+
+describe("checkSelfLink — map.link.add (Y5)", () => {
+  it("from === to ise SELF_LINK", () => {
+    expect(checkSelfLink("n1", "n1")).toEqual({ ok: false, code: "VALIDATION_MAP_SELF_LINK" });
+  });
+
+  it("farklı düğümlerse ok", () => {
+    expect(checkSelfLink("n1", "n2")).toEqual({ ok: true });
+  });
+});
+
+describe("checkSelfMember — map.member.add (Y5)", () => {
+  it("nodeId === groupId ise SELF_MEMBER", () => {
+    expect(checkSelfMember("g1", "g1")).toEqual({ ok: false, code: "VALIDATION_MAP_SELF_MEMBER" });
+  });
+
+  it("farklıysa ok", () => {
+    expect(checkSelfMember("n1", "g1")).toEqual({ ok: true });
   });
 });

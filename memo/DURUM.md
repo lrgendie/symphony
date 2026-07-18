@@ -3,14 +3,62 @@
 > Her oturuma bu dosya + `memo/BAGLAM.md` ile başla. Devralan modelsen ÖNCE `memo/DEVIR.md`.
 > Oturum sonunda bu dosyayı güncelle; biten fazın ayrıntısı oturum günlüğüne taşınır.
 
-**Son güncelleme:** 2026-07-13 (Sonnet — **Dilim H5 BİTTİ ve CANLI DOĞRULANDI — FAZ "H" (ADR-019)
-TAMAMEN KAPANDI (H1→H5).** Yaşayan animasyon katmanı: sürekli drift, akış nabzı, spring doğuş,
-katlanmada/silmede fade, `prefers-reduced-motion` geri dönüşü. 687→**700** test, `pnpm build &&
-pnpm test && pnpm lint` temiz. Headless tarayıcıda GERÇEK DOM ölçümleriyle dört mekanizma da tek
-tek kanıtlandı. Commit `315bc4b`, origin/main'e push'landı. Öncesi: aynı gün Sonnet — H1 TAMAMEN +
-H2 + H3 + H4 BİTTİ. Öncesi: Fable — Bağlam Haritası v2 TASARIMI: ADR-019 + dilimler H1..H5.)
+**Son güncelleme:** 2026-07-18 akşam (Sonnet — **ROADMAP §4.5 B tablosu TAMAMEN KAPANDI (tek
+oturumda 7 madde) + Y8 (canlı bulunan yeni hata) düzeltildi.** Y1/B2 (merge çakışması try/catch+
+`--abort`) · Y4 (map.pin boş başlık→"(adsız)") · Y5 (kürasyon idempotency: mükerrer pin/üye +
+self-link/self-üye reddi) · Y6 (yetim pin `limit` kesitinden muaf) · B4 (bekçi TOCTOU — kilit
+kontrolden hemen sonra + hata yolunda geri alma) · B5 (DB parse guard — bozuk JSON'lu satır
+atlanır+loglanır, sorgu çökmez) · B6 (URL kodlama tutarlılığı) · **Y8** (Tauri masaüstü penceresi
+artık daemon restart sonrası token'ı CANLI yeniliyor, `lib.rs` arka plan thread'i — kapat/aç
+gerekmiyor). 701→**714 test**, `pnpm build && pnpm test && pnpm lint` her adımda temiz. **v0.2.0
+draft ARTIK YAYIMLANMAYACAK** — bu düzeltmeler o derlemede yok; sıradaki adım sürüm 0.2.1 + tag
+yenileme + release pipeline'ın yeniden çalıştırılması (ROADMAP §4.5 A tablosu), SONRA kullanıcı
+installer'ı canlı doğrulayıp publish edecek. Ayrıntı: aşağıdaki "2026-07-18" bölümleri.
 
-## 🔧 Canlı olaylar 2026-07-13 akşamı (Sonnet) — token + harita hatası kök nedenleri; KULLANICI DOĞRULAMASI BEKLİYOR
+**Önceki (aynı gün, öğleden önce):** 13 Temmuz'un iki bekleyen kullanıcı-doğrulaması TAMAMLANDI.
+Y7 (zombi daemon/token) temiz: port 7770'te yalnız taze v0.2.0 daemon, token dosyayla uyumlu.
+**Bağlam Haritası hatası da DOĞRULANDI ama kök neden 13 Temmuz'un "sürüm sapması" hipotezinden
+FARKLI çıktı** — gerçek sebep zaten bilinen token-tazelik hatasıydı (bkz. aşağıdaki "2026-07-18"
+bölümü). Düzeltme: masaüstü penceresini tamamen kapat+taze aç (o an); kalıcı düzeltme SONRADAN
+aynı gün Y8 olarak uygulandı (yukarı bkz.). Ayrıca bu makinede `pnpm` için PowerShell execution
+policy CurrentUser/RemoteSigned olarak kalıcı ayarlandı [[bkz. Kalıcı teknik notlar]].)
+
+## ✅ 2026-07-18 (Sonnet) — Y7 + Bağlam Haritası hatası CANLI DOĞRULANDI, gerçek kök neden düzeltildi
+
+13 Temmuz'un iki bekleyen maddesi bu oturumda adım adım kullanıcıyla birlikte doğrulandı:
+
+1. **Y7 (zombi daemon/token):** port 7770 boştu (önceki zombi zaten yoktu), `symphony status` ile
+   taze v0.2.0 daemon başlatıldı, `/api/health` → `daemonVersion:0.2.0`, token dosyası daemon
+   başlangıcıyla aynı anda yazılmış. **Temiz, sorun yok.**
+2. **Bağlam Haritası "daemon'a bağlantı yok":** CANLI YAŞANDI (masaüstünde tekrar üretildi). Teşhis
+   sırası: WS bağlantısı SAĞLIKLIYDI (Şef Paneli "bağlı", GPU HUD gerçek veri akıyordu) — yalnız
+   REST tabanlı `fetchContextMap` başarısızdı. CORS preflight (curl ile simüle edildi) VE zod
+   şeması (`kind: z.string()`, gerçek API JSON'ıyla eşleşti) İKİSİ DE sağlıklı çıktı. Tarayıcıda
+   (`ui dev:token` + `ui dev`, `localhost:5173`) AYNI daemon'a karşı harita SORUNSUZ çalıştı —
+   bu, `shared`/`ui`/daemon kodunun tamamen sağlam olduğunu kanıtladı; sorun yalnız Tauri kabuğunda.
+   **Gerçek kök neden:** `desktop/src-tauri/src/lib.rs` `read_daemon_bootstrap()` token'ı YALNIZ
+   pencere açılışında bir kere okuyup `window.__SYMPHONY__`'ye gömüyor (satır 45-52). Açık kalan
+   ESKİ bir masaüstü penceresi, daemon sonradan yeniden başlayıp YENİ token yazınca ESKİ token'la
+   kilitli kalıyor → REST çağrıları (Bearer header) 401/başarısız, ama WS bağlantısı zaten
+   kurulduğu için (önceki oturumdan) kesilmiyor gibi görünüyor. **13 Temmuz'daki "sürüm sapması"
+   (eski `ui/dist`'in `week` kind'ını ayrıştıramaması) hipotezi YANLIŞTI** — kod zaten H2'de
+   düzeltilmişti, bu hiç sorun değildi. **Düzeltme (bugün):** pencereyi TAMAMEN kapat (Ctrl+C
+   dahil süreci öldür) + `desktop:dev`'i taze başlat → yeni pencere güncel token'ı okudu, harita
+   çalıştı. **Bu, 13 Temmuz'da zaten not edilen "kalıcı düzeltme (sıradaki dilim)" maddesiyle AYNI
+   hata** (bkz. aşağıdaki "Yan bulgu" notu) — bugün CANLI ikinci kez doğrulandı, kalıcı çözüm
+   (daemon token'ı diskte varsa yeniden kullansın YA DA istemci reconnect'te token dosyasını
+   yeniden okusun) hâlâ YAPILMADI, B tablosuna eklenmeli (önerilen kod: Y8).
+3. **Yan bulgu (bu oturum):** bu geliştirme makinesinde PowerShell execution policy `pnpm`'in
+   `.ps1` shim'ini engelliyordu ("running scripts is disabled"). `Set-ExecutionPolicy -Scope
+   CurrentUser -ExecutionPolicy RemoteSigned` ile KALICI çözüldü (yalnız bu kullanıcı hesabı,
+   MachinePolicy/UserPolicy Undefined — engelleyen bir grup ilkesi yoktu). **Yayımlanan paketle
+   (kurulan .exe/.msi) İLGİSİZ** — son kullanıcı hiç pnpm/PowerShell script'i çalıştırmaz, yalnız
+   derlenmiş binary'yi çalıştırır.
+
+**Sıradaki:** kullanıcı draft release'i yayımlar/kurar mı yoksa ROADMAP §4.5 B tablosuna (Y1/B2 +
+YENİ Y8) mi geçilir — karar bekliyor.
+
+## 🔧 Canlı olaylar 2026-07-13 akşamı (Sonnet) — token + harita hatası kök nedenleri; DOĞRULANDI (yukarıya bkz., 2026-07-18)
 
 Kullanıcı iki hata bildirdi, ikisinin de kök nedeni bulundu (kod bug'ı DEĞİL, ortam durumu):
 
@@ -3308,5 +3356,14 @@ Claude/Gemini sohbeti → GPU yükselmese de mood-activity dalgayı sürmeli. İ
 - AI SDK v7: system mesajı `instructions`; MCP araçları `jsonSchema()` sarmalı. Ayrıntı: DEVIR.md.
 - İzin kararları 4 kademeli: `allow` / `allow_for_run` (koşu boyunca, bellek-içi) /
   `always_allow` (kalıcı) / `deny`. Son ikisi `destructive`'de sunulmaz.
+- **Bu makinede PowerShell execution policy** (2026-07-18 canlı bulgu): `CurrentUser` scope
+  `RemoteSigned` olarak kalıcı ayarlandı — öncesinde `pnpm` (`.ps1` shim) her YENİ PowerShell
+  penceresinde "running scripts is disabled" hatası veriyordu. Yeni bir geliştirme makinesinde
+  aynı hata çıkarsa aynı komutla çözülür; paketlenmiş son-kullanıcı `.exe`/`.msi` ile ilgisi YOK.
+- **Tauri token-tazelik hatası CANLI 2. KEZ doğrulandı** (2026-07-18, bkz. yukarısı): açık kalan
+  masaüstü penceresi daemon restart sonrası YENİ token'ı asla görmez (yalnız açılışta bir kere
+  okunur, `lib.rs` `read_daemon_bootstrap`). Geçici çözüm: pencereyi kapat+taze aç. Kalıcı düzeltme
+  HÂLÂ yapılmadı (aday kod: Y8) — ya `token.ts` diskteki token'ı istemci sorduğunda (ör. WS
+  reconnect/REST 401'de) yeniden yaymalı, ya da `lib.rs`/`config.ts` periyodik yeniden okumalı.
 - Kurulu: Node 24.14.1, pnpm 11.9.0, TS 6.0.3, Vitest 4, zod 3(shared/core)/4(cli/ui-devDep),
   AI SDK 7, @modelcontextprotocol/sdk 1.29.0, **Rust 1.96.1, Tauri 2.11, Vite 8, React 19, zustand 5**.

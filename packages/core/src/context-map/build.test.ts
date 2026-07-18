@@ -191,6 +191,23 @@ describe("buildContextMap (ADR-016 Karar 6 + ADR-019 Karar 2/3) — SAF, determi
     ]);
   });
 
+  it("Y6: sabitlenmiş (pin) bir öğe limit kesitinden ESKİ olsa bile 'yetim' kalmaz, geri eklenir", () => {
+    const mapNodes: ContextMapCurationNodeInput[] = [
+      { id: "ctx-1", kind: "context", title: "önemli eski koşu", createdAt: 1_000, refKind: "run", refId: "eski" },
+    ];
+    const graph = buildContextMap({
+      runs: [run({ id: "eski", cwd: "/old", at: 1_000 }), run({ id: "yeni", cwd: "/new", at: 9_000 })],
+      sessions: [],
+      limit: 1, // yalnız "yeni" normalde kesitte kalır
+      mapNodes,
+      flat: true,
+    });
+    expect(graph.nodes.some((n) => n.id === "eski")).toBe(true);
+    expect(graph.nodes.some((n) => n.id === "yeni")).toBe(true);
+    // pin kenarı da grafiksiz KALMAZ — "eski" düğümü gerçekten var.
+    expect(graph.edges).toContainEqual({ from: "ctx-1", to: "eski", kind: "pin" });
+  });
+
   it("model VE agent bağı artık KENAR (ADR-016 Karar 6'nın reddi ADR-019 Karar 3'te REVİZE edildi)", () => {
     const graph = buildContextMap({ runs: [run()], sessions: [session()], flat: true });
     expect(graph.edges.some((e) => e.kind === "model")).toBe(true);
