@@ -54,6 +54,11 @@ ve masaüstü (Tauri) aynı daemon'a bağlı iki eş zamanlı arayüzdür.
 - Monorepo: pnpm workspace + turbo. Paketler: `shared` → `core` → (`cli`, `ui`, `desktop`).
   Bağımlılık yönü tek taraflıdır: `shared` hiçbir pakete bağımlı olamaz.
 - Tanımlayıcılar (değişken/fonksiyon/tip) İngilizce; kullanıcıya görünen metinler ve belgeler Türkçe.
+  **Muafiyet (N1, 2026-07-18):** bir CLI komutunun (`bekci`, `harita` gibi) birebir yansıması
+  olan dosya/fonksiyon adları ve o komuta özgü protokol hata kodları (`VALIDATION_BEKCI_*`) bu
+  kuraldan muaftır — rename hem protokolü (hata kodları) hem kullanıcının diskindeki `bekci.json`
+  formatını kırar, kazanç yalnızca üsluptur. Yeni, paylaşılan/iç mimari kavramlar yine İngilizce
+  olmalıdır; bu muafiyet yalnız var olan bekci/harita'ya özeldir, otomatik olarak genişlemez.
 - Hata yönetimi: hatayı yutma; `pino` ile yapılandırılmış logla (telemetri buna bağlı).
 - Çapraz platform: path işlemlerinde daima `node:path`; kabuk komutu üretirken Windows
   (PowerShell) ve POSIX farkını `execa` ile soyutla; `~` genişletmesini elle yapma.

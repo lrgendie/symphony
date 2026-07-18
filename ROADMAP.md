@@ -340,9 +340,11 @@ symphony/
 
 ### B) Teknik borç — tarama bulguları (öncelik: yayım sonrası ilk oturumlar)
 
-| İş | Ne yapılacak | Kim/Model |
-|---|---|---|
-| **N1 — Türkçe tanımlayıcı KARARI** (KISMEN ÇÖZÜLDÜ 2026-07-18) | Kullanıcının asıl kaygısı ("worldwide yayım") README.en.md + docs/REHBER.en.md çevirileriyle karşılandı — `bekci`/`harita` gibi CLI-katmanı tanımlayıcılar/protokol hata kodları DEĞİŞMEDİ (rename'in maliyeti: protokol kırılması + `bekci.json` format değişimi, fayda: yalnız üslup). CLAUDE.md'ye resmi bir muafiyet cümlesi eklenmesi hâlâ kullanıcı onayı bekliyor (bkz. DURUM.md) | **Kullanıcı** (CLAUDE.md muafiyet cümlesini onayla) |
+Boş — son madde **N1 kapandı** (2026-07-18): "worldwide yayım" kaygısı `README.en.md` +
+`docs/REHBER.en.md` çevirileriyle karşılandı; `bekci`/`harita` gibi CLI-katmanı Türkçe
+tanımlayıcılar/protokol hata kodları BİLİNÇLİ değiştirilmedi — kullanıcı onayıyla CLAUDE.md'ye
+resmi muafiyet cümlesi eklendi (rename protokolü + `bekci.json` formatını kırardı, kazanç yalnız
+üsluptu). Kod tarafında B tablosundan geriye açık madde kalmadı.
 
 ### C) Ertelenmiş v2 özellikleri (istenirse — tasarım kararı olanlar pahalı modele)
 
