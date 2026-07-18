@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "docs:pdf": "md-to-pdf docs/REHBER.md"
+    "docs:pdf": "md-to-pdf docs/REHBER.md",
+    "docs:pdf:en": "md-to-pdf docs/REHBER.en.md"
   },
   "devDependencies": {
     "@types/node": "^26.1.0",

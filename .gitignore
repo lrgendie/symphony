@@ -9,6 +9,7 @@ out/
 .turbo/
 target/
 docs/REHBER.pdf
+docs/REHBER.en.pdf
 
 # Ortam ve gizli bilgiler — ASLA commitlenmez
 .env

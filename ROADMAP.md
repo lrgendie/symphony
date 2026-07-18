@@ -342,7 +342,7 @@ symphony/
 
 | İş | Ne yapılacak | Kim/Model |
 |---|---|---|
-| **N1 — Türkçe tanımlayıcı KARARI** | Karar: İngilizce'ye kademeli dönüş MÜ, CLAUDE.md'de "alan terimleri (bekci/doktor/harita) muaf" gevşetmesi Mİ? Karar verilmeden her oturum birikimi büyütüyor | **Kullanıcı + Fable/Opus** (karar) → Sonnet (uygulama) |
+| **N1 — Türkçe tanımlayıcı KARARI** (KISMEN ÇÖZÜLDÜ 2026-07-18) | Kullanıcının asıl kaygısı ("worldwide yayım") README.en.md + docs/REHBER.en.md çevirileriyle karşılandı — `bekci`/`harita` gibi CLI-katmanı tanımlayıcılar/protokol hata kodları DEĞİŞMEDİ (rename'in maliyeti: protokol kırılması + `bekci.json` format değişimi, fayda: yalnız üslup). CLAUDE.md'ye resmi bir muafiyet cümlesi eklenmesi hâlâ kullanıcı onayı bekliyor (bkz. DURUM.md) | **Kullanıcı** (CLAUDE.md muafiyet cümlesini onayla) |
 
 ### C) Ertelenmiş v2 özellikleri (istenirse — tasarım kararı olanlar pahalı modele)
 

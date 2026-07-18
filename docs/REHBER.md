@@ -1,5 +1,7 @@
 # 🎼 Symphony — Mimari ve Kullanım Rehberi
 
+*[🇬🇧 English version](REHBER.en.md)*
+
 > Kaynak: bu dosya (`docs/REHBER.md`). PDF'e derlemek için: `pnpm docs:pdf`
 > (`docs/REHBER.pdf` üretir). Belge kodla birlikte büyür — sistem değiştikçe burası
 > güncellenir; ADR-017 Karar 5'in öngördüğü gibi tam teslim sürümü tüm sistem

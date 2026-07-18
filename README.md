@@ -1,5 +1,7 @@
 # 🎼 Symphony
 
+*[🇬🇧 English version](README.en.md)*
+
 Yerel ve bulut LLM'leri, agent'ları ve yazılım projelerini tek merkezden yöneten,
 koda müdahale edebilen, kendini geliştirebilen orkestrasyon platformu.
 Windows / macOS / ARM üzerinde çalışır; terminal (`symphony`) ve masaüstü uygulaması
